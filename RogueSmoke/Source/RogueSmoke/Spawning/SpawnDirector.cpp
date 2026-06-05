@@ -6,20 +6,6 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 
-USpawnDirector* USpawnDirector::Get(const UObject* WorldContext)
-{
-	if (WorldContext == nullptr || GEngine == nullptr)
-	{
-		return nullptr;
-	}
-
-	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::ReturnNull))
-	{
-		return World->GetSubsystem<USpawnDirector>();
-	}
-	return nullptr;
-}
-
 bool USpawnDirector::IsServer() const
 {
 	const UWorld* World = GetWorld();

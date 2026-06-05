@@ -23,9 +23,8 @@ class ROGUESMOKE_API USpawnDirector : public UWorldSubsystem
 	GENERATED_BODY()
 
 public:
-	/** AngelScript-friendly accessor: USpawnDirector::Get(this). */
-	UFUNCTION(BlueprintCallable, Category="Spawning", meta=(WorldContext="WorldContext"))
-	static USpawnDirector* Get(const UObject* WorldContext);
+	// NOTE: no hand-written Get() — the AngelScript fork auto-generates a static
+	// USpawnDirector::Get() for UWorldSubsystem types. In C++ use GetWorld()->GetSubsystem<>().
 
 	/** Spawn or recycle one elite at a transform. Server-only. Null off-server / on failure. */
 	UFUNCTION(BlueprintCallable, Category="Spawning")

@@ -20,9 +20,8 @@ class ROGUESMOKE_API UCombatSubsystem : public UWorldSubsystem
 	GENERATED_BODY()
 
 public:
-	/** AngelScript-friendly accessor: UCombatSubsystem::Get(this). */
-	UFUNCTION(BlueprintCallable, Category="Combat", meta=(WorldContext="WorldContext"))
-	static UCombatSubsystem* Get(const UObject* WorldContext);
+	// NOTE: no hand-written Get() — the AngelScript fork auto-generates a static
+	// UCombatSubsystem::Get() for UWorldSubsystem types. In C++ use GetWorld()->GetSubsystem<>().
 
 	// --- Registration (elite Actors call these on the server) ---
 	void RegisterElite(AEliteEnemyBase* Elite);

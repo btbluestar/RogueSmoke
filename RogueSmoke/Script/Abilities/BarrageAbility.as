@@ -19,7 +19,7 @@ class UBarrageAbilityComponent : UAbilityComponent
     // MVP: land on the owner. Real impl: override GetActivationLocation() to return the aim reticle hit.
     void ExecuteOnServer(FVector Location) override
     {
-        UCombatSubsystem Combat = UCombatSubsystem::Get(this);
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
         if (Combat == nullptr)
             return;
 

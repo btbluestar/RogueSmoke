@@ -13,8 +13,8 @@ class UAbilityComponent : UActorComponent
 
     float CooldownRemaining = 0.0;
 
-    default PrimaryComponentTick.bCanEverTick = true;
-
+    // Overriding the Tick event is what makes this component tick in the AngelScript fork
+    // (mirrors Blueprint) — there is no settable `default PrimaryComponentTick.bCanEverTick`.
     UFUNCTION(BlueprintOverride)
     void Tick(float DeltaSeconds)
     {

@@ -24,7 +24,8 @@ enum ERaidPhase
 class ARaidObjective : AActor
 {
     default bReplicates = true;
-    default PrimaryActorTick.bCanEverTick = true;
+    // Overriding the Tick event below is what enables ticking in the AngelScript fork
+    // (mirrors Blueprint) — there is no settable `default PrimaryActorTick.bCanEverTick`.
 
     UPROPERTY(EditAnywhere, Category = "Raid")
     float ExtractionDefendSeconds = 30.0;
@@ -72,7 +73,7 @@ class ARaidObjective : AActor
         if (Elapsed < StartGraceSeconds)
             return;
 
-        UCombatSubsystem Combat = UCombatSubsystem::Get(this);
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
         if (Combat == nullptr)
             return;
 
@@ -134,7 +135,7 @@ class ARaidObjective : AActor
         Print("EXTRACTION CALLED - defend the zone!", 5.0);
 
         // Spawn the final wave through the spawn seam (pooled elites now, Mass fodder later).
-        USpawnDirector Director = USpawnDirector::Get(this);
+        USpawnDirector Director = USpawnDirector::Get();
         if (Director != nullptr)
             Director.SpawnEliteWave(DefendWaveEliteClass, GetActorLocation(), DefendWaveRadius, DefendWaveCount);
     }

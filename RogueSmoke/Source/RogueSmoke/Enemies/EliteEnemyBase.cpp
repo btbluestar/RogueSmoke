@@ -20,7 +20,7 @@ void AEliteEnemyBase::BeginPlay()
 	// Register with the seam so AoE queries/abilities can find us (server owns the registry).
 	if (HasAuthority())
 	{
-		if (UCombatSubsystem* Combat = UCombatSubsystem::Get(this))
+		if (UCombatSubsystem* Combat = (GetWorld() ? GetWorld()->GetSubsystem<UCombatSubsystem>() : nullptr))
 		{
 			Combat->RegisterElite(this);
 		}
@@ -29,7 +29,7 @@ void AEliteEnemyBase::BeginPlay()
 
 void AEliteEnemyBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (UCombatSubsystem* Combat = UCombatSubsystem::Get(this))
+	if (UCombatSubsystem* Combat = (GetWorld() ? GetWorld()->GetSubsystem<UCombatSubsystem>() : nullptr))
 	{
 		Combat->UnregisterElite(this);
 	}
@@ -103,7 +103,7 @@ void AEliteEnemyBase::Activate(const FVector& Location, const FRotator& Rotation
 	// Re-join the combat registry (AddUnique guards against double-register).
 	if (HasAuthority())
 	{
-		if (UCombatSubsystem* Combat = UCombatSubsystem::Get(this))
+		if (UCombatSubsystem* Combat = (GetWorld() ? GetWorld()->GetSubsystem<UCombatSubsystem>() : nullptr))
 		{
 			Combat->RegisterElite(this);
 		}
@@ -114,7 +114,7 @@ void AEliteEnemyBase::Activate(const FVector& Location, const FRotator& Rotation
 
 void AEliteEnemyBase::Deactivate()
 {
-	if (UCombatSubsystem* Combat = UCombatSubsystem::Get(this))
+	if (UCombatSubsystem* Combat = (GetWorld() ? GetWorld()->GetSubsystem<UCombatSubsystem>() : nullptr))
 	{
 		Combat->UnregisterElite(this);
 	}

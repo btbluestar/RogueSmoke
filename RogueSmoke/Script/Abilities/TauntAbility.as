@@ -16,7 +16,7 @@ class UTauntAbilityComponent : UAbilityComponent
 
     void ExecuteOnServer(FVector Location) override
     {
-        UCombatSubsystem Combat = UCombatSubsystem::Get(this);
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
         if (Combat == nullptr)
             return;
 
