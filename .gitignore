@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------------------
+# Unreal Engine project ignore rules
+# The .uproject lives in the nested RogueSmoke/ folder, so these patterns are
+# written to match at any depth (no leading slash anchor).
+# ---------------------------------------------------------------------------
+
+# Generated / build output
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+Build/Receipts/
+
+# Editor / IDE
+.vs/
+.vscode/
+.idea/
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+.vsconfig
+
+# Compiled binaries
+*.dll
+*.exe
+*.lib
+*.pdb
+*.so
+*.dylib
+*.app
+*.ipa
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Crash / log artifacts
+*.log
+*.tmp
+
+# AngelScript: keep source (.as) but ignore any generated/precompiled output
+Script/**/*.tmp

@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# Git LFS tracking for Unreal binary assets.
+# Run `git lfs install` once per machine before cloning/committing.
+# ---------------------------------------------------------------------------
+
+# Unreal binary asset types
+*.uasset filter=lfs diff=lfs merge=lfs -text
+*.umap   filter=lfs diff=lfs merge=lfs -text
+
+# Audio
+*.wav filter=lfs diff=lfs merge=lfs -text
+*.mp3 filter=lfs diff=lfs merge=lfs -text
+*.ogg filter=lfs diff=lfs merge=lfs -text
+
+# Textures / images
+*.png  filter=lfs diff=lfs merge=lfs -text
+*.jpg  filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.tga  filter=lfs diff=lfs merge=lfs -text
+*.bmp  filter=lfs diff=lfs merge=lfs -text
+*.psd  filter=lfs diff=lfs merge=lfs -text
+*.exr  filter=lfs diff=lfs merge=lfs -text
+*.hdr  filter=lfs diff=lfs merge=lfs -text
+
+# Models / fonts / video
+*.fbx filter=lfs diff=lfs merge=lfs -text
+*.ttf filter=lfs diff=lfs merge=lfs -text
+*.otf filter=lfs diff=lfs merge=lfs -text
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+
+# Treat AngelScript and config as normal text (explicit, so LFS never grabs them)
+*.as   text
+*.ini  text
+*.cs   text
+*.cpp  text
+*.h    text
+*.md   text
