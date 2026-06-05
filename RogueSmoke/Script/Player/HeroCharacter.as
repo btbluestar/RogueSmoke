@@ -23,4 +23,18 @@ class AHeroCharacter : ACharacter
 
     // Overridden per kit.
     void ActivatePrimary() {}
+
+    // Apply a chosen upgrade server-side (authoritative — upgrades change combat math
+    // that runs on the server). Called by UpgradeSelectWidget on the owning client.
+    // NOTE: NewObject / Cast / TSubclassOf forms are fork-generated — verify in-editor.
+    UFUNCTION(Server)
+    void Server_ApplyUpgrade(TSubclassOf<UUpgradeEffect> UpgradeClass)
+    {
+        if (UpgradeClass.Get() == nullptr)
+            return;
+
+        UUpgradeEffect Effect = Cast<UUpgradeEffect>(NewObject(this, UpgradeClass.Get()));
+        if (Effect != nullptr)
+            Effect.Apply(this);
+    }
 }
