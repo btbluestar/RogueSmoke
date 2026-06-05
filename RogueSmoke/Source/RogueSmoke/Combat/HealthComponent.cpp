@@ -35,6 +35,11 @@ float UHealthComponent::ApplyDamage(float Amount, AActor* DamageInstigator)
 	return Applied;
 }
 
+void UHealthComponent::ResetHealth()
+{
+	Health = MaxHealth;
+}
+
 void UHealthComponent::OnRep_Health()
 {
 	// Hook for clients to update health bars / cosmetics. No gameplay logic here.

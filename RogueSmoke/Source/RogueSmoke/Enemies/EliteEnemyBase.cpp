@@ -77,3 +77,52 @@ void AEliteEnemyBase::ApplyPull(const FVector& Target, float Strength, float Dur
 		PullExpiresAtSeconds = GetWorld()->GetTimeSeconds() + Duration;
 	}
 }
+
+void AEliteEnemyBase::ClearTransientState()
+{
+	ClusteredUntilSeconds = 0.f;
+	PullTarget = FVector::ZeroVector;
+	PullStrength = 0.f;
+	PullExpiresAtSeconds = 0.f;
+}
+
+void AEliteEnemyBase::Activate(const FVector& Location, const FRotator& Rotation)
+{
+	SetActorLocationAndRotation(Location, Rotation);
+	ClearTransientState();
+
+	if (Health != nullptr)
+	{
+		Health->ResetHealth();
+	}
+
+	SetActorHiddenInGame(false);
+	SetActorEnableCollision(true);
+	SetActorTickEnabled(true);
+
+	// Re-join the combat registry (AddUnique guards against double-register).
+	if (HasAuthority())
+	{
+		if (UCombatSubsystem* Combat = UCombatSubsystem::Get(this))
+		{
+			Combat->RegisterElite(this);
+		}
+	}
+
+	bActive = true;
+}
+
+void AEliteEnemyBase::Deactivate()
+{
+	if (UCombatSubsystem* Combat = UCombatSubsystem::Get(this))
+	{
+		Combat->UnregisterElite(this);
+	}
+
+	ClearTransientState();
+	SetActorHiddenInGame(true);
+	SetActorEnableCollision(false);
+	SetActorTickEnabled(false);
+
+	bActive = false;
+}

@@ -10,9 +10,9 @@ Status legend: ✅ done · 🟡 scaffolded (unverified in-editor) · ⛔ blocked
 | 2 | Verify API signatures vs running compiler | ⬜ | `Math::`, `::Get` accessors, `NewObject`/`TSubclassOf` forms used in script are *patterns*, not verified. |
 | 3 | Stand up `UCombatSubsystem` (C++) stub | 🟡 | `Source/RogueSmoke/Combat/` + `Enemies/EliteEnemyBase`. Actor-registry backend. Needs a C++ compile. |
 | 4 | First combo on Actors only | 🟡 | Abilities + `Vanguard`/`Bombardier` + `ClusterableElite` written. Needs BP subclasses + input wiring in-editor. |
-| 5 | Spike Mass fodder | ⬜ | Deferred on purpose — version-sensitive. Plugs into the same 4 `UCombatSubsystem` methods. |
+| 5 | Spike Mass fodder | ⬜ | Deferred — version-sensitive. **Spawn seam is ready:** `Spawning/SpawnDirector` has a working pooled-Actor backend for elites; Mass fodder plugs into `SpawnFodderWave()` (currently a logged placeholder) without changing callers. |
 | 6 | Upgrade + select widget | 🟡 | `Upgrades/` + `UI/UpgradeSelectWidget.as` written. Still needs the BP widget asset + an offer flow. |
-| 7 | Raid objective + extraction, 2-player test | 🟡 | `Objective/RaidObjective.as` written (single raid D-0009 + defend-timer extraction D-0010). Defend-wave spawn + party-wipe are hooks pending a spawner / down-revive. 2-player test needs the editor. |
+| 7 | Raid objective + extraction, 2-player test | 🟡 | `Objective/RaidObjective.as` written (single raid D-0009 + defend-timer extraction D-0010). Defend-wave now spawns via `SpawnDirector` (set `DefendWaveEliteClass`). Party-wipe still a hook pending down/revive. 2-player test needs the editor. |
 
 ## To verify the slice in-editor (do in order)
 

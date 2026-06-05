@@ -32,6 +32,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Health")
 	float ApplyDamage(float Amount, AActor* DamageInstigator);
 
+	/** Restore to full. Used when recycling a pooled actor (SpawnDirector). */
+	UFUNCTION(BlueprintCallable, Category="Health")
+	void ResetHealth();
+
 	UFUNCTION(BlueprintPure, Category="Health")
 	bool IsDead() const { return Health <= 0.f; }
 

@@ -29,6 +29,17 @@ class ARaidObjective : AActor
     UPROPERTY(EditAnywhere, Category = "Raid")
     float ExtractionDefendSeconds = 30.0;
 
+    // The final defend wave spawned when extraction is called (D-0010). Leave the class
+    // unset to skip spawning (e.g. while testing the timer alone).
+    UPROPERTY(EditAnywhere, Category = "Raid|Defend Wave")
+    TSubclassOf<AEliteEnemyBase> DefendWaveEliteClass;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Defend Wave")
+    int DefendWaveCount = 8;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Defend Wave")
+    float DefendWaveRadius = 1200.0;
+
     // Grace window after start so placed elites register before we test "cleared".
     UPROPERTY(EditAnywhere, Category = "Raid")
     float StartGraceSeconds = 1.0;
@@ -121,6 +132,11 @@ class ARaidObjective : AActor
     void OnExtractionPhaseStarted()
     {
         Print("EXTRACTION CALLED - defend the zone!", 5.0);
+
+        // Spawn the final wave through the spawn seam (pooled elites now, Mass fodder later).
+        USpawnDirector Director = USpawnDirector::Get(this);
+        if (Director != nullptr)
+            Director.SpawnEliteWave(DefendWaveEliteClass, GetActorLocation(), DefendWaveRadius, DefendWaveCount);
     }
 
     void OnPhaseChanged(ERaidPhase NewPhase)

@@ -28,6 +28,7 @@ public class RogueSmoke : ModuleRules
 			"RogueSmoke",
 			"RogueSmoke/Combat",
 			"RogueSmoke/Enemies",
+			"RogueSmoke/Spawning",
 			"RogueSmoke/Variant_Horror",
 			"RogueSmoke/Variant_Horror/UI",
 			"RogueSmoke/Variant_Shooter",

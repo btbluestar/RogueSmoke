@@ -34,7 +34,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	void ApplyPull(const FVector& Target, float Strength, float Duration);
 
+	// --- Object pooling (driven by USpawnDirector) ---
+	/** Re-activate from the pool: place, reset health + transient state, register, show. */
+	void Activate(const FVector& Location, const FRotator& Rotation);
+	/** Return to the pool: unregister, clear transient state, hide + disable. */
+	void Deactivate();
+	bool IsActive() const { return bActive; }
+
 protected:
+	/** Wipe per-life transient state (cluster mark, pull) so a recycled actor starts clean. */
+	void ClearTransientState();
+
+	bool bActive = true;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
