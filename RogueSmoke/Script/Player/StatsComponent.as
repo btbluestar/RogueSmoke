@@ -195,8 +195,8 @@ class UStatsComponent : UActorComponent
     // ---------------------------------------------------------------- helpers
     bool HasAuthority() const
     {
-        AActor Owner = GetOwner();
-        return Owner != nullptr && Owner.HasAuthority();
+        AActor OwningActor = GetOwner();
+        return OwningActor != nullptr && OwningActor.HasAuthority();
     }
 
     private void SetHealth(float NewHealth)
