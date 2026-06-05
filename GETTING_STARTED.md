@@ -130,6 +130,12 @@ and cluster bonus grow. Re-run the combo to feel the difference.
 3. Confirm the host-authority model (CODING_STANDARDS §4): one client taunts, the other
    barrages; damage/extraction resolve on the server, cosmetics play on both.
 
+> ⚠️ **Remote-client abilities need component replication.** `UAbilityComponent`'s
+> `Server_Activate` only routes from a remote client if the component replicates. The
+> **host** works without it (it has authority), so solo/host tests pass — but before the
+> 2-player test, the ability component must be set to replicate. (Tracked under
+> "What's NOT wired yet".)
+
 ---
 
 ## 7. Troubleshooting
@@ -145,8 +151,28 @@ and cluster bonus grow. Re-run the combo to feel the difference.
 
 ---
 
+## Fork API conventions (confirmed against the engine)
+
+Things that differ from stock C++/Blueprint assumptions, learned from real compiler passes:
+
+- **Subsystems:** access world subsystems via the auto-generated **`UMySubsystem::Get()`**
+  (no args). Don't hand-write a `Get(WorldContext)` — it collides with the generated one.
+  In C++, use `GetWorld()->GetSubsystem<>()`.
+  ([docs](https://angelscript.hazelight.se/scripting/subsystems/))
+- **Components:** access via **`UMyComponent::Get(actor)`** (takes the owning actor).
+- **Ticking:** there is **no settable `default PrimaryActorTick.bCanEverTick`**. Overriding
+  the `Tick` event (`UFUNCTION(BlueprintOverride) void Tick(...)`) is what makes a class tick,
+  like Blueprint's Event Tick.
+- **RPCs default to RELIABLE** (opposite of C++); mark cosmetic ones `Unreliable`
+  (CODING_STANDARDS §4.1).
+- **Authority:** on a listen server the **host has authority**, so server-only logic and
+  `Server_` RPCs from the host execute locally — solo/host testing works before replication
+  is fully set up.
+
 ## What's NOT wired yet (by design)
 
+- **Ability component replication** — `UAbilityComponent`'s RPCs route on the host but not
+  from remote clients yet; needs the component set to replicate before the 2-player test (§6).
 - **Mass fodder** — `SpawnDirector::SpawnFodderWave` is a logged placeholder until the Mass
   spike (SETUP §5.5, needs a concrete enemy-count target — DECISIONS "Still open").
 - **Down/revive** → party-wipe is a hook (`RaidObjective::NotifyPartyWiped`).
