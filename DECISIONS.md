@@ -82,20 +82,38 @@ Format per entry: ID, date, status, the decision, the reasoning, and consequence
 - **Why:** Smallest content that tests the signature pillar. GDD §12, MVP arch §5–6.
 - **Consequences:** Build and tune this combo's *feel* before adding any other content.
 
+### D-0009 — Run structure: a run is a single raid
+- **Status:** Decided (MVP scope; revisit when expanding past the slice)
+- **Decision:** For now, one **run = one raid**. Complete the objective, extract, run ends.
+- **Why:** Smallest scope that proves the slice (GDD §12); no inter-raid state, difficulty
+  curve, or "push deeper vs cash out" needed yet. GDD §3.2.
+- **Consequences:** Upgrades need not persist across raids yet. Failed extraction loses the
+  run (= the raid). Chained/escalating raids become a later, explicitly-recorded decision.
+
+### D-0010 — Extraction: called-in defend timer
+- **Status:** Decided (MVP scope)
+- **Decision:** Objective complete → players **call in extraction**, then survive a
+  **defend timer** (a final wave) in the zone before escaping. Surviving the hold wins the run.
+- **Why:** Generates the co-op tension cap the genre wants (GDD §3.3) without inter-raid
+  systems. Pairs with the single-raid structure (D-0009).
+- **Consequences:** Needs a wave/defend spawn on extraction (hook `OnExtractionPhaseStarted`
+  in `RaidObjective.as`, spawner TBD) and party-wipe detection (depends on down/revive,
+  MVP §12). Implemented as `Script/Objective/RaidObjective.as`.
+
 ---
 
 ## Still open
 
 These are unresolved and block or shape downstream work. Resolve, then move up as a D-entry.
 
-1. **Run structure** — single raid vs chained escalating raids (GDD §3.2, §13). Highest priority.
-2. **Meta-progression scope** — shared per-session vs per-player persistent unlocks
+1. **Meta-progression scope** — shared per-session vs per-player persistent unlocks
    (ARCHITECTURE §4.5, GDD §6.3).
-3. **Max party size** — GDD says 2–4; MVP slice targets 2. Confirm the real cap (affects spawn
+2. **Max party size** — GDD says 2–4; MVP slice targets 2. Confirm the real cap (affects spawn
    budgets, scaling, UI).
-4. **Solo support** — unsupported / scaled / companion (GDD §2, §4).
-5. **Friendly fire** — off (recommended) / positional (GDD §4).
-6. **Extraction design** — trigger, push-deeper risk/reward, failure cost (GDD §3.3).
-7. **Theme/setting & whether "smoke" is mechanical** (GDD §10).
-8. **Enemy-count target on target hardware** — set a concrete N; it's a design constraint, not
+3. **Solo support** — unsupported / scaled / companion (GDD §2, §4).
+4. **Friendly fire** — off (recommended) / positional (GDD §4).
+5. **Theme/setting & whether "smoke" is mechanical** (GDD §10).
+6. **Enemy-count target on target hardware** — set a concrete N; it's a design constraint, not
    just optimization (GDD §11.2).
+
+> Resolved & moved up: run structure → **D-0009**, extraction design → **D-0010**.

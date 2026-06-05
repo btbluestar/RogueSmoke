@@ -59,6 +59,19 @@ int32 UCombatSubsystem::CountEnemiesInSphere(FVector Center, float Radius) const
 	return Count;
 }
 
+int32 UCombatSubsystem::GetEliteCount() const
+{
+	int32 Count = 0;
+	for (const TWeakObjectPtr<AEliteEnemyBase>& Ptr : Elites)
+	{
+		if (Ptr.IsValid())
+		{
+			++Count;
+		}
+	}
+	return Count;
+}
+
 void UCombatSubsystem::PullEnemiesToward(FVector Center, float Radius, float Strength, float Duration)
 {
 	if (!IsServer())

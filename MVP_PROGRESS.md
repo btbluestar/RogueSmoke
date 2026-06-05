@@ -12,7 +12,7 @@ Status legend: ✅ done · 🟡 scaffolded (unverified in-editor) · ⛔ blocked
 | 4 | First combo on Actors only | 🟡 | Abilities + `Vanguard`/`Bombardier` + `ClusterableElite` written. Needs BP subclasses + input wiring in-editor. |
 | 5 | Spike Mass fodder | ⬜ | Deferred on purpose — version-sensitive. Plugs into the same 4 `UCombatSubsystem` methods. |
 | 6 | Upgrade + select widget | 🟡 | `Upgrades/` + `UI/UpgradeSelectWidget.as` written. Still needs the BP widget asset + an offer flow. |
-| 7 | Raid objective + extraction, 2-player test | ⛔ | Blocked: extraction design & run structure are open (DECISIONS "Still open" #1, #6). |
+| 7 | Raid objective + extraction, 2-player test | 🟡 | `Objective/RaidObjective.as` written (single raid D-0009 + defend-timer extraction D-0010). Defend-wave spawn + party-wipe are hooks pending a spawner / down-revive. 2-player test needs the editor. |
 
 ## To verify the slice in-editor (do in order)
 

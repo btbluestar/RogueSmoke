@@ -37,4 +37,14 @@ class AHeroCharacter : ACharacter
         if (Effect != nullptr)
             Effect.Apply(this);
     }
+
+    // Route a remote client's "call extraction" through a player-owned RPC (clients can't
+    // Server-RPC the unowned objective directly). The caller passes the objective it found
+    // (e.g. an interaction volume), avoiding a world-wide actor lookup. D-0010.
+    UFUNCTION(Server)
+    void Server_CallExtraction(ARaidObjective Objective)
+    {
+        if (Objective != nullptr)
+            Objective.CallExtraction();
+    }
 }

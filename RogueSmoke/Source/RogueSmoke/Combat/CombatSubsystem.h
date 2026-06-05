@@ -32,6 +32,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	int32 CountEnemiesInSphere(FVector Center, float Radius) const;
 
+	/** Total live elites registered (any location). Used by the raid objective to detect "arena cleared". */
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	int32 GetEliteCount() const;
+
 	// --- Setup operations (server-authoritative) ---
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	void PullEnemiesToward(FVector Center, float Radius, float Strength, float Duration);
