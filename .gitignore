@@ -16,6 +16,7 @@ Build/Receipts/
 .vs/
 .vscode/
 .idea/
+.ai/
 *.VC.db
 *.VC.opendb
 *.opensdf
