@@ -14,6 +14,11 @@ class AHeroCharacter : ACharacter
     UPROPERTY(DefaultComponent, Attach = CameraBoom)
     UCameraComponent TopDownCamera;
 
+    // Tunable stat block (health/armor/speed/etc). Self-applies MoveSpeed on BeginPlay and
+    // replicates current health/shield for HUDs. Inherited by Vanguard/Bombardier.
+    UPROPERTY(DefaultComponent)
+    UStatsComponent Stats;
+
     // Bind this to an Enhanced Input action on the owning client (IA_PrimaryAbility).
     UFUNCTION()
     void OnPrimaryAbilityPressed()

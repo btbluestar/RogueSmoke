@@ -8,6 +8,9 @@
 // for an import, use "Add Import To" (Shift+Alt+I).
 class UAbilityComponent : UActorComponent
 {
+    // Replicate so a remote client's Server_Activate routes (host works regardless).
+    default bReplicates = true;
+
     UPROPERTY(EditDefaultsOnly, Category = "Ability")
     float Cooldown = 6.0;
 
@@ -31,7 +34,7 @@ class UAbilityComponent : UActorComponent
         if (!IsReady())
             return;
 
-        CooldownRemaining = Cooldown;          // optimistic local cooldown
+        CooldownRemaining = GetEffectiveCooldown();   // optimistic local cooldown (after CDR)
         Server_Activate(GetActivationLocation());
     }
 
@@ -39,6 +42,15 @@ class UAbilityComponent : UActorComponent
     FVector GetActivationLocation() const
     {
         return GetOwner().GetActorLocation();
+    }
+
+    // Cooldown after the owner's CooldownReduction stat (UStatsComponent), if present.
+    float GetEffectiveCooldown() const
+    {
+        UStatsComponent Stats = UStatsComponent::Get(GetOwner());
+        if (Stats != nullptr)
+            return Stats.GetEffectiveCooldown(Cooldown);
+        return Cooldown;
     }
 
     // ---- Override points for concrete abilities ----

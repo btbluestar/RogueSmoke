@@ -64,8 +64,8 @@ Create these under `Content/RogueSmoke/` (right-click → Blueprint Class → pi
 | Blueprint | Parent (script) | Set up |
 |-----------|-----------------|--------|
 | `BP_ClusterableElite` | `AClusterableElite` | Assign a **Static Mesh** to `Mesh` (a cube is fine). Set `Health → MaxHealth`. |
-| `BP_Vanguard` | `AVanguard` | Assign a skeletal mesh + anim BP to the inherited `Mesh`. Tune `Taunt` (Radius/PullStrength/ClusterDuration). |
-| `BP_Bombardier` | `ABombardier` | Same mesh setup. Tune `Barrage` (Radius/BaseDamage/ClusterBonusMultiplier). |
+| `BP_Vanguard` | `AVanguard` | Assign a skeletal mesh + anim BP to the inherited `Mesh`. Tune `Taunt` (Radius/PullStrength/ClusterDuration) and `Stats` (MaxHealth/Armor/MoveSpeed/…). |
+| `BP_Bombardier` | `ABombardier` | Same mesh setup. Tune `Barrage` (Radius/BaseDamage/ClusterBonusMultiplier) and `Stats`. |
 | `BP_RaidObjective` | `ARaidObjective` | Set **`DefendWaveEliteClass = BP_ClusterableElite`**, `DefendWaveCount`, `DefendWaveRadius`, `ExtractionDefendSeconds`. |
 | `WBP_UpgradeSelect` | `UUpgradeSelectWidget` | Add buttons; each button calls `ChooseUpgrade(index)`. Fill `OfferedUpgrades` (e.g. `UUpgrade_ChainDetonation`). |
 
@@ -130,11 +130,9 @@ and cluster bonus grow. Re-run the combo to feel the difference.
 3. Confirm the host-authority model (CODING_STANDARDS §4): one client taunts, the other
    barrages; damage/extraction resolve on the server, cosmetics play on both.
 
-> ⚠️ **Remote-client abilities need component replication.** `UAbilityComponent`'s
-> `Server_Activate` only routes from a remote client if the component replicates. The
-> **host** works without it (it has authority), so solo/host tests pass — but before the
-> 2-player test, the ability component must be set to replicate. (Tracked under
-> "What's NOT wired yet".)
+> Note: `UAbilityComponent` and `UStatsComponent` both set `default bReplicates = true`,
+> so remote-client ability activation and teammate HUD values work. Health/shield bars on
+> clients read the replicated `Stats.Health` / `Stats.Shield` (via their `OnRep_` hooks).
 
 ---
 
@@ -171,8 +169,8 @@ Things that differ from stock C++/Blueprint assumptions, learned from real compi
 
 ## What's NOT wired yet (by design)
 
-- **Ability component replication** — `UAbilityComponent`'s RPCs route on the host but not
-  from remote clients yet; needs the component set to replicate before the 2-player test (§6).
+- **Hero damage intake** — heroes have a full `UStatsComponent`, but nothing damages them
+  yet (enemies have no attack). Route enemy attacks to `Stats.ApplyDamage(...)` when added.
 - **Mass fodder** — `SpawnDirector::SpawnFodderWave` is a logged placeholder until the Mass
   spike (SETUP §5.5, needs a concrete enemy-count target — DECISIONS "Still open").
 - **Down/revive** → party-wipe is a hook (`RaidObjective::NotifyPartyWiped`).
