@@ -12,6 +12,7 @@ public class RogueSmoke : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"NetCore",
 			"InputCore",
 			"EnhancedInput",
 			"AIModule",
@@ -25,6 +26,8 @@ public class RogueSmoke : ModuleRules
 
 		PublicIncludePaths.AddRange(new string[] {
 			"RogueSmoke",
+			"RogueSmoke/Combat",
+			"RogueSmoke/Enemies",
 			"RogueSmoke/Variant_Horror",
 			"RogueSmoke/Variant_Horror/UI",
 			"RogueSmoke/Variant_Shooter",
