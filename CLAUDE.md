@@ -23,8 +23,8 @@ This is **not** an AngelScript-only project. Do not refactor away the C++/Mass l
   handles both Mass agents (fodder) and Actor elites.
 
 ## Build & run
-<!-- TODO: fill in real paths once the engine build is in place. Full guide in SETUP.md. -->
-- Open `RogueSmoke.uproject` with the **custom** editor you built (not a launcher engine).
+- **AngelScript engine fork:** `F:\UEAS` (editor: `F:\UEAS\Engine\Binaries\Win64\UnrealEditor.exe`).
+- Open `RogueSmoke.uproject` (in `RogueSmoke/RogueSmoke/`) with that **custom** editor — not a launcher engine.
 - AngelScript: hot-reloads on save (non-structural changes reload live in PIE).
   Editor **Tools -> Open Angelscript workspace** opens `Script/` in VS Code.
 - C++: rebuild in Visual Studio, relaunch editor.
