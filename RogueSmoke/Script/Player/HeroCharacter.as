@@ -2,14 +2,9 @@
 // Base hero: top-down camera (D-0005). Subclasses pick the ability (Vanguard = taunt,
 // Bombardier = barrage). MVP arch §6.
 //
-// INPUT: this fork build does not expose Enhanced Input *binding* to script (only the
-// legacy BindAction), so wire input in the hero BP and call the BlueprintCallable entry
-// points below:
-//   - IA_PrimaryAbility (Started)  -> OnPrimaryAbilityPressed()
-//   - IA_Move (Triggered)          -> DoMove(ActionValue.Axis2D)
-// IMPORTANT: also add the Input Mapping Context (IMC_Default) to the player on BeginPlay
-// in the BP — if that step is missing, NO input reaches the pawn (the usual "nothing
-// happens" cause).
+// Input lives on ARaidPlayerController (Controller = the player; Pawn = the body). The
+// controller forwards intent here via the BlueprintCallable entry points below, so every
+// hero variant gets input for free with no per-pawn wiring.
 class AHeroCharacter : ACharacter
 {
     default bReplicates = true;
@@ -28,19 +23,19 @@ class AHeroCharacter : ACharacter
     UPROPERTY(DefaultComponent)
     UStatsComponent Stats;
 
-    // Call from the BP's IA_PrimaryAbility (Started/Triggered) event.
-    UFUNCTION(BlueprintCallable)
-    void OnPrimaryAbilityPressed()
-    {
-        ActivatePrimary();
-    }
-
-    // Call from the BP's IA_Move (Triggered) event, passing the action value's 2D axis.
+    // Called by ARaidPlayerController from the IA_Move action value.
     UFUNCTION(BlueprintCallable)
     void DoMove(FVector2D Axis)
     {
         AddMovementInput(FVector(1.0, 0.0, 0.0), Axis.Y);        // top-down: world +X = "up"
         AddMovementInput(FVector(0.0, 1.0, 0.0), Axis.X);
+    }
+
+    // Called by ARaidPlayerController from the IA_PrimaryAbility action.
+    UFUNCTION(BlueprintCallable)
+    void OnPrimaryAbilityPressed()
+    {
+        ActivatePrimary();
     }
 
     // Overridden per kit.
