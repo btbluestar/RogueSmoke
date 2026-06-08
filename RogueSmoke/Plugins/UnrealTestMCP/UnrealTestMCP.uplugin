@@ -1,0 +1,35 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0-alpha",
+	"FriendlyName": "Unreal Test MCP",
+	"Description": "MCP server exposing the Unreal Editor to Claude for authoring and running gameplay integration tests in PIE.",
+	"Category": "Testing",
+	"CreatedBy": "Staffan J. Olsson",
+	"CreatedByURL": "https://github.com/StaffanJOlsson/unreal-test-mcp",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": false,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "UeMcpRuntime",
+			"Type": "Runtime",
+			"LoadingPhase": "PreDefault"
+		},
+		{
+			"Name": "UeMcpEditor",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "PythonScriptPlugin",
+			"Enabled": true
+		}
+	]
+}

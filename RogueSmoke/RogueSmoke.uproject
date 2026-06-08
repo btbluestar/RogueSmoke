@@ -34,6 +34,10 @@
 		{
 			"Name": "AngelscriptEnhancedInput",
 			"Enabled": true
+		},
+		{
+			"Name": "UnrealTestMCP",
+			"Enabled": true
 		}
 	]
 }
