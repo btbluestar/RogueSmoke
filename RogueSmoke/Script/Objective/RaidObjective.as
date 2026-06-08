@@ -41,6 +41,9 @@ class ARaidObjective : AActor
     UPROPERTY(EditAnywhere, Category = "Raid|Defend Wave")
     float DefendWaveRadius = 1200.0;
 
+    UPROPERTY(EditAnywhere, Category = "Debug")
+    bool bShowDebug = true;
+
     // Grace window after start so placed elites register before we test "cleared".
     UPROPERTY(EditAnywhere, Category = "Raid")
     float StartGraceSeconds = 1.0;
@@ -57,6 +60,9 @@ class ARaidObjective : AActor
     UFUNCTION(BlueprintOverride)
     void Tick(float DeltaSeconds)
     {
+        if (bShowDebug)
+            DrawDebug();
+
         if (!HasAuthority())
             return;
 
@@ -121,6 +127,20 @@ class ARaidObjective : AActor
     {
         Phase = NewPhase;
         OnPhaseChanged(NewPhase);        // server-side reaction
+    }
+
+    // White = clearing · Green = extraction ready · Red = defending · Blue = extracted.
+    private void DrawDebug()
+    {
+        FLinearColor Color = FLinearColor::White;
+        if (Phase == ERaidPhase::ExtractionReady)
+            Color = FLinearColor::Green;
+        else if (Phase == ERaidPhase::Extracting)
+            Color = FLinearColor::Red;
+        else if (Phase == ERaidPhase::Extracted)
+            Color = FLinearColor::Blue;
+
+        System::DrawDebugSphere(GetActorLocation(), DefendWaveRadius, 32, Color, 0.0, 3.0);
     }
 
     UFUNCTION()

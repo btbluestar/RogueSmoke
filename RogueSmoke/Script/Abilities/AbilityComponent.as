@@ -16,6 +16,9 @@ class UAbilityComponent : UActorComponent
 
     float CooldownRemaining = 0.0;
 
+    UPROPERTY(EditAnywhere, Category = "Debug")
+    bool bShowDebug = true;
+
     // Overriding the Tick event is what makes this component tick in the AngelScript fork
     // (mirrors Blueprint) — there is no settable `default PrimaryComponentTick.bCanEverTick`.
     UFUNCTION(BlueprintOverride)
@@ -23,6 +26,13 @@ class UAbilityComponent : UActorComponent
     {
         if (CooldownRemaining > 0.0)
             CooldownRemaining = Math::Max(0.0, CooldownRemaining - DeltaSeconds);
+
+        if (bShowDebug)
+        {
+            float DebugRadius = GetDebugRadius();
+            if (DebugRadius > 0.0)
+                System::DrawDebugSphere(GetOwner().GetActorLocation(), DebugRadius, 24, FLinearColor::Blue, 0.0, 1.5);
+        }
     }
 
     bool IsReady() const { return CooldownRemaining <= 0.0; }
@@ -52,6 +62,9 @@ class UAbilityComponent : UActorComponent
             return Stats.GetEffectiveCooldown(Cooldown);
         return Cooldown;
     }
+
+    // Range to visualize around the owner when bShowDebug (0 = nothing). Override per ability.
+    float GetDebugRadius() const { return 0.0; }
 
     // ---- Override points for concrete abilities ----
     void ExecuteOnServer(FVector Location) {}    // authoritative gameplay effect (server only)

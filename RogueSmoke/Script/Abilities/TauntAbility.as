@@ -32,4 +32,6 @@ class UTauntAbilityComponent : UAbilityComponent
         // Distinct "SETUP READY" cue (GDD §5.3 / §10). Replace with VFX/SFX.
         Print("TAUNT: enemies pulled + marked Clustered", 2.0);
     }
+
+    float GetDebugRadius() const override { return Radius; }
 }

@@ -34,4 +34,6 @@ class UBarrageAbilityComponent : UAbilityComponent
     {
         Print("BARRAGE: AoE detonation", 2.0);
     }
+
+    float GetDebugRadius() const override { return Radius; }
 }

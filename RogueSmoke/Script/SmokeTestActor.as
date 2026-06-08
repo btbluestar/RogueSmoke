@@ -6,7 +6,7 @@
 class ASmokeTestActor : AActor
 {
     UPROPERTY(EditAnywhere, Category = "SmokeTest")
-    FString Message = "AngelScript OK - Does it work?";
+    FString Message = "AngelScript OK - Well?";
 
     UFUNCTION(BlueprintOverride)
     void BeginPlay()

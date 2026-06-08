@@ -7,4 +7,19 @@ class AClusterableElite : AEliteEnemyBase
     UPROPERTY(DefaultComponent, RootComponent)
     UStaticMeshComponent Mesh;
     default Mesh.RelativeScale3D = FVector(1.0, 1.0, 2.0);
+
+    UPROPERTY(EditAnywhere, Category = "Debug")
+    bool bShowDebug = true;
+
+    // C++ base already ticks (PrimaryActorTick enabled), so this script Tick fires too.
+    UFUNCTION(BlueprintOverride)
+    void Tick(float DeltaSeconds)
+    {
+        if (!bShowDebug)
+            return;
+
+        // Green = currently Clustered (was taunted); White = normal, taunt-able.
+        FLinearColor Color = IsClustered() ? FLinearColor::Green : FLinearColor::White;
+        System::DrawDebugSphere(GetActorLocation() + FVector(0.0, 0.0, 150.0), 35.0, 8, Color, 0.0, 2.0);
+    }
 }
