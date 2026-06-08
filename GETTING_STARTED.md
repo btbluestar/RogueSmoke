@@ -72,17 +72,22 @@ Create these under `Content/RogueSmoke/` (right-click → Blueprint Class → pi
 > You *can* place raw script actors directly, but BPs are where you attach meshes/materials
 > and tweak defaults without recompiling.
 
-### Input wiring (Enhanced Input)
+### Input wiring (Enhanced Input — on the PlayerController)
 
-Our `AHeroCharacter` exposes `OnPrimaryAbilityPressed()` to bind, but doesn't register the
-mapping itself yet. Wire it in `BP_Vanguard` / `BP_Bombardier`:
+Input is wired in script on **`ARaidPlayerController`** (one place for every hero), not per
+pawn. Requires the `AngelscriptEnhancedInput` plugin (already enabled in the `.uproject`).
+No node graphs — just asset assignment:
 
-1. Create `IA_PrimaryAbility` (Input Action, Digital/bool) and add it to your `IMC_Default`
-   mapping context (e.g. on a mouse button).
-2. In the hero BP **Event BeginPlay**: if locally controlled, add `IMC_Default` to the
-   player's Enhanced Input subsystem.
-3. In the hero BP, add the **`IA_PrimaryAbility` (Triggered)** event → call
-   `OnPrimaryAbilityPressed` (the inherited script function).
+1. Create `IA_PrimaryAbility` (Input Action, Digital/bool) and add it to `IMC_Default` with a
+   key (e.g. Left Mouse Button). `IA_Move` is already in `IMC_Default` from the template.
+2. Make **`BP_RaidPlayerController`** (parent class = `RaidPlayerController`). In Class
+   Defaults → Input, assign: **Input Mapping Context** = `IMC_Default`, **Move Action** =
+   `IA_Move`, **Primary Ability Action** = `IA_PrimaryAbility`.
+3. In **`BP_RaidGameMode`** → Class Defaults, set **Player Controller Class** =
+   `BP_RaidPlayerController`.
+
+That's it — the controller adds the mapping context, binds the actions, and forwards `DoMove`
+/ `OnPrimaryAbilityPressed` to whatever hero is possessed. No input wiring in the hero BPs.
 
 ---
 
