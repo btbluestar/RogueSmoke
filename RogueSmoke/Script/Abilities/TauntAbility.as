@@ -31,7 +31,27 @@ class UTauntAbilityComponent : UAbilityComponent
     {
         // Distinct "SETUP READY" cue (GDD §5.3 / §10). Replace with VFX/SFX.
         Print("TAUNT: enemies pulled + marked Clustered", 2.0);
+
+        LastTauntLocation = Location;            // debug: the "knot" enemies are pulled to
+        TauntMarkerRemaining = ClusterDuration;
     }
 
     float GetDebugRadius() const override { return Radius; }
+
+    // ---- debug: show the pull destination for the cluster duration ----
+    private FVector LastTauntLocation;
+    private float TauntMarkerRemaining = 0.0;
+
+    UFUNCTION(BlueprintOverride)
+    void Tick(float DeltaSeconds)
+    {
+        Super::Tick(DeltaSeconds);   // base: cooldown + ability-range debug sphere
+
+        if (TauntMarkerRemaining > 0.0)
+        {
+            TauntMarkerRemaining -= DeltaSeconds;
+            if (RaidDebug::bEnabled && bShowDebug)
+                System::DrawDebugSphere(LastTauntLocation, 60.0, 12, FLinearColor::Yellow, 0.0, 3.0);
+        }
+    }
 }

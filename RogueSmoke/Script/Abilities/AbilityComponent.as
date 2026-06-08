@@ -27,7 +27,7 @@ class UAbilityComponent : UActorComponent
         if (CooldownRemaining > 0.0)
             CooldownRemaining = Math::Max(0.0, CooldownRemaining - DeltaSeconds);
 
-        if (bShowDebug)
+        if (bShowDebug && RaidDebug::bEnabled)
         {
             float DebugRadius = GetDebugRadius();
             if (DebugRadius > 0.0)

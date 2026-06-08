@@ -132,15 +132,33 @@ class ARaidObjective : AActor
     // White = clearing · Green = extraction ready · Red = defending · Blue = extracted.
     private void DrawDebug()
     {
+        if (!RaidDebug::bEnabled)
+            return;
+
         FLinearColor Color = FLinearColor::White;
+        FString Label = "RAID: clearing";
         if (Phase == ERaidPhase::ExtractionReady)
+        {
             Color = FLinearColor::Green;
+            Label = "RAID: extraction ready";
+        }
         else if (Phase == ERaidPhase::Extracting)
+        {
             Color = FLinearColor::Red;
+            Label = f"DEFEND: {int(ExtractionSecondsRemaining)}s";
+        }
         else if (Phase == ERaidPhase::Extracted)
+        {
             Color = FLinearColor::Blue;
+            Label = "EXTRACTED";
+        }
+        else if (Phase == ERaidPhase::Failed)
+        {
+            Label = "FAILED";
+        }
 
         System::DrawDebugSphere(GetActorLocation(), DefendWaveRadius, 32, Color, 0.0, 3.0);
+        System::DrawDebugString(GetActorLocation() + FVector(0.0, 0.0, 120.0), Label, nullptr, Color, 0.0);
     }
 
     UFUNCTION()

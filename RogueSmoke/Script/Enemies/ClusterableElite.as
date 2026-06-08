@@ -15,11 +15,15 @@ class AClusterableElite : AEliteEnemyBase
     UFUNCTION(BlueprintOverride)
     void Tick(float DeltaSeconds)
     {
-        if (!bShowDebug)
+        if (!RaidDebug::bEnabled || !bShowDebug)
             return;
 
         // Green = currently Clustered (was taunted); White = normal, taunt-able.
         FLinearColor Color = IsClustered() ? FLinearColor::Green : FLinearColor::White;
         System::DrawDebugSphere(GetActorLocation() + FVector(0.0, 0.0, 150.0), 35.0, 8, Color, 0.0, 2.0);
+
+        if (Health != nullptr)
+            System::DrawDebugString(GetActorLocation() + FVector(0.0, 0.0, 210.0),
+                f"HP {int(Health.Health)}/{int(Health.MaxHealth)}", nullptr, Color, 0.0);
     }
 }

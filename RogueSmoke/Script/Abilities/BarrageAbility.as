@@ -33,6 +33,9 @@ class UBarrageAbilityComponent : UAbilityComponent
     void PlayCosmetics(FVector Location) override
     {
         Print("BARRAGE: AoE detonation", 2.0);
+
+        if (RaidDebug::bEnabled && bShowDebug)
+            System::DrawDebugSphere(Location, Radius, 24, FLinearColor::Red, 1.0, 2.0);  // 1s flash at impact
     }
 
     float GetDebugRadius() const override { return Radius; }
