@@ -1,6 +1,11 @@
 // HeroCharacter.as
-// Base hero: top-down camera (D-0005) + the primary-ability input hook. Subclasses pick
-// the ability (Vanguard = taunt, Bombardier = barrage). MVP arch §6.
+// Base hero: top-down camera (D-0005) + self-contained Enhanced Input. Subclasses pick the
+// ability (Vanguard = taunt, Bombardier = barrage). MVP arch §6.
+//
+// SETUP — in the hero BP (Class Defaults > Input) assign:
+//   InputMappingContext  = IMC_Default          (must contain a key->PrimaryAbilityAction mapping)
+//   MoveAction           = IA_Move
+//   PrimaryAbilityAction = IA_PrimaryAbility     (create this asset; add it to IMC_Default)
 class AHeroCharacter : ACharacter
 {
     default bReplicates = true;
@@ -19,7 +24,58 @@ class AHeroCharacter : ACharacter
     UPROPERTY(DefaultComponent)
     UStatsComponent Stats;
 
-    // Bind this to an Enhanced Input action on the owning client (IA_PrimaryAbility).
+    // ---- Input assets (assign in the hero BP) ----
+    UPROPERTY(EditDefaultsOnly, Category = "Input")
+    UInputMappingContext InputMappingContext;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input")
+    UInputAction MoveAction;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input")
+    UInputAction PrimaryAbilityAction;
+
+    // Register the mapping context for the locally-controlled player.
+    UFUNCTION(BlueprintOverride)
+    void BeginPlay()
+    {
+        APlayerController PC = Cast<APlayerController>(GetController());
+        if (PC != nullptr && InputMappingContext != nullptr)
+        {
+            UEnhancedInputLocalPlayerSubsystem InputSystem = UEnhancedInputLocalPlayerSubsystem::Get(PC.GetLocalPlayer());
+            if (InputSystem != nullptr)
+                InputSystem.AddMappingContext(InputMappingContext, 0);
+        }
+    }
+
+    // Bind actions. Called automatically when the pawn is possessed by a local player.
+    UFUNCTION(BlueprintOverride)
+    void SetupPlayerInputComponent(UInputComponent InputComponent)
+    {
+        UEnhancedInputComponent EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent);
+        if (EnhancedInput == nullptr)
+            return;
+
+        if (MoveAction != nullptr)
+            EnhancedInput.BindAction(MoveAction, ETriggerEvent::Triggered, FEnhancedInputActionHandlerDynamicSignature(this, n"HandleMove"));
+
+        if (PrimaryAbilityAction != nullptr)
+            EnhancedInput.BindAction(PrimaryAbilityAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"HandlePrimaryAbility"));
+    }
+
+    UFUNCTION()
+    private void HandleMove(FInputActionValue ActionValue)
+    {
+        FVector2D Axis = ActionValue.GetAxis2D();
+        AddMovementInput(FVector(1.0, 0.0, 0.0), Axis.Y);   // top-down: world +X = "up"
+        AddMovementInput(FVector(0.0, 1.0, 0.0), Axis.X);
+    }
+
+    UFUNCTION()
+    private void HandlePrimaryAbility(FInputActionValue ActionValue)
+    {
+        OnPrimaryAbilityPressed();
+    }
+
     UFUNCTION()
     void OnPrimaryAbilityPressed()
     {
