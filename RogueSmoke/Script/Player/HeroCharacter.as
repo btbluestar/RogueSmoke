@@ -1,11 +1,15 @@
 // HeroCharacter.as
-// Base hero: top-down camera (D-0005) + self-contained Enhanced Input. Subclasses pick the
-// ability (Vanguard = taunt, Bombardier = barrage). MVP arch §6.
+// Base hero: top-down camera (D-0005). Subclasses pick the ability (Vanguard = taunt,
+// Bombardier = barrage). MVP arch §6.
 //
-// SETUP — in the hero BP (Class Defaults > Input) assign:
-//   InputMappingContext  = IMC_Default          (must contain a key->PrimaryAbilityAction mapping)
-//   MoveAction           = IA_Move
-//   PrimaryAbilityAction = IA_PrimaryAbility     (create this asset; add it to IMC_Default)
+// INPUT: this fork build does not expose Enhanced Input *binding* to script (only the
+// legacy BindAction), so wire input in the hero BP and call the BlueprintCallable entry
+// points below:
+//   - IA_PrimaryAbility (Started)  -> OnPrimaryAbilityPressed()
+//   - IA_Move (Triggered)          -> DoMove(ActionValue.Axis2D)
+// IMPORTANT: also add the Input Mapping Context (IMC_Default) to the player on BeginPlay
+// in the BP — if that step is missing, NO input reaches the pawn (the usual "nothing
+// happens" cause).
 class AHeroCharacter : ACharacter
 {
     default bReplicates = true;
@@ -24,62 +28,19 @@ class AHeroCharacter : ACharacter
     UPROPERTY(DefaultComponent)
     UStatsComponent Stats;
 
-    // ---- Input assets (assign in the hero BP) ----
-    UPROPERTY(EditDefaultsOnly, Category = "Input")
-    UInputMappingContext InputMappingContext;
-
-    UPROPERTY(EditDefaultsOnly, Category = "Input")
-    UInputAction MoveAction;
-
-    UPROPERTY(EditDefaultsOnly, Category = "Input")
-    UInputAction PrimaryAbilityAction;
-
-    // Register the mapping context for the locally-controlled player.
-    UFUNCTION(BlueprintOverride)
-    void BeginPlay()
-    {
-        APlayerController PC = Cast<APlayerController>(GetController());
-        if (PC != nullptr && InputMappingContext != nullptr)
-        {
-            UEnhancedInputLocalPlayerSubsystem InputSystem = UEnhancedInputLocalPlayerSubsystem::Get(PC.GetLocalPlayer());
-            if (InputSystem != nullptr)
-                InputSystem.AddMappingContext(InputMappingContext, 0);
-        }
-    }
-
-    // Bind actions. Called automatically when the pawn is possessed by a local player.
-    UFUNCTION(BlueprintOverride)
-    void SetupPlayerInputComponent(UInputComponent InputComponent)
-    {
-        UEnhancedInputComponent EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent);
-        if (EnhancedInput == nullptr)
-            return;
-
-        if (MoveAction != nullptr)
-            EnhancedInput.BindAction(MoveAction, ETriggerEvent::Triggered, FEnhancedInputActionHandlerDynamicSignature(this, n"HandleMove"));
-
-        if (PrimaryAbilityAction != nullptr)
-            EnhancedInput.BindAction(PrimaryAbilityAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"HandlePrimaryAbility"));
-    }
-
-    UFUNCTION()
-    private void HandleMove(FInputActionValue ActionValue)
-    {
-        FVector2D Axis = ActionValue.GetAxis2D();
-        AddMovementInput(FVector(1.0, 0.0, 0.0), Axis.Y);   // top-down: world +X = "up"
-        AddMovementInput(FVector(0.0, 1.0, 0.0), Axis.X);
-    }
-
-    UFUNCTION()
-    private void HandlePrimaryAbility(FInputActionValue ActionValue)
-    {
-        OnPrimaryAbilityPressed();
-    }
-
-    UFUNCTION()
+    // Call from the BP's IA_PrimaryAbility (Started/Triggered) event.
+    UFUNCTION(BlueprintCallable)
     void OnPrimaryAbilityPressed()
     {
         ActivatePrimary();
+    }
+
+    // Call from the BP's IA_Move (Triggered) event, passing the action value's 2D axis.
+    UFUNCTION(BlueprintCallable)
+    void DoMove(FVector2D Axis)
+    {
+        AddMovementInput(FVector(1.0, 0.0, 0.0), Axis.Y);        // top-down: world +X = "up"
+        AddMovementInput(FVector(0.0, 1.0, 0.0), Axis.X);
     }
 
     // Overridden per kit.
@@ -87,7 +48,6 @@ class AHeroCharacter : ACharacter
 
     // Apply a chosen upgrade server-side (authoritative — upgrades change combat math
     // that runs on the server). Called by UpgradeSelectWidget on the owning client.
-    // NOTE: NewObject / Cast / TSubclassOf forms are fork-generated — verify in-editor.
     UFUNCTION(Server)
     void Server_ApplyUpgrade(TSubclassOf<UUpgradeEffect> UpgradeClass)
     {
@@ -100,8 +60,7 @@ class AHeroCharacter : ACharacter
     }
 
     // Route a remote client's "call extraction" through a player-owned RPC (clients can't
-    // Server-RPC the unowned objective directly). The caller passes the objective it found
-    // (e.g. an interaction volume), avoiding a world-wide actor lookup. D-0010.
+    // Server-RPC the unowned objective directly). D-0010.
     UFUNCTION(Server)
     void Server_CallExtraction(ARaidObjective Objective)
     {
