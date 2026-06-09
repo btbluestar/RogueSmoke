@@ -5,6 +5,8 @@
 #include "Enemies/EliteEnemyBase.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "GameFramework/Actor.h"
+#include "CollisionQueryParams.h"
 
 bool UCombatSubsystem::IsServer() const
 {
@@ -123,4 +125,40 @@ float UCombatSubsystem::ApplyRadialDamage(FVector Center, float Radius, float Ba
 		}
 	}
 	return TotalDealt;
+}
+
+FHitscanResult UCombatSubsystem::FireHitscan(FVector Start, FVector End, float Damage, AActor* DamageInstigator)
+{
+	FHitscanResult Result;
+	Result.ImpactPoint = End; // default: nothing hit -> tracer reaches the trace end
+
+	UWorld* World = GetWorld();
+	if (World == nullptr || !IsServer())
+	{
+		return Result;
+	}
+
+	FCollisionQueryParams Params(FName(TEXT("FireHitscan")), /*bTraceComplex=*/false, DamageInstigator);
+	Params.AddIgnoredActor(DamageInstigator);
+
+	FHitResult Hit;
+	if (World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+	{
+		Result.bBlockingHit = true;
+		Result.ImpactPoint = Hit.ImpactPoint;
+		Result.ImpactNormal = Hit.ImpactNormal;
+		Result.HitActor = Hit.GetActor();
+
+		// Actor-elite backend (D-0003). The Mass-agent raycast resolves here later, behind the same call.
+		if (AEliteEnemyBase* Elite = Cast<AEliteEnemyBase>(Hit.GetActor()))
+		{
+			if (Elite->Health != nullptr)
+			{
+				Result.DamageDealt = Elite->Health->ApplyDamage(Damage, DamageInstigator);
+				Result.bHitEnemy = true;
+			}
+		}
+	}
+
+	return Result;
 }

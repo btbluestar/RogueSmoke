@@ -13,6 +13,37 @@
 #include "CombatSubsystem.generated.h"
 
 class AEliteEnemyBase;
+class AActor;
+
+/** Result of a single hitscan through the seam. Returned by value for clean AngelScript interop. */
+USTRUCT(BlueprintType)
+struct FHitscanResult
+{
+	GENERATED_BODY()
+
+	/** True if the trace hit a registered enemy and applied damage. */
+	UPROPERTY(BlueprintReadOnly, Category="Combat")
+	bool bHitEnemy = false;
+
+	/** True if the trace hit anything (enemy or world geometry). */
+	UPROPERTY(BlueprintReadOnly, Category="Combat")
+	bool bBlockingHit = false;
+
+	/** Where the trace stopped (impact point, or the trace end if nothing was hit). Use for tracer end + impact FX. */
+	UPROPERTY(BlueprintReadOnly, Category="Combat")
+	FVector ImpactPoint = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadOnly, Category="Combat")
+	FVector ImpactNormal = FVector::ZeroVector;
+
+	/** Damage actually applied to the enemy (0 if a wall/nothing was hit, or on a client). */
+	UPROPERTY(BlueprintReadOnly, Category="Combat")
+	float DamageDealt = 0.f;
+
+	/** The actor hit, if any. */
+	UPROPERTY(BlueprintReadOnly, Category="Combat")
+	TObjectPtr<AActor> HitActor = nullptr;
+};
 
 UCLASS()
 class ROGUESMOKE_API UCombatSubsystem : public UWorldSubsystem
@@ -47,6 +78,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	float ApplyRadialDamage(FVector Center, float Radius, float BaseDamage,
 	                        float ClusterBonusMultiplier, AActor* DamageInstigator);
+
+	// --- Single-target hitscan (server-authoritative; the shooting path) ---
+	/**
+	 * Trace Start->End and damage the first registered enemy hit through its HealthComponent.
+	 * Returns the impact (for tracer/impact FX) and damage dealt. The Mass-fodder raycast plugs in
+	 * here later (D-0003); abilities call this instead of tracing/iterating enemies themselves.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	FHitscanResult FireHitscan(FVector Start, FVector End, float Damage, AActor* DamageInstigator);
 
 private:
 	bool IsServer() const;

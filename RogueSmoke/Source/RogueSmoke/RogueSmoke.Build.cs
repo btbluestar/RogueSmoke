@@ -19,13 +19,22 @@ public class RogueSmoke : ModuleRules
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"UMG",
-			"Slate"
+			"Slate",
+			// GAS (Lyra-style ability system; ASC bound to AngelScript via the AngelscriptGAS plugin).
+			"GameplayAbilities",
+			"GameplayTags",
+			"GameplayTasks",
+			// AngelscriptGAS exposes UAngelscriptAbilitySystemComponent / UAngelscriptAttributeSet etc.
+			// (the C++ bases our PlayerState/HeroBase/attribute sets build on).
+			"AngelscriptGAS"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"RogueSmoke",
+			"RogueSmoke/AbilitySystem",
+			"RogueSmoke/AbilitySystem/Attributes",
 			"RogueSmoke/Combat",
 			"RogueSmoke/Enemies",
 			"RogueSmoke/Spawning",
