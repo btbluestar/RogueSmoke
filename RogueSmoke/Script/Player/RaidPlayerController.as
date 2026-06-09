@@ -37,6 +37,10 @@ class ARaidPlayerController : APlayerController
     UPROPERTY(EditDefaultsOnly, Category = "Input")
     UInputAction CrouchAction;
 
+    // Light ADS / focus (hold RMB): zoom in + tighten spread (D-0014).
+    UPROPERTY(EditDefaultsOnly, Category = "Input")
+    UInputAction FocusAction;
+
     // Maps ability input actions -> gameplay input tags (Lyra-style). Each ability action's tag is
     // matched against the abilities the hero was granted from its AbilitySet.
     UPROPERTY(EditDefaultsOnly, Category = "Input")
@@ -141,6 +145,14 @@ class ARaidPlayerController : APlayerController
                 FEnhancedInputActionHandlerDynamicSignature(this, n"HandleCrouchPressed"));
             EnhancedInput.BindAction(CrouchAction, ETriggerEvent::Completed,
                 FEnhancedInputActionHandlerDynamicSignature(this, n"HandleCrouchReleased"));
+        }
+
+        if (FocusAction != nullptr)
+        {
+            EnhancedInput.BindAction(FocusAction, ETriggerEvent::Started,
+                FEnhancedInputActionHandlerDynamicSignature(this, n"HandleFocusOn"));
+            EnhancedInput.BindAction(FocusAction, ETriggerEvent::Completed,
+                FEnhancedInputActionHandlerDynamicSignature(this, n"HandleFocusOff"));
         }
 
         // Bind every ability action; the shared handler resolves which by the source action's tag.
@@ -253,6 +265,22 @@ class ARaidPlayerController : APlayerController
         AHeroCharacter Hero = GetHero();
         if (Hero != nullptr)
             Hero.CrouchReleased();
+    }
+
+    UFUNCTION()
+    private void HandleFocusOn(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+    {
+        AHeroCharacter Hero = GetHero();
+        if (Hero != nullptr)
+            Hero.SetFocus(true);
+    }
+
+    UFUNCTION()
+    private void HandleFocusOff(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+    {
+        AHeroCharacter Hero = GetHero();
+        if (Hero != nullptr)
+            Hero.SetFocus(false);
     }
 
     UFUNCTION()

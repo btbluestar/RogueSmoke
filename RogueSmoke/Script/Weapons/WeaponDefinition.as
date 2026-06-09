@@ -64,6 +64,17 @@ class URogueWeaponDefinition : UPrimaryDataAsset
     UPROPERTY(EditDefaultsOnly, Category = "Recoil")
     float RecoilYawRange = 0.2;
 
+    // --- Focus (light ADS, D-0014): hold-to-aim zooms in and tightens spread. Camera-only zoom; no
+    // separate aim rig (the over-the-shoulder camera stays). The strafe slow is on the locomotion comp. ---
+    UPROPERTY(EditDefaultsOnly, Category = "Focus")
+    float FocusSpreadMultiplier = 0.4;       // spread x this while focusing
+
+    UPROPERTY(EditDefaultsOnly, Category = "Focus")
+    float FocusFOV = 70.0;                    // camera FOV when fully focused (hipfire is 90)
+
+    UPROPERTY(EditDefaultsOnly, Category = "Focus")
+    float FocusArmLength = 220.0;             // boom pull-in when fully focused (hipfire is 350)
+
     // --- Cosmetic (assigned per weapon; consumed by FX / montage) ---
     UPROPERTY(EditDefaultsOnly, Category = "Cosmetic")
     USkeletalMesh WeaponMesh;

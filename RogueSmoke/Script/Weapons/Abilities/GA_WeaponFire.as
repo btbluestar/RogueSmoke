@@ -42,25 +42,37 @@ class UGA_WeaponFire : UGA_RogueAbility
         if (Def == nullptr || Combat == nullptr)
             return;
 
-        // Aim from the follow camera (over-the-shoulder). On a listen server the camera transform
-        // reflects the replicated control rotation. Client target-data aim is a later precision upgrade.
-        FVector AimStart = Hero.FollowCamera.GetWorldLocation();
-        FVector AimDir = Hero.FollowCamera.GetForwardVector();
+        // Third-person convergence (D-0014): the camera sits over the shoulder, so firing straight from it
+        // looks wrong. Instead find the world point under the crosshair from the camera, then fire from the
+        // MUZZLE toward that point — bullets originate at the gun yet land on the reticle. On a listen
+        // server the camera transform reflects the replicated control rotation. Client target-data aim is a
+        // later precision upgrade.
+        FVector CamLoc = Hero.FollowCamera.GetWorldLocation();
+        FVector CamDir = Hero.FollowCamera.GetForwardVector();
+        FVector AimPoint = Combat.ResolveAimPoint(CamLoc, CamDir, Def.MaxRange);
+
+        FVector MuzzleLoc = Hero.GetMuzzleLocation();
+        FVector BaseDir = (AimPoint - MuzzleLoc).GetSafeNormal();
+        if (BaseDir.IsNearlyZero())
+            BaseDir = CamDir;   // degenerate (muzzle ~ aim point): fall back to camera forward
 
         bool bMoving = Hero.CharacterMovement != nullptr && Hero.CharacterMovement.Velocity.Size() > 50.0;
-        float HalfAngleRad = Weapon.GetSpreadDegrees(bMoving) * HalfAngleDegToRad;
+        float HalfAngleRad = Weapon.GetSpreadDegrees(bMoving, Hero.bFocusing) * HalfAngleDegToRad;
 
         AActor Avatar = GetAvatarActorFromActorInfo();
         TArray<FVector> Impacts;
+        bool bHitEnemy = false;
         for (int i = 0; i < Def.BulletsPerCartridge; i++)
         {
-            FVector Dir = (HalfAngleRad > 0.0) ? Math::VRandCone(AimDir, HalfAngleRad) : AimDir;
-            FVector End = AimStart + Dir * Def.MaxRange;
-            FHitscanResult Result = Combat.FireHitscan(AimStart, End, Def.Damage, Avatar);
+            FVector Dir = (HalfAngleRad > 0.0) ? Math::VRandCone(BaseDir, HalfAngleRad) : BaseDir;
+            FVector End = MuzzleLoc + Dir * Def.MaxRange;
+            FHitscanResult Result = Combat.FireHitscan(MuzzleLoc, End, Def.Damage, Avatar);
             Impacts.Add(Result.ImpactPoint);
+            if (Result.bHitEnemy)
+                bHitEnemy = true;
         }
 
         Weapon.NotifyFired();
-        Hero.Multicast_FireFX(AimStart, Impacts);
+        Hero.Multicast_FireFX(MuzzleLoc, Impacts, bHitEnemy);
     }
 }

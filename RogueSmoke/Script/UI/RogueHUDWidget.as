@@ -22,6 +22,10 @@ class URogueHUDWidget : UUserWidget
     private UProgressBar ShieldBar;
     private UTextBlock AmmoText;
     private UTextBlock ObjectiveText;
+    private UTextBlock Crosshair;
+    private UTextBlock HitMarker;
+
+    const float HitMarkerDuration = 0.12;   // seconds the hitmarker stays lit after a confirmed hit
 
     private AHeroCharacter Hero;
     private bool bBuilt = false;
@@ -57,10 +61,19 @@ class URogueHUDWidget : UUserWidget
         SetRootWidget(Root);
         bBuilt = true;
 
-        // Crosshair: a simple centered '+' marking where fire is aimed (screen-center, D-0014 shooter).
-        UTextBlock Crosshair = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
+        // Crosshair: a centered '+' marking where fire is aimed (screen-center, D-0014 shooter). Its
+        // render scale blooms with hipfire/movement and tightens on focus (RefreshCrosshair).
+        Crosshair = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
         Crosshair.SetText(FText::FromString("+"));
         AddChild(Crosshair, FAnchors(0.5, 0.5), FVector2D(0.5, 0.5), FVector2D(0.0, 0.0), FVector2D(), true);
+
+        // Hitmarker: a centered 'X' flashed briefly on a confirmed enemy hit. Collapsed until then.
+        HitMarker = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
+        HitMarker.SetText(FText::FromString("X"));
+        HitMarker.SetColorAndOpacity(FSlateColor(Danger));
+        HitMarker.SetRenderScale(FVector2D(1.4, 1.4));
+        HitMarker.SetVisibility(ESlateVisibility::Collapsed);
+        AddChild(HitMarker, FAnchors(0.5, 0.5), FVector2D(0.5, 0.5), FVector2D(0.0, 0.0), FVector2D(), true);
 
         // Objective banner: top-center.
         ObjectiveText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
@@ -133,6 +146,38 @@ class URogueHUDWidget : UUserWidget
         RefreshAmmo();
         RefreshObjective();
         RefreshEdgeIndicators();
+        RefreshCrosshair();
+        RefreshHitMarker();
+    }
+
+    // Crosshair bloom proxy: tighten when focusing, widen while moving (hip-fire). Full heat-driven bloom
+    // needs weapon heat replicated to the owning client (server-only today) — a follow-up; the host reads
+    // its own weapon directly, so this is exact for the host and a good approximation for remote clients.
+    private void RefreshCrosshair()
+    {
+        if (Crosshair == nullptr || Hero == nullptr)
+            return;
+
+        float Scale = 1.0;
+        if (Hero.bFocusing)
+            Scale = 0.6;
+        else if (Hero.CharacterMovement != nullptr && Hero.CharacterMovement.Velocity.Size() > 50.0)
+            Scale = 1.6;
+        Crosshair.SetRenderScale(FVector2D(Scale, Scale));
+    }
+
+    // Flash the hitmarker for HitMarkerDuration after the hero records a confirmed hit (set locally on the
+    // owning client in Multicast_FireFX).
+    private void RefreshHitMarker()
+    {
+        if (HitMarker == nullptr || Hero == nullptr)
+            return;
+
+        bool bShow = Hero.LastHitConfirmTime > 0.0
+            && (Gameplay::GetTimeSeconds() - Hero.LastHitConfirmTime) < HitMarkerDuration;
+        ESlateVisibility Want = bShow ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+        if (HitMarker.GetVisibility() != Want)
+            HitMarker.SetVisibility(Want);
     }
 
     private void RefreshHero()

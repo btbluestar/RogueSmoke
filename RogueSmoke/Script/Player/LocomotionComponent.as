@@ -33,6 +33,12 @@ class URogueLocomotionComponent : UActorComponent
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Crouch")
     float CrouchSpeed = 300.0;
 
+    // --- Focus (light ADS) ---
+    // The strafe slow while aiming lives here (a movement tunable), not on the weapon, so the owning
+    // client can predict it without the server-only weapon state. The hero toggles it via SetFocus().
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Focus")
+    float FocusMoveMultiplier = 0.8;
+
     // --- Slide ---
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
     float SlideBoostSpeed = 900.0;          // target horizontal speed entering a slide
@@ -68,6 +74,7 @@ class URogueLocomotionComponent : UActorComponent
     private UCharacterMovementComponent Move;
     private float BaseWalkSpeed = 600.0;    // from the MoveSpeed attribute
     private bool bSprinting = false;
+    private bool bFocusing = false;
     private bool bCrouchHeld = false;
     private bool bSliding = false;
     private float SlideTimeRemaining = 0.0;
@@ -115,6 +122,13 @@ class URogueLocomotionComponent : UActorComponent
     void SetSprint(bool bWantsSprint)
     {
         bSprinting = bWantsSprint;
+        ApplyGroundSpeed();
+    }
+
+    // Light-ADS focus: slows the strafe. Recomputes the ground speed (stacks under sprint/crouch).
+    void SetFocus(bool bWantsFocus)
+    {
+        bFocusing = bWantsFocus;
         ApplyGroundSpeed();
     }
 
@@ -185,7 +199,10 @@ class URogueLocomotionComponent : UActorComponent
     {
         if (Move == nullptr)
             return;
-        Move.MaxWalkSpeed = BaseWalkSpeed * (bSprinting ? SprintSpeedMultiplier : 1.0);
+        float Speed = BaseWalkSpeed * (bSprinting ? SprintSpeedMultiplier : 1.0);
+        if (bFocusing)
+            Speed *= FocusMoveMultiplier;
+        Move.MaxWalkSpeed = Speed;
         Move.MaxWalkSpeedCrouched = CrouchSpeed;
     }
 

@@ -39,8 +39,8 @@ class URogueWeaponComponent : UActorComponent
 
     bool IsReloading() const { return bIsReloading; }
 
-    // Full spread cone angle in degrees, factoring heat + movement.
-    float GetSpreadDegrees(bool bMoving) const
+    // Full spread cone angle in degrees, factoring heat + movement + focus (light ADS tightens it).
+    float GetSpreadDegrees(bool bMoving, bool bFocusing) const
     {
         if (Definition == nullptr)
             return 0.0;
@@ -49,6 +49,8 @@ class URogueWeaponComponent : UActorComponent
                                   Math::Clamp(CurrentHeat, 0.0, 1.0));
         if (bMoving)
             Spread *= Definition.MovingSpreadMultiplier;
+        if (bFocusing)
+            Spread *= Definition.FocusSpreadMultiplier;
         return Spread;
     }
 

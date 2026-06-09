@@ -132,6 +132,27 @@ float UCombatSubsystem::ApplyRadialDamage(FVector Center, float Radius, float Ba
 	return TotalDealt;
 }
 
+FVector UCombatSubsystem::ResolveAimPoint(FVector CamStart, FVector CamDir, float MaxDist) const
+{
+	const FVector End = CamStart + CamDir * MaxDist;
+
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return End;
+	}
+
+	// Visibility trace from the camera; the first thing under the crosshair (enemy or world geo) is the
+	// convergence point. No damage here — FireHitscan applies damage on the muzzle->aim trace.
+	FCollisionQueryParams Params(FName(TEXT("ResolveAimPoint")), /*bTraceComplex=*/false);
+	FHitResult Hit;
+	if (World->LineTraceSingleByChannel(Hit, CamStart, End, ECC_Visibility, Params))
+	{
+		return Hit.ImpactPoint;
+	}
+	return End;
+}
+
 FHitscanResult UCombatSubsystem::FireHitscan(FVector Start, FVector End, float Damage, AActor* DamageInstigator)
 {
 	FHitscanResult Result;

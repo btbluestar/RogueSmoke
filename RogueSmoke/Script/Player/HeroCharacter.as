@@ -59,6 +59,28 @@ class AHeroCharacter : ARogueHeroBase
     // Server-only: is the fire input currently held (drives full-auto refire in Tick).
     private bool bWantsToFire = false;
 
+    // Visible weapon mesh, attached to the right hand. Its muzzle socket (WeaponDefinition.MuzzleSocket)
+    // is the true bullet origin for third-person convergence (D-0014). Mesh asset comes from the
+    // equipped definition; assigned on all machines so clients see the gun too.
+    UPROPERTY(DefaultComponent)
+    USkeletalMeshComponent WeaponMesh;
+    default WeaponMesh.SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+    // --- Focus / light ADS (D-0014). bFocusing gates the authoritative spread (server reads it when
+    // firing) and the local camera zoom; the strafe slow lives on the locomotion component so the
+    // owning client can predict it. The camera zoom itself is owning-client cosmetic only. ---
+    UPROPERTY(Replicated)
+    bool bFocusing = false;
+
+    private float FocusAlpha = 0.0;          // owning-client camera blend 0..1
+    const float BaseCameraFOV = 90.0;
+    const float BaseArmLength = 350.0;       // mirrors CameraBoom.TargetArmLength default
+    const float FocusBlendSpeed = 9.0;       // FInterp speed for the zoom blend
+
+    // World time of the last confirmed enemy hit on the owning client; the HUD flashes a hitmarker.
+    UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+    float LastHitConfirmTime = -100.0;
+
     // --- Down/revive (MVP lose condition, D-0010). Logic lives in URogueDownComponent; the
     // replicated life-state lives here on the pawn so teammates see/skip downed allies. ---
     UPROPERTY(DefaultComponent)
@@ -129,6 +151,30 @@ class AHeroCharacter : ARogueHeroBase
 
         // Down/revive: subscribes (server) to Health hitting 0. Self-gates to authority.
         Down.Initialize(this);
+
+        // Visible weapon mesh (all machines): attach to the right hand and set the asset from the class
+        // default (available everywhere even though the runtime Weapon.Definition is server-only today).
+        WeaponMesh.AttachToComponent(Mesh, n"hand_r", EAttachmentRule::SnapToTarget,
+            EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, false);
+        if (DefaultWeapon != nullptr && DefaultWeapon.WeaponMesh != nullptr)
+            WeaponMesh.SetSkeletalMeshAsset(DefaultWeapon.WeaponMesh);
+    }
+
+    // True bullet origin for third-person convergence: the weapon muzzle socket when the mesh + socket
+    // exist, else a shoulder-height offset toward aim so shooting works before weapon art is assigned.
+    // Called server-side from the fire ability (where Weapon.Definition is valid).
+    FVector GetMuzzleLocation() const
+    {
+        if (WeaponMesh.GetSkeletalMeshAsset() != nullptr && Weapon != nullptr && Weapon.Definition != nullptr
+            && WeaponMesh.DoesSocketExist(Weapon.Definition.MuzzleSocket))
+        {
+            return WeaponMesh.GetSocketLocation(Weapon.Definition.MuzzleSocket);
+        }
+        FRotator AimYaw = FRotator(0.0, GetControlRotation().Yaw, 0.0);
+        return GetActorLocation()
+            + AimYaw.GetForwardVector() * 60.0
+            + AimYaw.GetRightVector() * 30.0
+            + FVector(0.0, 0.0, 40.0);
     }
 
     // Keep locomotion's base speed in sync with the MoveSpeed attribute (e.g. the Swift upgrade).
@@ -202,6 +248,40 @@ class AHeroCharacter : ARogueHeroBase
         Locomotion.ReleaseCrouch();
     }
 
+    // Focus / light ADS (hold). Local predicts the spread/zoom/move-slow; the server mirror makes the
+    // authoritative spread + move-speed match (same shape as sprint). Camera zoom is owning-client only.
+    void SetFocus(bool bWants)
+    {
+        bool bWant = bWants && !IsIncapacitated();
+        bFocusing = bWant;
+        Locomotion.SetFocus(bWant);
+        Server_SetFocus(bWant);
+    }
+
+    UFUNCTION(Server)
+    void Server_SetFocus(bool bWants)
+    {
+        bFocusing = bWants;
+        Locomotion.SetFocus(bWants);
+    }
+
+    // Owning-client cosmetic: blend the focus camera (FOV zoom + boom pull-in) toward the focus state.
+    private void UpdateFocusCamera(float DeltaSeconds)
+    {
+        float Target = bFocusing ? 1.0 : 0.0;
+        FocusAlpha = Math::FInterpTo(FocusAlpha, Target, DeltaSeconds, FocusBlendSpeed);
+
+        float TargetFOV = 70.0;          // fallbacks for remote clients (Weapon.Definition is server-only)
+        float TargetArm = 220.0;
+        if (Weapon != nullptr && Weapon.Definition != nullptr)
+        {
+            TargetFOV = Weapon.Definition.FocusFOV;
+            TargetArm = Weapon.Definition.FocusArmLength;
+        }
+        FollowCamera.FieldOfView = Math::Lerp(BaseCameraFOV, TargetFOV, FocusAlpha);
+        CameraBoom.TargetArmLength = Math::Lerp(BaseArmLength, TargetArm, FocusAlpha);
+    }
+
     // Server: drive weapon timing and full-auto refire. Overriding Tick is what makes the class tick.
     UFUNCTION(BlueprintOverride)
     void Tick(float DeltaSeconds)
@@ -209,6 +289,10 @@ class AHeroCharacter : ARogueHeroBase
         // Slide physics run wherever movement is simulated (predicted client + authority).
         if (IsLocallyControlled() || HasAuthority())
             Locomotion.TickLocomotion(DeltaSeconds);
+
+        // Owning client: blend the focus camera zoom (cosmetic, local only).
+        if (IsLocallyControlled())
+            UpdateFocusCamera(DeltaSeconds);
 
         if (HasAuthority())
         {
@@ -275,17 +359,24 @@ class AHeroCharacter : ARogueHeroBase
             Weapon.StartReload();
     }
 
-    // Cosmetic, fire-and-forget: tracer(s) on all machines + recoil on the owning client only.
+    // Cosmetic, fire-and-forget: muzzle tracer(s) on all machines + recoil and a hitmarker on the
+    // owning client. MuzzleLocation is the gun muzzle (computed server-side) so tracers come from the
+    // weapon, not the camera (D-0014). bHitEnemy flags that a pellet damaged an enemy this shot.
     UFUNCTION(NetMulticast, Unreliable)
-    void Multicast_FireFX(FVector MuzzleLocation, TArray<FVector> Impacts)
+    void Multicast_FireFX(FVector MuzzleLocation, TArray<FVector> Impacts, bool bHitEnemy)
     {
         for (FVector Impact : Impacts)
             System::DrawDebugLine(MuzzleLocation, Impact, FLinearColor(1.0, 1.0, 0.0), 0.05, 2.0);
 
-        if (IsLocallyControlled() && Weapon != nullptr && Weapon.Definition != nullptr)
+        if (IsLocallyControlled())
         {
-            AddControllerPitchInput(-Weapon.Definition.RecoilPitchPerShot);
-            AddControllerYawInput(Math::RandRange(-Weapon.Definition.RecoilYawRange, Weapon.Definition.RecoilYawRange));
+            if (Weapon != nullptr && Weapon.Definition != nullptr)
+            {
+                AddControllerPitchInput(-Weapon.Definition.RecoilPitchPerShot);
+                AddControllerYawInput(Math::RandRange(-Weapon.Definition.RecoilYawRange, Weapon.Definition.RecoilYawRange));
+            }
+            if (bHitEnemy)
+                LastHitConfirmTime = Gameplay::GetTimeSeconds();
         }
     }
 

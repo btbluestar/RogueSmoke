@@ -88,6 +88,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	FHitscanResult FireHitscan(FVector Start, FVector End, float Damage, AActor* DamageInstigator);
 
+	/**
+	 * Camera-origin visibility trace returning the world point under the crosshair — the convergence
+	 * target for third-person muzzle fire (D-0014). Returns the impact point, or CamStart + CamDir*MaxDist
+	 * if nothing is hit. Read-only query (no damage), so abilities don't world-trace themselves: the
+	 * shooting ability resolves this, then fires the damage trace from the muzzle toward the result.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	FVector ResolveAimPoint(FVector CamStart, FVector CamDir, float MaxDist) const;
+
 private:
 	bool IsServer() const;
 
