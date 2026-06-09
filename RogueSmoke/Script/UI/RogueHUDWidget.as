@@ -11,7 +11,7 @@
 // correctly on the listen-server host but shows "--" on remote clients until weapon state replicates.
 // Health/Shield come from the ASC, which replicates to the owning client, so those are correct.
 //
-// Follow-ups (Design/hud_mockup.html): squad list, ability cooldown slots, off-screen edge indicators.
+// Follow-ups (Design/hud_mockup.html): squad list, ability cooldown slots.
 class URogueHUDWidget : UUserWidget
 {
     // Built once in OnInitialized; children are owned by the widget tree (no UPROPERTY needed, same as
@@ -25,6 +25,15 @@ class URogueHUDWidget : UUserWidget
 
     private AHeroCharacter Hero;
     private bool bBuilt = false;
+
+    // Off-screen edge indicators: a pool of arrow glyphs reused each tick (teal = teammate, red = elite).
+    // They mark where an off-screen ally or threat is, clamped to the screen border and rotated to point at it.
+    private TArray<UTextBlock> EdgeMarkers;   // rotating arrow glyphs
+    private TArray<UTextBlock> EdgeLabels;    // distance readout, sits just inside each arrow (unrotated)
+    const int MaxEdgeMarkers = 8;
+    const float EdgeMargin = 56.0;     // layout-space inset from the screen border
+    const float EdgeArrowScale = 1.8;  // arrows are tiny at the default font size, so scale them up
+    const float EdgeLabelInset = 30.0; // how far inward (toward centre) the distance label sits from the arrow
 
     // Palette (mirrors the mockup tokens): teal accent, red danger, light-blue shield.
     const FLinearColor Accent = FLinearColor(0.27, 0.84, 0.77);
@@ -74,6 +83,28 @@ class URogueHUDWidget : UUserWidget
         // Ammo: bottom-right.
         AmmoText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
         AddChild(AmmoText, FAnchors(1.0, 1.0), FVector2D(1.0, 1.0), FVector2D(-40.0, -40.0), FVector2D(), true);
+
+        // Edge-indicator pool: top-left anchored (absolute layout-space positioning), centred on their slot,
+        // collapsed until a target needs one. The glyph points right at 0deg so atan2 maps straight to its angle.
+        for (int i = 0; i < MaxEdgeMarkers; ++i)
+        {
+            UTextBlock Marker = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
+            if (Marker == nullptr)
+                continue;
+            Marker.SetText(FText::FromString("▶"));
+            Marker.SetRenderScale(FVector2D(EdgeArrowScale, EdgeArrowScale));
+            Marker.SetVisibility(ESlateVisibility::Collapsed);
+            AddChild(Marker, FAnchors(0.0, 0.0), FVector2D(0.5, 0.5), FVector2D(), FVector2D(), true);
+            EdgeMarkers.Add(Marker);
+
+            // Paired distance label (unrotated, sits inboard of the arrow).
+            UTextBlock LabelText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
+            if (LabelText == nullptr)
+                continue;
+            LabelText.SetVisibility(ESlateVisibility::Collapsed);
+            AddChild(LabelText, FAnchors(0.0, 0.0), FVector2D(0.5, 0.5), FVector2D(), FVector2D(), true);
+            EdgeLabels.Add(LabelText);
+        }
     }
 
     // Add a widget to the root canvas with anchor-relative placement. When bAutoSize, the widget sizes
@@ -101,6 +132,7 @@ class URogueHUDWidget : UUserWidget
         RefreshVitals();
         RefreshAmmo();
         RefreshObjective();
+        RefreshEdgeIndicators();
     }
 
     private void RefreshHero()
@@ -192,5 +224,137 @@ class URogueHUDWidget : UUserWidget
                 break;
         }
         ObjectiveText.SetText(FText::FromString(Label));
+    }
+
+    // Drive the pooled edge arrows: one per off-screen teammate (teal) then off-screen elite (red), each
+    // clamped to the screen border and rotated to point at its target. Everything here is local + cosmetic.
+    private void RefreshEdgeIndicators()
+    {
+        if (EdgeMarkers.Num() == 0)
+            return;
+
+        APlayerController PC = GetOwningPlayer();
+        // GetViewportSize is in raw pixels; canvas slots live in DPI-scaled layout space, so divide by the
+        // DPI scale and use WidgetLayout's DPI-corrected projection to keep both in the same coordinate space.
+        FVector2D ViewSize = WidgetLayout::GetViewportSize();
+        float DPI = WidgetLayout::GetViewportScale();
+        if (PC == nullptr || PC.PlayerCameraManager == nullptr || DPI <= 0.0 || ViewSize.X <= 0.0)
+        {
+            HideMarkersFrom(0);
+            return;
+        }
+
+        FVector2D LayoutSize = ViewSize / DPI;
+        FVector2D Center = LayoutSize * 0.5;
+        float HalfW = Math::Max(16.0, Center.X - EdgeMargin);
+        float HalfH = Math::Max(16.0, Center.Y - EdgeMargin);
+
+        FVector CamLoc = PC.PlayerCameraManager.GetCameraLocation();
+        FRotator CamRot = PC.PlayerCameraManager.GetCameraRotation();
+        // Distance is measured from the pawn (more meaningful than the trailing 3rd-person camera).
+        FVector PlayerLoc = (Hero != nullptr) ? Hero.GetActorLocation() : CamLoc;
+
+        int Used = 0;
+
+        // Teammates first (teal): other heroes that are currently off-screen.
+        TArray<AHeroCharacter> Heroes;
+        GetAllActorsOfClass(Heroes);
+        for (AHeroCharacter H : Heroes)
+        {
+            if (Used >= EdgeMarkers.Num())
+                break;
+            if (H == nullptr || H == Hero)
+                continue;
+            if (PlaceEdgeMarker(Used, H.GetActorLocation(), Accent, Center, HalfW, HalfH, LayoutSize, CamLoc, CamRot, PlayerLoc, PC))
+                Used++;
+        }
+
+        // Then elites (red): off-screen threats worth turning toward.
+        TArray<AEliteEnemyBase> Elites;
+        GetAllActorsOfClass(Elites);
+        for (AEliteEnemyBase E : Elites)
+        {
+            if (Used >= EdgeMarkers.Num())
+                break;
+            if (E == nullptr)
+                continue;
+            if (PlaceEdgeMarker(Used, E.GetActorLocation(), Danger, Center, HalfW, HalfH, LayoutSize, CamLoc, CamRot, PlayerLoc, PC))
+                Used++;
+        }
+
+        HideMarkersFrom(Used);
+    }
+
+    // Position marker [Index] for a world target. Returns false (and consumes no marker) when the target is
+    // already on-screen; true when an edge arrow was placed.
+    private bool PlaceEdgeMarker(int Index, FVector TargetLoc, FLinearColor Color,
+        FVector2D Center, float HalfW, float HalfH, FVector2D LayoutSize,
+        FVector CamLoc, FRotator CamRot, FVector PlayerLoc, APlayerController PC)
+    {
+        FVector2D ScreenPos;
+        bool bProjected = WidgetLayout::ProjectWorldLocationToWidgetPosition(PC, TargetLoc, ScreenPos, false);
+
+        bool bOnScreen = bProjected
+            && ScreenPos.X >= EdgeMargin && ScreenPos.X <= LayoutSize.X - EdgeMargin
+            && ScreenPos.Y >= EdgeMargin && ScreenPos.Y <= LayoutSize.Y - EdgeMargin;
+        if (bOnScreen)
+            return false;
+
+        // Screen-space direction from centre toward the target. ProjectWorldLocationToWidgetPosition gives a
+        // valid (mirrored) point only when in front; for targets behind the camera, derive the direction from
+        // the camera-local offset instead (UnrotateVector: X=forward, Y=right, Z=up).
+        FVector2D Dir;
+        if (bProjected)
+        {
+            Dir = ScreenPos - Center;
+        }
+        else
+        {
+            FVector Local = CamRot.UnrotateVector(TargetLoc - CamLoc);
+            Dir = FVector2D(Local.Y, -Local.Z);   // screen Y points down
+        }
+
+        if (Dir.IsNearlyZero())
+            Dir = FVector2D(0.0, 1.0);   // directly behind: point straight down
+        Dir.Normalize();
+
+        // Scale the unit direction out to whichever inset border it hits first.
+        float TX = (Math::Abs(Dir.X) > 0.0001) ? HalfW / Math::Abs(Dir.X) : 1000000.0;
+        float TY = (Math::Abs(Dir.Y) > 0.0001) ? HalfH / Math::Abs(Dir.Y) : 1000000.0;
+        FVector2D EdgePos = Center + Dir * Math::Min(TX, TY);
+
+        UTextBlock Marker = EdgeMarkers[Index];
+        Marker.SetColorAndOpacity(FSlateColor(Color));
+        Marker.SetVisibility(ESlateVisibility::HitTestInvisible);
+        Marker.SetRenderTransformAngle(Math::Atan2(Dir.Y, Dir.X) * 57.2957795);   // rad -> deg
+
+        UCanvasPanelSlot Slot = WidgetLayout::SlotAsCanvasSlot(Marker);
+        if (Slot != nullptr)
+            Slot.SetPosition(EdgePos);
+
+        // Distance label, just inboard of the arrow (unrotated so the number stays upright).
+        if (Index < EdgeLabels.Num() && EdgeLabels[Index] != nullptr)
+        {
+            UTextBlock LabelText = EdgeLabels[Index];
+            int Meters = int((TargetLoc - PlayerLoc).Size() / 100.0);   // cm -> m
+            LabelText.SetText(FText::FromString(f"{Meters}m"));
+            LabelText.SetColorAndOpacity(FSlateColor(Color));
+            LabelText.SetVisibility(ESlateVisibility::HitTestInvisible);
+            UCanvasPanelSlot LabelSlot = WidgetLayout::SlotAsCanvasSlot(LabelText);
+            if (LabelSlot != nullptr)
+                LabelSlot.SetPosition(EdgePos - Dir * EdgeLabelInset);
+        }
+        return true;
+    }
+
+    private void HideMarkersFrom(int FromIndex)
+    {
+        for (int i = FromIndex; i < EdgeMarkers.Num(); ++i)
+        {
+            if (EdgeMarkers[i] != nullptr && EdgeMarkers[i].GetVisibility() != ESlateVisibility::Collapsed)
+                EdgeMarkers[i].SetVisibility(ESlateVisibility::Collapsed);
+            if (i < EdgeLabels.Num() && EdgeLabels[i] != nullptr && EdgeLabels[i].GetVisibility() != ESlateVisibility::Collapsed)
+                EdgeLabels[i].SetVisibility(ESlateVisibility::Collapsed);
+        }
     }
 }
