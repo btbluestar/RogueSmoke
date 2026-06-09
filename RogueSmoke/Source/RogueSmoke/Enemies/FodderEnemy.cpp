@@ -2,6 +2,7 @@
 
 #include "Enemies/FodderEnemy.h"
 #include "Combat/HealthComponent.h"
+#include "Combat/CombatSubsystem.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
@@ -59,11 +60,43 @@ void AFodderEnemy::Tick(float DeltaSeconds)
 		return;
 	}
 
+	if (AttackCooldown > 0.f)
+	{
+		AttackCooldown -= DeltaSeconds;
+	}
+
 	// While a pull owns our movement, let it; otherwise advance the swarm toward the players.
 	const bool bBeingPulled = GetWorld()->GetTimeSeconds() < PullExpiresAtSeconds;
 	if (!bBeingPulled)
 	{
 		SteerTowardNearestPlayer(DeltaSeconds);
+	}
+
+	// Bite whoever we've reached (contact melee; no telegraph — that's what makes the swarm scary).
+	TryMeleeNearestPlayer();
+}
+
+void AFodderEnemy::TryMeleeNearestPlayer()
+{
+	if (AttackCooldown > 0.f)
+	{
+		return;
+	}
+
+	AActor* Target = FindNearestPlayerPawn();
+	if (Target == nullptr)
+	{
+		return;
+	}
+	if (FVector::Dist(Target->GetActorLocation(), GetActorLocation()) > AttackRange)
+	{
+		return;
+	}
+
+	if (UCombatSubsystem* Combat = (GetWorld() ? GetWorld()->GetSubsystem<UCombatSubsystem>() : nullptr))
+	{
+		Combat->ApplyDamageToPlayer(Cast<APawn>(Target), MeleeDamage, this);
+		AttackCooldown = AttackInterval;
 	}
 }
 

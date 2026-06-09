@@ -37,6 +37,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	void ApplyPull(const FVector& Target, float Strength, float Duration);
 
+	/** True while a taunt/pull is steering us. AS attacking-elite subclasses skip their own movement
+	 *  while this is set so they don't fight the base pull steering (the synergy SETUP). */
+	UFUNCTION(BlueprintPure, Category="Combat")
+	bool IsBeingPulled() const;
+
 	// --- Object pooling (driven by USpawnDirector) ---
 	/** Re-activate from the pool: place, reset health + transient state, register, show. */
 	void Activate(const FVector& Location, const FRotator& Rotation);

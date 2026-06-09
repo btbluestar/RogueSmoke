@@ -33,6 +33,16 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Fodder")
 	float StopDistance = 120.f;
 
+	/** Contact melee: damage dealt to a player within AttackRange, at most once per AttackInterval. */
+	UPROPERTY(EditDefaultsOnly, Category="Fodder")
+	float MeleeDamage = 8.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Fodder")
+	float AttackInterval = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Fodder")
+	float AttackRange = 170.f;
+
 protected:
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -43,4 +53,9 @@ protected:
 	/** Server-only: move toward the nearest player pawn. Skipped while a pull is steering us. */
 	void SteerTowardNearestPlayer(float DeltaSeconds);
 	AActor* FindNearestPlayerPawn() const;
+
+	/** Server-only: if a player is within AttackRange and the cooldown is up, deal contact melee. */
+	void TryMeleeNearestPlayer();
+
+	float AttackCooldown = 0.f;
 };

@@ -83,6 +83,11 @@ void AEliteEnemyBase::ApplyPull(const FVector& Target, float Strength, float Dur
 	}
 }
 
+bool AEliteEnemyBase::IsBeingPulled() const
+{
+	return GetWorld() != nullptr && GetWorld()->GetTimeSeconds() < PullExpiresAtSeconds;
+}
+
 void AEliteEnemyBase::ClearTransientState()
 {
 	ClusteredUntilSeconds = 0.f;

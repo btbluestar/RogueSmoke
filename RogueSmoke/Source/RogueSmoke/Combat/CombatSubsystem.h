@@ -14,6 +14,7 @@
 
 class AEliteEnemyBase;
 class AActor;
+class APawn;
 
 /** Result of a single hitscan through the seam. Returned by value for clean AngelScript interop. */
 USTRUCT(BlueprintType)
@@ -96,6 +97,16 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	FVector ResolveAimPoint(FVector CamStart, FVector CamDir, float MaxDist) const;
+
+	// --- Enemy -> player damage (server-authoritative). The outbound analog of FireHitscan: enemies
+	// damage the players' GAS health through here instead of touching the ASC directly. Applies a
+	// transient instant Damage GE, so RogueHealthSet resolves armor/shield/health uniformly. ---
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	void ApplyDamageToPlayer(APawn* Target, float Damage, AActor* DamageInstigator);
+
+	/** Apply Damage to every player pawn within Radius of Center (explosions, slams). Server-only. */
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	void ApplyRadialDamageToPlayers(FVector Center, float Radius, float Damage, AActor* DamageInstigator);
 
 private:
 	bool IsServer() const;

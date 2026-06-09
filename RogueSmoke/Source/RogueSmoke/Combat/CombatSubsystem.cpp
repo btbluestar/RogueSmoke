@@ -6,7 +6,13 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "CollisionQueryParams.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "GameplayEffect.h"
+#include "RogueHealthSet.h"
 
 bool UCombatSubsystem::IsServer() const
 {
@@ -151,6 +157,60 @@ FVector UCombatSubsystem::ResolveAimPoint(FVector CamStart, FVector CamDir, floa
 		return Hit.ImpactPoint;
 	}
 	return End;
+}
+
+void UCombatSubsystem::ApplyDamageToPlayer(APawn* Target, float Damage, AActor* DamageInstigator)
+{
+	if (!IsServer() || Target == nullptr || Damage <= 0.f)
+	{
+		return;
+	}
+
+	UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
+	if (ASC == nullptr)
+	{
+		return;
+	}
+
+	// Transient instant GE that adds to the Damage meta attribute; RogueHealthSet::PostGameplayEffectExecute
+	// resolves Damage -> armor mitigation -> shield absorption -> Health. Mirrors how upgrades/abilities
+	// apply effects, so player damage stays uniform and server-authoritative (no direct attribute pokes).
+	UGameplayEffect* DamageGE = NewObject<UGameplayEffect>(GetTransientPackage(), FName(TEXT("EnemyDamage")));
+	DamageGE->DurationPolicy = EGameplayEffectDurationType::Instant;
+
+	FGameplayModifierInfo Mod;
+	Mod.Attribute = URogueHealthSet::GetDamageAttribute();
+	Mod.ModifierOp = EGameplayModOp::Additive;
+	Mod.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Damage));
+	DamageGE->Modifiers.Add(Mod);
+
+	FGameplayEffectContextHandle Ctx = ASC->MakeEffectContext();
+	Ctx.AddInstigator(DamageInstigator, DamageInstigator);
+	ASC->ApplyGameplayEffectToSelf(DamageGE, 1.0f, Ctx);
+}
+
+void UCombatSubsystem::ApplyRadialDamageToPlayers(FVector Center, float Radius, float Damage, AActor* DamageInstigator)
+{
+	UWorld* World = GetWorld();
+	if (!IsServer() || World == nullptr || Damage <= 0.f)
+	{
+		return;
+	}
+
+	const float RadiusSq = Radius * Radius;
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		APlayerController* PC = It->Get();
+		APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+		if (Pawn == nullptr)
+		{
+			continue;
+		}
+		if (FVector::DistSquared(Pawn->GetActorLocation(), Center) <= RadiusSq)
+		{
+			ApplyDamageToPlayer(Pawn, Damage, DamageInstigator);
+		}
+	}
 }
 
 FHitscanResult UCombatSubsystem::FireHitscan(FVector Start, FVector End, float Damage, AActor* DamageInstigator)
