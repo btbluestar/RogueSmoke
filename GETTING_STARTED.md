@@ -80,14 +80,19 @@ No node graphs — just asset assignment:
 
 1. Create `IA_PrimaryAbility` (Input Action, Digital/bool) and add it to `IMC_Default` with a
    key (e.g. Left Mouse Button). `IA_Move` is already in `IMC_Default` from the template.
-2. Make **`BP_RaidPlayerController`** (parent class = `RaidPlayerController`). In Class
+2. Create **`IA_Look`** (Input Action, **Axis2D**) and add it to `IMC_Default` for mouse XY and the
+   right stick. Third-person shooter camera (D-0014): this drives the control rotation the boom
+   follows. Add a **Negate (Y)** modifier on the mouse mapping if you want standard (non-inverted)
+   pitch — sign is handled in the IMC, not in script.
+3. Make **`BP_RaidPlayerController`** (parent class = `RaidPlayerController`). In Class
    Defaults → Input, assign: **Input Mapping Context** = `IMC_Default`, **Move Action** =
-   `IA_Move`, **Primary Ability Action** = `IA_PrimaryAbility`.
-3. In **`BP_RaidGameMode`** → Class Defaults, set **Player Controller Class** =
+   `IA_Move`, **Look Action** = `IA_Look`, and the **Input Config** (`DA_Raid_InputConfig`,
+   which maps `IA_PrimaryAbility` → `InputTag.Ability.Primary`).
+4. In **`BP_RaidGameMode`** → Class Defaults, set **Player Controller Class** =
    `BP_RaidPlayerController`.
 
-That's it — the controller adds the mapping context, binds the actions, and forwards `DoMove`
-/ `OnPrimaryAbilityPressed` to whatever hero is possessed. No input wiring in the hero BPs.
+That's it — the controller adds the mapping context, binds the actions, forwards `DoMove` / look to
+the possessed hero, and routes ability inputs by gameplay tag. No input wiring in the hero BPs.
 
 ---
 
@@ -135,9 +140,10 @@ and cluster bonus grow. Re-run the combo to feel the difference.
 3. Confirm the host-authority model (CODING_STANDARDS §4): one client taunts, the other
    barrages; damage/extraction resolve on the server, cosmetics play on both.
 
-> Note: `UAbilityComponent` and `UStatsComponent` both set `default bReplicates = true`,
-> so remote-client ability activation and teammate HUD values work. Health/shield bars on
-> clients read the replicated `Stats.Health` / `Stats.Shield` (via their `OnRep_` hooks).
+> Note: abilities and stats now run on **GAS** (DECISIONS.md D-0013), not the old
+> `UAbilityComponent`/`UStatsComponent`. The AbilitySystemComponent lives on `ARoguePlayerState`
+> and replicates; teammate HUDs read replicated attributes (`URogueHealthSet` Health/Shield).
+> Heroes are granted a `URogueAbilitySet` on possession; input activates abilities by gameplay tag.
 
 ---
 

@@ -23,6 +23,15 @@
   abilities, read by payoff abilities for bonus effect. Time-limited.
 - **Density** — how tightly enemies are grouped; a *mechanic*, since it enables synergies.
 
+## Movement (Apex/Deadlock-style, D-0015)
+
+- **Sprint** — hold-to-run; raises move speed in any direction (omnidirectional).
+- **Slide** — a momentum burst entered by crouching while sprinting; carries on low friction, decays,
+  speeds up downhill. The MVP's skill-expression traversal move.
+- **Double-jump** — a second mid-air jump (`MaxJumpCount = 2`); a future meta-progression unlock.
+- **Locomotion component** — `URogueLocomotionComponent`, the AngelScript component on the hero that
+  owns the sprint/crouch/slide/jump state machine and its tunables (the seam upgrades modify).
+
 ## Synergy system (signature feature)
 
 - **Synergy** — an effect that combines across players, greater than either part alone.

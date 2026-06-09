@@ -6,6 +6,14 @@
 
 > ⚠️ **Verify against your fork before trusting signatures.** AngelScript-for-Unreal mirrors the Blueprint/C++ API, but exact helper names (`System::`, `Gameplay::`, `Math::`), subsystem/component `::Get` accessors, and Mass APIs **vary by engine/fork version**. Treat the code below as correct *patterns*; the running editor + compiler are the source of truth. Build a one-line "AngelScript OK" test actor first to confirm the pipeline before writing gameplay.
 
+> 🔄 **The ability/stats/upgrade layer below is SUPERSEDED.** The custom `UAbilityComponent` /
+> `UStatsComponent` / `UUpgradeEffect` sketches in §5–7 were replaced by **GAS** (Lyra-style) — see
+> **DECISIONS.md D-0013**. Real code: GAS abilities in `Script/AbilitySystem/Abilities/`
+> (`UGA_Taunt`/`UGA_Barrage` over `UAngelscriptGASAbility`), data-driven `URogueAbilitySet` /
+> `URogueInputConfig`, C++ attribute sets + PlayerState/HeroBase in `Source/RogueSmoke/AbilitySystem/`,
+> and `URogueUpgradeDef` (a GameplayEffect). The **seam** (`UCombatSubsystem`) and the synergy design
+> (taunt → cluster → barrage) are unchanged; only the ability *plumbing* moved to GAS.
+
 ---
 
 ## 1. The core principle
@@ -37,7 +45,7 @@ RogueSmoke/
 │        └─ SwarmProcessors.h/.cpp     # movement / pull / cluster-tag / apply-damage processors
 ├─ Script/                            # AngelScript — gameplay & iteration surface
 │  ├─ Player/
-│  │  ├─ HeroCharacter.as              # base: top-down camera + input wiring
+│  │  ├─ HeroCharacter.as              # base: third-person shooter camera + input wiring
 │  │  ├─ Vanguard.as                   # SETUP kit (taunt)
 │  │  └─ Bombardier.as                 # PAYOFF kit (barrage)
 │  ├─ Abilities/
@@ -300,12 +308,17 @@ class AHeroCharacter : ACharacter
 {
     UPROPERTY(DefaultComponent)
     USpringArmComponent CameraBoom;
-    default CameraBoom.TargetArmLength = 1500.0;            // top-down (GDD §9)
-    default CameraBoom.bUsePawnControlRotation = false;
-    default CameraBoom.RelativeRotation = FRotator(-60.0, 0.0, 0.0);
+    default CameraBoom.TargetArmLength = 350.0;             // third-person shooter (GDD §9, D-0014)
+    default CameraBoom.SocketOffset = FVector(0.0, 60.0, 60.0);  // over-the-shoulder
+    default CameraBoom.bUsePawnControlRotation = true;      // aim drives the boom
+    default CameraBoom.bEnableCameraLag = true;
 
     UPROPERTY(DefaultComponent, Attach = CameraBoom)
-    UCameraComponent TopDownCamera;
+    UCameraComponent FollowCamera;
+
+    // Strafe / aim-locked: the character faces the control rotation, not the move direction.
+    default bUseControllerRotationYaw = true;
+    // (set CharacterMovement.bOrientRotationToMovement = false in the ctor/BeginPlay)
 
     // Bound to an Enhanced Input action on the owning client.
     UFUNCTION()

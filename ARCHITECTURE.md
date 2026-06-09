@@ -79,10 +79,12 @@ this state machine and is the single source of truth for "where are we in the ru
 
 ### 4.2 Player character & abilities
 - A base **Character** (movement, health hooks) subclassed per playable hero.
-- Abilities modeled as data-driven **Ability** objects (cooldown, cost, effect). Activation flows
-  client intent → `Server` RPC → server validates & applies → results replicate back.
-- Consider Unreal's Gameplay Ability System (GAS) only if scope justifies it; for a first
-  vertical slice, a lightweight custom ability component is usually faster to iterate in script.
+- Abilities are **GAS** GameplayAbilities (cooldown/cost/effect/replication via the system).
+  Activation flows client intent → `Server` RPC → server activates the granted ability → results
+  replicate back.
+- The project uses **Unreal's Gameplay Ability System**, copying Lyra's patterns, via the engine
+  fork's **AngelscriptGAS** plugin (so abilities/granting stay in AngelScript). The ASC lives on the
+  PlayerState; player stats are GAS AttributeSets; upgrades are GameplayEffects. See **D-0013**.
 
 ### 4.3 Items, loot & inventory
 - Items defined as **DataAssets** (stats, rarity, tags, visuals). Never hardcode item stats.
@@ -116,7 +118,8 @@ Scripts live under `Project/Script/` (auto-loaded by the plugin). Suggested top-
 ```
 Script/
   Core/         RunManager, GameMode, GameState, GameInstance subsystems
-  Player/       Character, controllers, ability component, input
+  Player/       Character, controllers, input
+  AbilitySystem/ GAS abilities, AbilitySet/InputConfig (Attributes/PlayerState/HeroBase are C++)
   Abilities/    Ability definitions and effects
   Items/        Item data, inventory, modifier system
   Enemies/      Enemy pawns, AI, spawning

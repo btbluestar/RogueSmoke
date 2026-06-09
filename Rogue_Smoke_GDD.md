@@ -144,19 +144,46 @@ Goal: raids are assembled procedurally so layouts and encounters stay fresh. Tre
 
 ---
 
-## 9. Camera & Perspective **[DECISION NEEDED]**
+## 9. Camera & Perspective **[DECIDED — third-person shooter (D-0014)]**
 
-Not yet decided. This is one of the highest-leverage open questions — it cascades into controls, art, readability, and netcode. Options and trade-offs:
+**Decision: third-person over-shoulder *shooter*, strafe/aim-locked.** Camera sits on a short spring
+arm behind the character with a shoulder offset and uses pawn control rotation; the character faces
+the aim/control rotation and moves strafe-relative (Gears/Lyra-style), not orient-to-movement.
+Built from the engine fork's `TP_ThirdPerson` template, adjusted to aim-locked strafing. See
+**DECISIONS.md D-0014**.
+
+The options below are retained for context on the trade-off we accepted:
 
 | Option | Fits "lots of enemies"? | Co-op readability | Notes |
 |--------|------------------------|-------------------|-------|
-| **Top-down / twin-stick** | Excellent | Excellent (whole arena visible) | Classic for swarm + co-op roguelikes; easiest to read density & synergies; shared screen feasible. **Strong default recommendation.** |
+| **Top-down / twin-stick** | Excellent | Excellent (whole arena visible) | Classic for swarm + co-op roguelikes; easiest to read density & synergies. Was the prior default (D-0005). |
 | **Isometric / 3-4 angle** | Very good | Very good | Stylish, good spatial read; more art cost. |
-| **3rd person over-shoulder** | Good | Harder (each player sees differently) | More immersive/action-y; readability of swarms + teammate setups is harder. |
+| **3rd person over-shoulder** | Good | Harder (each player sees differently) | **Chosen (D-0014).** More immersive/action-y; readability of swarms + teammate setups is harder — mitigated deliberately (§10). |
 | **First person** | Risky | Hard | Swarm readability and "see your teammate's setup" both suffer; not recommended for this concept. |
 | **Side-scroller 2D/2.5D** | Good | Good | Constrains the synergy/positioning space to 1 axis. |
 
-**Recommendation:** start prototyping in **top-down twin-stick** — it maximizes the two hardest pillars (lots of enemies + visible cross-player synergy) at the lowest readability cost. Revisit only if the desired *feel* demands otherwise.
+**Consequence to protect:** third person trades away the overhead read that made swarm density and
+cross-player setups legible for free. Readability is now an active design cost, not a freebie —
+lean hard on the §10 readability pass (silhouettes, edge/off-screen indicators for teammates and
+clustered enemies, AoE ground telegraphs, audio callouts). Validate the taunt→barrage combo (§12)
+still reads at speed in this view before scaling content.
+
+### 9.1 Movement & traversal **[DECIDED — AngelScript MVP (D-0015)]**
+
+Movement is a first-class part of the feel, drawing on **Apex Legends / Deadlock**: fluid, momentum-y,
+expressive. The MVP kit:
+
+- **Sprint** — hold to move faster in any direction (omnidirectional, fits the strafe-aim camera).
+- **Crouch** — hold to crouch-walk (smaller silhouette, slower).
+- **Slide** — crouch while sprinting to slide: a momentum burst that carries on low friction and
+  decays, with downhill speed-up on slopes. The core skill-expression move.
+- **Jump + double-jump** — a second air jump for repositioning and dodging.
+
+**Meta-progression ties directly into movement** (scope still open, §6.3): upgrades are expected to
+tune **move speed, jump height, jump count (e.g. unlock the double-jump), and slide distance/friction**.
+The implementation keeps each of these as a tunable knob so an upgrade can modify it without a rewrite
+— but no movement upgrades are wired yet. See **DECISIONS.md D-0015** for the technical approach
+(AngelScript on stock CharacterMovement, server-authoritative, idempotent slide impulse).
 
 ---
 
@@ -208,7 +235,9 @@ These constraints are unusually important because **co-op + lots of enemies + pr
 - Rule of thumb: **script the decisions, compile the simulation.**
 
 ### 11.4 Target platform(s) **[TBD]**
-- PC, console, both? Affects input scheme (twin-stick implies controller-first), perf budget, and online infrastructure.
+- PC, console, both? Affects input scheme, perf budget, and online infrastructure. Note the camera is
+  now a third-person **shooter** (D-0014, §9): mouse-aim is a first-class path, so input is no longer
+  controller-first by default — support mouse/keyboard aim and gamepad aim equally.
 
 ---
 
@@ -233,7 +262,7 @@ Prove the fun before building breadth. Suggested vertical slice:
 Track and resolve these — most are upstream of implementation:
 
 1. **Run structure** — single raid vs chained escalating raids. *(§3.2 — highest priority)*
-2. **Camera/perspective.** *(§9 — highest priority)*
+2. ~~**Camera/perspective.**~~ **Resolved → third-person shooter, strafe/aim-locked (D-0014).** *(§9)*
 3. **Meta-progression model** — pure roguelike / roguelite / character progression. *(§6.3)*
 4. **Class system** — fixed kits / freeform / hybrid. *(§4)*
 5. **Upgrade scope mix** — personal / team / synergy ratio & shared vs independent draws. *(§6.2)*
