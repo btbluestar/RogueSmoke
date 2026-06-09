@@ -176,7 +176,8 @@ void UCombatSubsystem::ApplyDamageToPlayer(APawn* Target, float Damage, AActor* 
 	// Transient instant GE that adds to the Damage meta attribute; RogueHealthSet::PostGameplayEffectExecute
 	// resolves Damage -> armor mitigation -> shield absorption -> Health. Mirrors how upgrades/abilities
 	// apply effects, so player damage stays uniform and server-authoritative (no direct attribute pokes).
-	UGameplayEffect* DamageGE = NewObject<UGameplayEffect>(GetTransientPackage(), FName(TEXT("EnemyDamage")));
+	// NAME_None -> auto-unique name; a fixed name would collide across repeated per-hit allocations.
+	UGameplayEffect* DamageGE = NewObject<UGameplayEffect>(GetTransientPackage());
 	DamageGE->DurationPolicy = EGameplayEffectDurationType::Instant;
 
 	FGameplayModifierInfo Mod;
