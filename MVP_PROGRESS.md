@@ -8,9 +8,9 @@ Status legend: ✅ done · 🟡 scaffolded (unverified in-editor) · ⛔ blocked
 | 0 | Build UE 5.7 + AngelScript fork from source | ⬜ | Confirm stable 5.7 branch (D-0001). Prereq for *all* verification below. |
 | 1 | Hot-reload smoke test | 🟡 | `Script/SmokeTestActor.as` written. **Run this first**; don't proceed until hot-reload works. |
 | 2 | Verify API signatures vs running compiler | ⬜ | `Math::`, `::Get` accessors, `NewObject`/`TSubclassOf` forms used in script are *patterns*, not verified. |
-| 3 | Stand up `UCombatSubsystem` (C++) stub | 🟡 | `Source/RogueSmoke/Combat/` + `Enemies/EliteEnemyBase`. Actor-registry backend. Needs a C++ compile. |
-| 4 | First combo on Actors only | 🟡 | Abilities + `Vanguard`/`Bombardier` + `ClusterableElite` written. Needs BP subclasses + input wiring in-editor. |
-| 5 | Spike Mass fodder | ⬜ | Deferred — version-sensitive. **Spawn seam is ready:** `Spawning/SpawnDirector` has a working pooled-Actor backend for elites; Mass fodder plugs into `SpawnFodderWave()` (currently a logged placeholder) without changing callers. |
+| 3 | Stand up `UCombatSubsystem` (C++) stub | ✅ | `Source/RogueSmoke/Combat/` + `Enemies/EliteEnemyBase`. Builds clean; verified in PIE — `GetEliteCount`/`CountEnemiesInSphere` see registered elites. |
+| 4 | First combo on Actors only | ✅ | **Verified in PIE (2026-06-09):** `MarkClustered`→`IsClustered` gives the cluster bonus (unclustered 40 → clustered 120 = 3×); damage lands on replicated health (100→60). Pull now *visibly* converges enemies after the `bSweep` fix (was a no-op — actors at Z=0 froze on a swept move). Ability-activation-via-input path still to exercise with real input. |
+| 5 | Fodder swarm | ✅ (interim) | **Cheap-Actor fodder shipped** (`Enemies/FodderEnemy`, D-0003 fast path): subclasses `AEliteEnemyBase` so it reuses the seam + pool unchanged; steers at the nearest player; excluded from `GetEliteCount` but counted by `CountEnemiesInSphere`. Verified in PIE: 12 spawn + approach + die to barrage (20 HP) + recycle. **Mass backend** is the eventual replacement behind the same `SpawnFodderWave()` seam (version-sensitive, deferred). |
 | 6 | Upgrade + select widget | 🟡 | `Upgrades/` + `UI/UpgradeSelectWidget.as` written. Still needs the BP widget asset + an offer flow. |
 | 7 | Raid objective + extraction, 2-player test | 🟡 | `Objective/RaidObjective.as` written (single raid D-0009 + defend-timer extraction D-0010). Defend-wave now spawns via `SpawnDirector` (set `DefendWaveEliteClass`). Party-wipe still a hook pending down/revive. 2-player test needs the editor. |
 
