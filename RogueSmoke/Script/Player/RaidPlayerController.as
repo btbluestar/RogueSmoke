@@ -51,6 +51,13 @@ class ARaidPlayerController : APlayerController
 
     private UUpgradeSelectWidget ActiveUpgradeWidget;
 
+    // In-game HUD (crosshair / health / ammo / objective). A child of URogueHUDWidget; assign
+    // WBP_HUD on BP_RaidPlayerController. Created once for the local player in BeginPlay.
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<URogueHUDWidget> HUDWidgetClass;
+
+    private URogueHUDWidget HUDWidget;
+
     // Server -> owning client: present a choose-1-of-N upgrade screen with the rolled options.
     UFUNCTION(Client)
     void Client_OfferUpgrades(TArray<URogueUpgradeDef> Options)
@@ -77,6 +84,14 @@ class ARaidPlayerController : APlayerController
     UFUNCTION(BlueprintOverride)
     void BeginPlay()
     {
+        // HUD belongs to the local player only (the owning client / the host's own controller).
+        if (IsLocalController() && HUDWidgetClass.Get() != nullptr && HUDWidget == nullptr)
+        {
+            HUDWidget = Cast<URogueHUDWidget>(WidgetBlueprint::CreateWidget(HUDWidgetClass, this));
+            if (HUDWidget != nullptr)
+                HUDWidget.AddToViewport();
+        }
+
         EnhancedInput = UEnhancedInputComponent::Create(this);
         PushInputComponent(EnhancedInput);
 
