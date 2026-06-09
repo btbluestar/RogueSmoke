@@ -41,6 +41,24 @@ class ARaidObjective : AActor
     UPROPERTY(EditAnywhere, Category = "Raid|Defend Wave")
     float DefendWaveRadius = 1200.0;
 
+    // --- Elite roster: the elites placed at raid start. These COUNT toward "clear the arena" (so the raid
+    // isn't done until they're dead); the fodder waves below are pressure that does NOT gate the clear. A
+    // seeded mix is drawn from EliteRoster, plus one optional boss at the center. Defaults to the bio-horde
+    // roster (Carapace/Spitter/Bloater/Lunger + Brood-mother) so a fresh arena works without editor wiring;
+    // designers override by filling these on the placed objective. Balance is a tuning call. ---
+    UPROPERTY(EditAnywhere, Category = "Raid|Elites")
+    TArray<TSubclassOf<AEliteEnemyBase>> EliteRoster;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Elites")
+    int InitialEliteCount = 4;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Elites")
+    float EliteSpawnRadius = 1400.0;
+
+    // Optional boss spawned once at the arena center (also counts). Unset (BossClass cleared) to skip.
+    UPROPERTY(EditAnywhere, Category = "Raid|Elites")
+    TSubclassOf<AEliteEnemyBase> BossClass;
+
     // --- Fodder waves: continuous swarm pressure during the raid (D-0003 fodder). Server-only.
     // Placement is deterministic per master seed (a fresh FRandomStream salted by wave index), so it
     // never perturbs the run's master stream and reproduces for a given seed (CODING_STANDARDS §5). ---
@@ -75,9 +93,29 @@ class ARaidObjective : AActor
     float ExtractionSecondsRemaining = 0.0;
 
     private bool bSeenElites = false;
+    private bool bSpawnedInitialElites = false;
     private float Elapsed = 0.0;
     private float WaveTimer = 0.0;
     private int WaveIndex = 0;
+
+    UFUNCTION(BlueprintOverride)
+    void BeginPlay()
+    {
+        if (!HasAuthority())
+            return;
+
+        // Starter bio-horde roster so an arena has elites without editor wiring. Override by filling
+        // EliteRoster / BossClass on the placed objective (or clear them to disable auto-spawn).
+        if (EliteRoster.Num() == 0)
+        {
+            EliteRoster.Add(ACarapace);
+            EliteRoster.Add(ASpitter);
+            EliteRoster.Add(ABloater);
+            EliteRoster.Add(ALunger);
+        }
+        if (BossClass.Get() == nullptr)
+            BossClass = ABroodMother;
+    }
 
     UFUNCTION(BlueprintOverride)
     void Tick(float DeltaSeconds)
@@ -157,10 +195,45 @@ class ARaidObjective : AActor
         return GameState != nullptr ? GameState.MasterSeed : 1;
     }
 
+    // Spawn the gating elites once: an optional boss at the center plus a seeded mix from EliteRoster on a
+    // ring. Deterministic per master seed (a fresh stream salted off it, never touching the master stream).
+    private void SpawnInitialElites()
+    {
+        bSpawnedInitialElites = true;
+
+        USpawnDirector Director = USpawnDirector::Get();
+        if (Director == nullptr)
+            return;
+
+        FVector Center = GetActorLocation();
+
+        if (BossClass.Get() != nullptr)
+            Director.SpawnElite(BossClass, Center, FRotator());
+
+        if (EliteRoster.Num() > 0 && InitialEliteCount > 0)
+        {
+            FRandomStream Rng(GetMasterSeed() + 104729);
+            for (int i = 0; i < InitialEliteCount; i++)
+            {
+                TSubclassOf<AEliteEnemyBase> Cls = EliteRoster[Rng.RandRange(0, EliteRoster.Num() - 1)];
+                if (Cls.Get() == nullptr)
+                    continue;
+                float Angle = (2.0 * 3.14159265 * i) / InitialEliteCount;
+                FVector Offset = FVector(Math::Cos(Angle), Math::Sin(Angle), 0.0) * EliteSpawnRadius;
+                Director.SpawnElite(Cls, Center + Offset, FRotator());
+            }
+        }
+    }
+
     private void UpdateObjective()
     {
         if (Elapsed < StartGraceSeconds)
             return;
+
+        // Place the elites that gate the clear, once, after the grace window (so they register before we
+        // first test "cleared").
+        if (!bSpawnedInitialElites)
+            SpawnInitialElites();
 
         UCombatSubsystem Combat = UCombatSubsystem::Get();
         if (Combat == nullptr)
