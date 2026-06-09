@@ -42,6 +42,16 @@ AAttackingElite::AAttackingElite()
 	Body->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 }
 
+void AAttackingElite::ClearTransientState()
+{
+	Super::ClearTransientState();
+	// Reset the attack loop so a recycled elite doesn't resume a stale telegraph / cooldown.
+	Target = nullptr;
+	AttackCooldown = 0.f;
+	TelegraphRemaining = 0.f;
+	bTelegraphing = false;
+}
+
 void AAttackingElite::BeginPlay()
 {
 	Super::BeginPlay();

@@ -47,9 +47,10 @@ class UGA_WeaponFire : UGA_RogueAbility
         // MUZZLE toward that point — bullets originate at the gun yet land on the reticle. On a listen
         // server the camera transform reflects the replicated control rotation. Client target-data aim is a
         // later precision upgrade.
+        AActor Avatar = GetAvatarActorFromActorInfo();
         FVector CamLoc = Hero.FollowCamera.GetWorldLocation();
         FVector CamDir = Hero.FollowCamera.GetForwardVector();
-        FVector AimPoint = Combat.ResolveAimPoint(CamLoc, CamDir, Def.MaxRange);
+        FVector AimPoint = Combat.ResolveAimPoint(CamLoc, CamDir, Def.MaxRange, Avatar);
 
         FVector MuzzleLoc = Hero.GetMuzzleLocation();
         FVector BaseDir = (AimPoint - MuzzleLoc).GetSafeNormal();
@@ -59,7 +60,6 @@ class UGA_WeaponFire : UGA_RogueAbility
         bool bMoving = Hero.CharacterMovement != nullptr && Hero.CharacterMovement.Velocity.Size() > 50.0;
         float HalfAngleRad = Weapon.GetSpreadDegrees(bMoving, Hero.bFocusing) * HalfAngleDegToRad;
 
-        AActor Avatar = GetAvatarActorFromActorInfo();
         TArray<FVector> Impacts;
         bool bHitEnemy = false;
         for (int i = 0; i < Def.BulletsPerCartridge; i++)

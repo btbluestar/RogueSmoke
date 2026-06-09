@@ -50,8 +50,9 @@ public:
 	bool IsActive() const { return bActive; }
 
 protected:
-	/** Wipe per-life transient state (cluster mark, pull) so a recycled actor starts clean. */
-	void ClearTransientState();
+	/** Wipe per-life transient state (cluster mark, pull) so a recycled actor starts clean. Virtual so
+	 *  attacking-elite subclasses also clear their attack/telegraph state on pool reuse. */
+	virtual void ClearTransientState();
 
 	bool bActive = true;
 	virtual void BeginPlay() override;

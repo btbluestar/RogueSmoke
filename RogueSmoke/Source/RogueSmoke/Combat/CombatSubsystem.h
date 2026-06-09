@@ -96,7 +96,7 @@ public:
 	 * shooting ability resolves this, then fires the damage trace from the muzzle toward the result.
 	 */
 	UFUNCTION(BlueprintCallable, Category="Combat")
-	FVector ResolveAimPoint(FVector CamStart, FVector CamDir, float MaxDist) const;
+	FVector ResolveAimPoint(FVector CamStart, FVector CamDir, float MaxDist, AActor* IgnoreActor) const;
 
 	// --- Enemy -> player damage (server-authoritative). The outbound analog of FireHitscan: enemies
 	// damage the players' GAS health through here instead of touching the ASC directly. Applies a

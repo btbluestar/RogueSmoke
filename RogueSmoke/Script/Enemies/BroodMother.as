@@ -27,6 +27,10 @@ class ABroodMother : AAttackingElite
     UPROPERTY(EditDefaultsOnly, Category = "Boss")
     float ArtilleryRadius = 450.0;
 
+    // Don't summon while at least this many enemies are already alive (so the boss can't flood the arena).
+    UPROPERTY(EditDefaultsOnly, Category = "Boss")
+    int MaxFieldEnemies = 40;
+
     // Cycles 0 -> 1 -> 2 across attacks so the boss reads as a rotation, not a spam.
     private int AttackPhase = 0;
 
@@ -38,9 +42,12 @@ class ABroodMother : AAttackingElite
 
         if (AttackPhase == 1)
         {
-            // Summon a Crawler wave around the boss (the spawn seam; Mass fodder later).
+            // Summon a Crawler wave around the boss (the spawn seam; Mass fodder later) — but only if the
+            // field isn't already saturated, so the boss can't bury the arena in fodder.
             USpawnDirector Director = USpawnDirector::Get();
-            if (Director != nullptr)
+            bool bRoomToSpawn = Combat == nullptr
+                || Combat.CountEnemiesInSphere(GetActorLocation(), 1000000.0) < MaxFieldEnemies;
+            if (Director != nullptr && bRoomToSpawn)
                 Director.SpawnFodderWave(GetActorLocation(), SummonRadius, SummonCount);
         }
         else if (AttackPhase == 2)

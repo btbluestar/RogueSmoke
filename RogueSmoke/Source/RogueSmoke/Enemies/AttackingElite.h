@@ -85,6 +85,7 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void ClearTransientState() override;
 
 	/** Cheap visible body + hitscan target (Visibility-blocking), no skeletal mesh / AIController. */
 	UPROPERTY(VisibleAnywhere, Category="Enemy")
