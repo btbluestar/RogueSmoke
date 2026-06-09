@@ -49,3 +49,8 @@ desktop.ini
 
 # AngelScript: keep source (.as) but ignore any generated/precompiled output
 Script/**/*.tmp
+Script/Binds.Cache
+Script/Binds.Cache.Headers
+
+# Obsidian vault config (per-user notes UI state, not project source)
+.obsidian/

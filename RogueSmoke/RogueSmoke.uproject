@@ -40,6 +40,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "GameplayAbilities",
+			"Enabled": true
+		},
+		{
 			"Name": "AngelscriptGAS",
 			"Enabled": true
 		},
