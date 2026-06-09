@@ -119,15 +119,23 @@ class AHeroCharacter : ARogueHeroBase
         }
 
         // Server + clients: the locomotion component owns MaxWalkSpeed (base + sprint/crouch). Seed its
-        // base from the MoveSpeed attribute, which the grant registers on the server and replicates.
-        // NOTE (MVP gap): set once here, not live-updated — no current upgrade changes MoveSpeed.
-        // When one does, re-call Locomotion.SetBaseSpeed from a MoveSpeed attribute-changed callback.
+        // base from the MoveSpeed attribute (the grant registers it on the server and replicates), then
+        // keep it live so the Swift upgrade (a MoveSpeed GE) actually takes effect — the callback fires
+        // on the server when the GE applies and on clients via the attribute's replication.
         Locomotion.Initialize(this);
         float CurrentMoveSpeed = ASC.GetAttributeCurrentValue(URogueCombatSet, n"MoveSpeed", 600.0);
         Locomotion.SetBaseSpeed(CurrentMoveSpeed);
+        ASC.RegisterAttributeChangedCallback(URogueCombatSet, n"MoveSpeed", this, n"OnMoveSpeedChanged");
 
         // Down/revive: subscribes (server) to Health hitting 0. Self-gates to authority.
         Down.Initialize(this);
+    }
+
+    // Keep locomotion's base speed in sync with the MoveSpeed attribute (e.g. the Swift upgrade).
+    UFUNCTION()
+    void OnMoveSpeedChanged(FAngelscriptAttributeChangedData Data)
+    {
+        Locomotion.SetBaseSpeed(Data.GetNewValue());
     }
 
     // Called by ARaidPlayerController from the IA_Move action value.
