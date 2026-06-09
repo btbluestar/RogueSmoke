@@ -5,11 +5,12 @@
 class UUpgradeSelectWidget : UUserWidget
 {
     // The upgrades offered this pick. Populated by the run/upgrade flow (or BP defaults for now).
+    // Each is a URogueUpgradeDef carrying the GameplayEffect applied on selection.
     UPROPERTY(EditAnywhere, Category = "Upgrades")
-    TArray<TSubclassOf<UUpgradeEffect>> OfferedUpgrades;
+    TArray<URogueUpgradeDef> OfferedUpgrades;
 
     // Called from the BP widget's buttons. Routes the choice through the owning pawn's
-    // server RPC so the upgrade applies authoritatively.
+    // server RPC so the upgrade's GameplayEffect applies authoritatively.
     UFUNCTION(BlueprintCallable)
     void ChooseUpgrade(int Index)
     {
