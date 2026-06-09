@@ -38,6 +38,14 @@
 		{
 			"Name": "UnrealTestMCP",
 			"Enabled": true
+		},
+		{
+			"Name": "AngelscriptGAS",
+			"Enabled": true
+		},
+		{
+			"Name": "CommonUI",
+			"Enabled": true
 		}
 	]
 }
