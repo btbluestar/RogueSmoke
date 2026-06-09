@@ -41,6 +41,26 @@ class ARaidObjective : AActor
     UPROPERTY(EditAnywhere, Category = "Raid|Defend Wave")
     float DefendWaveRadius = 1200.0;
 
+    // --- Fodder waves: continuous swarm pressure during the raid (D-0003 fodder). Server-only.
+    // Placement is deterministic per master seed (a fresh FRandomStream salted by wave index), so it
+    // never perturbs the run's master stream and reproduces for a given seed (CODING_STANDARDS §5). ---
+    UPROPERTY(EditAnywhere, Category = "Raid|Fodder Waves")
+    bool bSpawnFodderWaves = true;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Fodder Waves")
+    float FodderWaveInterval = 7.0;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Fodder Waves")
+    int FodderPerWave = 8;
+
+    // How far from the targeted player a wave's ring is centered.
+    UPROPERTY(EditAnywhere, Category = "Raid|Fodder Waves")
+    float FodderSpawnDistance = 1400.0;
+
+    // Soft cap: skip a wave while this many enemies (elites + fodder) are already alive.
+    UPROPERTY(EditAnywhere, Category = "Raid|Fodder Waves")
+    int MaxConcurrentEnemies = 60;
+
     UPROPERTY(EditAnywhere, Category = "Debug")
     bool bShowDebug = true;
 
@@ -56,6 +76,8 @@ class ARaidObjective : AActor
 
     private bool bSeenElites = false;
     private float Elapsed = 0.0;
+    private float WaveTimer = 0.0;
+    private int WaveIndex = 0;
 
     UFUNCTION(BlueprintOverride)
     void Tick(float DeltaSeconds)
@@ -69,9 +91,70 @@ class ARaidObjective : AActor
         Elapsed += DeltaSeconds;
 
         if (Phase == ERaidPhase::InProgress)
+        {
             UpdateObjective();
+            TickFodderWaves(DeltaSeconds);    // swarm pressure while clearing
+        }
         else if (Phase == ERaidPhase::Extracting)
+        {
             UpdateExtraction(DeltaSeconds);
+            TickFodderWaves(DeltaSeconds);    // keep the heat on during the defend timer
+        }
+    }
+
+    // Spawn a deterministic fodder wave every FodderWaveInterval, soft-capped by live enemy count.
+    private void TickFodderWaves(float DeltaSeconds)
+    {
+        if (!bSpawnFodderWaves || Elapsed < StartGraceSeconds)
+            return;
+
+        WaveTimer += DeltaSeconds;
+        if (WaveTimer < FodderWaveInterval)
+            return;
+        WaveTimer = 0.0;
+
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
+        if (Combat != nullptr && Combat.CountEnemiesInSphere(GetActorLocation(), 1000000.0) >= MaxConcurrentEnemies)
+            return;     // already enough on the field
+
+        USpawnDirector Director = USpawnDirector::Get();
+        if (Director == nullptr)
+            return;
+
+        Director.SpawnFodderWave(PickWaveCenter(WaveIndex), 300.0, FodderPerWave);
+        WaveIndex += 1;
+    }
+
+    // Deterministic per-seed wave center: a player (cycled by wave index), offset by a seeded
+    // ground direction. A fresh stream salted by the wave index keeps the master stream untouched.
+    private FVector PickWaveCenter(int Index)
+    {
+        FVector Base = GetActorLocation();
+
+        TArray<AHeroCharacter> Heroes;
+        GetAllActorsOfClass(Heroes);
+        if (Heroes.Num() > 0)
+        {
+            AHeroCharacter Target = Heroes[Index % Heroes.Num()];
+            if (Target != nullptr)
+                Base = Target.GetActorLocation();
+        }
+
+        FRandomStream WaveRng(GetMasterSeed() + Index * 7919);
+        FVector Dir = WaveRng.GetUnitVector();
+        Dir.Z = 0.0;
+        if (Dir.SizeSquared() < 0.01)
+            Dir = FVector(1.0, 0.0, 0.0);
+        Dir = Dir.GetSafeNormal();
+
+        // Ring sits FodderSpawnDistance out, a touch above the floor so the bodies read.
+        return Base + Dir * FodderSpawnDistance + FVector(0.0, 0.0, -40.0);
+    }
+
+    private int GetMasterSeed() const
+    {
+        ARaidGameState GameState = Cast<ARaidGameState>(Gameplay::GetGameState());
+        return GameState != nullptr ? GameState.MasterSeed : 1;
     }
 
     private void UpdateObjective()
