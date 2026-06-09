@@ -50,8 +50,13 @@ void AEliteEnemyBase::Tick(float DeltaSeconds)
 	const float Now = GetWorld()->GetTimeSeconds();
 	if (Now < PullExpiresAtSeconds)
 	{
-		const FVector Dir = (PullTarget - GetActorLocation()).GetSafeNormal();
-		SetActorLocation(GetActorLocation() + Dir * PullStrength * DeltaSeconds, /*bSweep=*/true);
+		// Steer horizontally toward the taunt point. bSweep=false on purpose: a swept move from
+		// an actor placed at/under the floor (Z=0, half-buried) reports an immediate blocking hit
+		// and freezes — which made this stub a visible no-op. The pull only needs to read, so slide.
+		FVector Dir = PullTarget - GetActorLocation();
+		Dir.Z = 0.f;
+		Dir = Dir.GetSafeNormal();
+		SetActorLocation(GetActorLocation() + Dir * PullStrength * DeltaSeconds, /*bSweep=*/false);
 	}
 }
 

@@ -52,9 +52,14 @@ int32 UCombatSubsystem::GetEliteCount() const
 	int32 Count = 0;
 	for (const TWeakObjectPtr<AEliteEnemyBase>& Ptr : Elites)
 	{
-		if (Ptr.IsValid())
+		// Only true elites/bosses gate "arena cleared" — fodder shares this registry (so AoE/pull
+		// hit it) but must not keep extraction from opening. CountEnemiesInSphere still counts all.
+		if (const AEliteEnemyBase* Enemy = Ptr.Get())
 		{
-			++Count;
+			if (Enemy->CountsAsObjectiveTarget())
+			{
+				++Count;
+			}
 		}
 	}
 	return Count;

@@ -3,6 +3,7 @@
 #include "Spawning/SpawnDirector.h"
 #include "Combat/HealthComponent.h"
 #include "Enemies/EliteEnemyBase.h"
+#include "Enemies/FodderEnemy.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 
@@ -38,7 +39,7 @@ AEliteEnemyBase* USpawnDirector::AcquireFromPool(UClass* EliteClass)
 	{
 		while (Free->Num() > 0)
 		{
-			TWeakObjectPtr<AEliteEnemyBase> Ptr = Free->Pop(/*bAllowShrinking=*/false);
+			TWeakObjectPtr<AEliteEnemyBase> Ptr = Free->Pop(EAllowShrinking::No);
 			if (Ptr.IsValid())
 			{
 				return Ptr.Get();
@@ -113,9 +114,19 @@ void USpawnDirector::HandleEliteDeath(AActor* DeadActor)
 
 void USpawnDirector::SpawnFodderWave(FVector Center, float Radius, int32 Count)
 {
-	// Mass fodder backend not built yet (D-0003). This is the seam where it plugs in:
-	// callers (waves, the run director) already target this signature.
-	UE_LOG(LogTemp, Warning,
-		TEXT("USpawnDirector::SpawnFodderWave is a placeholder — Mass fodder pending (SETUP 5.5). Requested %d near %s."),
-		Count, *Center.ToString());
+	// INTERIM cheap-Actor fodder (D-0003 fast path; Mass replaces this behind the same signature).
+	// AFodderEnemy IS-A AEliteEnemyBase, so it reuses SpawnElite's pool/Activate/recycle path and
+	// registers with the seam — taunt/barrage hit it for free; only GetEliteCount excludes it.
+	if (!IsServer() || Count <= 0)
+	{
+		return;
+	}
+
+	// Deterministic ring placement (CODING_STANDARDS §5; seeded jitter via RunManager later).
+	for (int32 i = 0; i < Count; ++i)
+	{
+		const float Angle = (2.f * PI * i) / Count;
+		const FVector Offset(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.f);
+		SpawnElite(AFodderEnemy::StaticClass(), Center + Offset, FRotator::ZeroRotator);
+	}
 }

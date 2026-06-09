@@ -30,6 +30,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Combat")
 	bool IsClustered() const;
 
+	/** True for elites/bosses (gate the "arena cleared" objective); false for fodder. See GetEliteCount. */
+	bool CountsAsObjectiveTarget() const { return bCountsAsObjectiveTarget; }
+
 	/** Begin steering toward Target at Strength (uu/s) for Duration seconds. Server-only stub. */
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	void ApplyPull(const FVector& Target, float Strength, float Duration);
@@ -49,6 +52,9 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
+
+	/** Counts toward the raid "clear the arena" objective. Fodder sets this false. */
+	bool bCountsAsObjectiveTarget = true;
 
 	/** World time (seconds) before which this enemy counts as Clustered. */
 	float ClusteredUntilSeconds = 0.f;
