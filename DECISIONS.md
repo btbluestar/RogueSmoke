@@ -258,6 +258,32 @@ Format per entry: ID, date, status, the decision, the reasoning, and consequence
 
 ---
 
+### D-0017 — Enemy roster + attack/damage model (bio-horde)
+- **Status:** Decided — resolves the GDD §128–131 enemy TBDs (theme / damage model / aggro).
+- **Decision:** Theme = **bio-horde creatures**. Roster by role: **Crawler** (swarm fodder, contact
+  melee — C++ `AFodderEnemy`, Mass-bound later) plus AngelScript elites over a C++ **`AAttackingElite`**
+  base: **Carapace** (tanky radial-slam shield elite — the taunt/cluster synergy anchor), **Spitter**
+  (ranged kiter), **Bloater** (suicide-bomber radial, blast on contact-or-death), **Lunger** (telegraph
+  → lunge gap-closer), **Brood-mother** (mini-boss: spit / summon-wave / artillery-AoE). Damage model =
+  **melee + telegraphed radial/ranged**; hitscan stays the *player* weapon's model. Aggro = nearest
+  **living** hero (GAS Health > 0), taunt overrides.
+- **Damage seam:** enemy→player damage goes through a new outbound seam —
+  `UCombatSubsystem::ApplyDamageToPlayer` / `ApplyRadialDamageToPlayers` — applying an instant Damage GE
+  to the hero ASC (armor/shield/health resolve in `RogueHealthSet`). It is the mirror of `FireHitscan`.
+  Every attack is **telegraphed** (GDD §10 readability); the wind-up is the player's counterplay window.
+- **Why:** GDD wants fodder + synergy-elites + a boss, with density and telegraphing. `AAttackingElite`
+  is self-contained (visible body + Visibility-blocking collision, like `AFodderEnemy`) so elites are
+  visible/hittable with no Blueprint; the per-archetype attack is a `BlueprintNativeEvent` that
+  AngelScript overrides — "script the decision, compile the simulation" (D-0002).
+- **Consequences:** elites count toward "clear the arena", fodder does not (`bCountsAsObjectiveTarget`).
+  `RaidObjective` spawns a seeded elite mix + boss at raid start (defaults to this roster, so a raid is a
+  full loop with no editor wiring). **Open / polish:** per-archetype creature art + readability tint;
+  real telegraph VFX + attack/death GameplayCues (debug-draw for now); projectile + line-of-sight for
+  Spitter; smooth dash for Lunger; a boss healthbar. Cross-links D-0002 (seam), D-0003 (Mass fodder),
+  D-0013 (upgrades as GEs), D-0014 (shooter), D-0015 (slide dodges the Lunger).
+
+---
+
 ## Still open
 
 These are unresolved and block or shape downstream work. Resolve, then move up as a D-entry.

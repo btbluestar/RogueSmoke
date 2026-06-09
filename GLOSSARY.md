@@ -22,6 +22,19 @@
 - **Clustered** — the synergy condition: enemies recently pulled/grouped. Set by setup
   abilities, read by payoff abilities for bonus effect. Time-limited.
 - **Density** — how tightly enemies are grouped; a *mechanic*, since it enables synergies.
+- **Telegraph** — a visible wind-up before an enemy attack lands; the player's counterplay window.
+  A hard readability requirement (GDD §10). Debug-drawn for now; Niagara/decal cues later.
+
+## Enemy roster (bio-horde, D-0017)
+
+- **AttackingElite** — `AAttackingElite`, the C++ base for the attacking elites: self-contained body +
+  collision, shared targeting/approach/telegraph loop; per-archetype attack is an AngelScript override.
+- **Crawler** — swarm fodder with contact melee (`AFodderEnemy`). Doesn't gate the objective.
+- **Carapace** — tanky shield elite with a telegraphed radial slam; the taunt/cluster synergy anchor.
+- **Spitter** — ranged elite that kites and lands a telegraphed shot.
+- **Bloater** — suicide bomber: telegraph then detonate a radial blast (on contact or on death).
+- **Lunger** — gap-closer: telegraph then lunge + melee (dodge it with the slide).
+- **Brood-mother** — mini-boss / raid anchor: cycles ranged spit, summoned Crawler waves, and artillery AoE.
 
 ## Movement (Apex/Deadlock-style, D-0015)
 
