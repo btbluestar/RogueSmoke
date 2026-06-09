@@ -127,8 +127,14 @@ Pick a philosophy early; it shapes scope heavily:
 - **Core verb:** combat against large numbers of enemies. Feel target: powerful, kinetic, readable even when the screen is full.
 - **Enemy design:** mostly **swarm/fodder** units (cheap, numerous) plus **specials/elites** (introduce decisions and create synergy setups, e.g. a unit worth taunting/clustering) plus **mini-bosses/bosses** as raid-goal anchors.
 - **Density as a mechanic:** since clustering enemies is a synergy enabler (§5.1), enemy grouping/flocking behavior is a *design feature*, not just AI flavor.
-- **Telegraphing:** with high enemy counts and AoE flying around, clear telegraphs and a strong readability pass are essential.
-- **[TBD]:** enemy faction/theme, damage model (hitscan vs projectile vs melee mix), and how aggro is distributed across 2–4 players.
+- **Telegraphing:** with high enemy counts and AoE flying around, clear telegraphs and a strong readability pass are essential. Every elite attack has a wind-up window that is the player's counterplay (move/slide out of it).
+- **Roster (resolved → D-0017):** theme is **bio-horde creatures**. Damage model is **melee + telegraphed radial/ranged**; hitscan stays the *player* weapon's model. Aggro targets the nearest **living** hero, with the Vanguard taunt overriding it.
+  - **Crawler** — swarm fodder, contact melee.
+  - **Carapace** — tanky shield elite with a radial slam; the taunt/cluster synergy anchor.
+  - **Spitter** — ranged kiter.
+  - **Bloater** — suicide bomber (detonates on contact or death).
+  - **Lunger** — charge/gap-closer (dodge with the slide).
+  - **Brood-mother** — mini-boss: ranged spit, summoned Crawler waves, artillery AoE.
 
 ---
 
