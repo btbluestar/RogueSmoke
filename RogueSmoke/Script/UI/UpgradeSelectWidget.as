@@ -21,6 +21,11 @@ class UUpgradeSelectWidget : UUserWidget
         if (Hero != nullptr)
             Hero.Server_ApplyUpgrade(OfferedUpgrades[Index]);
 
+        // Hand input back to gameplay (the PC owns the cursor + active-widget bookkeeping).
+        ARaidPlayerController PC = Cast<ARaidPlayerController>(GetOwningPlayer());
+        if (PC != nullptr)
+            PC.CloseUpgradeScreen();
+
         RemoveFromParent();
     }
 }

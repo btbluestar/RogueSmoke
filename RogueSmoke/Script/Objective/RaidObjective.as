@@ -264,7 +264,14 @@ class ARaidObjective : AActor
     void OnPhaseChanged(ERaidPhase NewPhase)
     {
         if (NewPhase == ERaidPhase::ExtractionReady)
+        {
             Print("OBJECTIVE COMPLETE - call extraction", 5.0);
+
+            // Reward clearing the arena with an upgrade choice (GDD §6.1, D-0013).
+            ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+            if (GameMode != nullptr)
+                GameMode.OfferUpgradesToAll();
+        }
         else if (NewPhase == ERaidPhase::Extracted)
             Print("EXTRACTED - raid won!", 8.0);
         else if (NewPhase == ERaidPhase::Failed)

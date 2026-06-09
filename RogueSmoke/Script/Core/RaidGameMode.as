@@ -39,4 +39,55 @@ class ARaidGameMode : AGameModeBase
     {
         return RunManager;
     }
+
+    // --- Roguelike upgrades (D-0013). Designer pool of URogueUpgradeDef (each carries a GameplayEffect);
+    // offered on milestones, rolled per master seed. Assign the pool on BP_RaidGamemode. ---
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrades")
+    TArray<URogueUpgradeDef> UpgradePool;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrades")
+    int OptionsPerOffer = 3;
+
+    private int OfferCounter = 0;
+
+    // Roll OptionsPerOffer distinct upgrades and present them to every player's client. Server only.
+    UFUNCTION(BlueprintCallable, Category = "Upgrades")
+    void OfferUpgradesToAll()
+    {
+        if (!HasAuthority() || UpgradePool.Num() == 0)
+            return;
+
+        TArray<URogueUpgradeDef> Options = RollOptions(OptionsPerOffer, OfferCounter);
+        OfferCounter += 1;
+        if (Options.Num() == 0)
+            return;
+
+        TArray<ARaidPlayerController> PCs;
+        GetAllActorsOfClass(PCs);
+        for (ARaidPlayerController PC : PCs)
+        {
+            if (PC != nullptr)
+                PC.Client_OfferUpgrades(Options);   // Client RPC -> shows the pick screen
+        }
+    }
+
+    // Distinct picks via a FRESH stream salted by the offer index, so upgrade rolls reproduce per
+    // seed yet never perturb the run's master stream (CODING_STANDARDS §5; same trick as fodder waves).
+    private TArray<URogueUpgradeDef> RollOptions(int Count, int Salt)
+    {
+        TArray<URogueUpgradeDef> Result;
+        TArray<URogueUpgradeDef> Available = UpgradePool;
+
+        int BaseSeed = (RunManager != nullptr) ? RunManager.GetStream().GetInitialSeed() : 1;
+        FRandomStream Rng(BaseSeed + Salt * 6151);
+
+        int Want = Math::Min(Count, Available.Num());
+        for (int i = 0; i < Want; i++)
+        {
+            int Idx = Rng.RandRange(0, Available.Num() - 1);
+            Result.Add(Available[Idx]);
+            Available.RemoveAt(Idx);
+        }
+        return Result;
+    }
 }

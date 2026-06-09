@@ -44,6 +44,36 @@ class ARaidPlayerController : APlayerController
 
     UEnhancedInputComponent EnhancedInput;
 
+    // Upgrade selection: the BP widget (a child of UUpgradeSelectWidget) shown when the server offers
+    // a choice. Assign WBP_UpgradeSelect on BP_RaidPlayerController.
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrades")
+    TSubclassOf<UUpgradeSelectWidget> UpgradeWidgetClass;
+
+    private UUpgradeSelectWidget ActiveUpgradeWidget;
+
+    // Server -> owning client: present a choose-1-of-N upgrade screen with the rolled options.
+    UFUNCTION(Client)
+    void Client_OfferUpgrades(TArray<URogueUpgradeDef> Options)
+    {
+        if (UpgradeWidgetClass.Get() == nullptr || Options.Num() == 0 || ActiveUpgradeWidget != nullptr)
+            return;
+
+        ActiveUpgradeWidget = Cast<UUpgradeSelectWidget>(WidgetBlueprint::CreateWidget(UpgradeWidgetClass, this));
+        if (ActiveUpgradeWidget == nullptr)
+            return;
+
+        ActiveUpgradeWidget.OfferedUpgrades = Options;
+        ActiveUpgradeWidget.AddToViewport();
+        bShowMouseCursor = true;
+    }
+
+    // Called by the widget after a pick (it grants + removes itself): return to gameplay.
+    void CloseUpgradeScreen()
+    {
+        ActiveUpgradeWidget = nullptr;
+        bShowMouseCursor = false;
+    }
+
     UFUNCTION(BlueprintOverride)
     void BeginPlay()
     {
