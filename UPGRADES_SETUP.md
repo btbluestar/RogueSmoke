@@ -1,9 +1,20 @@
 # Upgrades — authoring the pool (GE content)
 
+> **STATUS (done):** 8 Tier-1 GEs are authored, fixed, and wired. The pool on `BP_RaidGamemode`
+> points at 8 `URogueUpgradeDef` assets in `/Game/Upgrades` (Vitality, Bulwark, Overshield, Power,
+> Quick Hands, Swift, Wide Barrage, Chain Detonation). All verified in PIE to move their attributes.
+> This doc is kept as reference for authoring **more** upgrades / higher tiers.
+>
+> **Lesson learned (applies to any new GE):** for a *permanent* roguelike buff authored as an
+> **INSTANT** effect, every modifier must use **ADD_BASE** (it permanently adds to the base value).
+> **MULTIPLY_ADDITIVE on INSTANT multiplies the base** (e.g. MoveSpeed 600 × 0.15 = 90), which is
+> almost never what you want. Use percentages only with **Infinite**-duration GEs. Flat bonuses that
+> start at 0 (BarrageRadiusBonus) must be ADD_BASE regardless. A `MoveSpeed` GE also relies on the
+> hero's `OnMoveSpeedChanged` callback (now wired) to take effect live.
+
 The roguelike upgrade **flow** is built and verified (D-0013): on arena-clear the server rolls a
 choice from a pool and shows each player a pick screen; choosing applies a GameplayEffect to the
-player's ASC. What's left is **authoring the upgrade content** — the GameplayEffect assets — which
-is editor work (you own this; the modifier UI is hard to drive from script).
+player's ASC. Authoring **more** upgrade content (the GameplayEffect assets) is editor work.
 
 ## How the flow works (already wired, don't change)
 - `ARaidGameMode.UpgradePool` (`TArray<URogueUpgradeDef>`) + `OptionsPerOffer` — assigned on
