@@ -59,6 +59,44 @@ class AHeroCharacter : ARogueHeroBase
     // Server-only: is the fire input currently held (drives full-auto refire in Tick).
     private bool bWantsToFire = false;
 
+    // --- Down/revive (MVP lose condition, D-0010). Logic lives in URogueDownComponent; the
+    // replicated life-state lives here on the pawn so teammates see/skip downed allies. ---
+    UPROPERTY(DefaultComponent)
+    URogueDownComponent Down;
+
+    // DOWNED = 0 HP, bleeding out, revivable. DEAD = bled out (run-dead). Either => incapacitated:
+    // no movement/abilities/fire. Both replicate; OnRep applies the cosmetic stop on clients.
+    UPROPERTY(Replicated, ReplicatedUsing = OnRep_Incap, BlueprintReadOnly, Category = "Down")
+    bool bDowned = false;
+
+    UPROPERTY(Replicated, ReplicatedUsing = OnRep_Incap, BlueprintReadOnly, Category = "Down")
+    bool bDeadDowned = false;
+
+    bool IsDowned() const { return bDowned; }
+    bool IsIncapacitated() const { return bDowned || bDeadDowned; }
+
+    // Server only (called by URogueDownComponent). Updates the host's cosmetics immediately;
+    // clients get it through OnRep_Incap.
+    void SetDownedState(bool bInDowned, bool bInDead)
+    {
+        bDowned = bInDowned;
+        bDeadDowned = bInDead;
+        ApplyIncapacitatedState();
+    }
+
+    UFUNCTION()
+    void OnRep_Incap() { ApplyIncapacitatedState(); }
+
+    // Halt the body + cut held fire while incapacitated. (Crawl/ragdoll pose is later polish.)
+    private void ApplyIncapacitatedState()
+    {
+        if (IsIncapacitated())
+        {
+            bWantsToFire = false;
+            CharacterMovement.StopMovementImmediately();
+        }
+    }
+
     // Called by ARogueHeroBase once the ASC is initialized for this pawn (server + clients).
     UFUNCTION(BlueprintOverride)
     void OnAbilitySystemReady()
@@ -87,6 +125,9 @@ class AHeroCharacter : ARogueHeroBase
         Locomotion.Initialize(this);
         float CurrentMoveSpeed = ASC.GetAttributeCurrentValue(URogueCombatSet, n"MoveSpeed", 600.0);
         Locomotion.SetBaseSpeed(CurrentMoveSpeed);
+
+        // Down/revive: subscribes (server) to Health hitting 0. Self-gates to authority.
+        Down.Initialize(this);
     }
 
     // Called by ARaidPlayerController from the IA_Move action value.
@@ -95,6 +136,8 @@ class AHeroCharacter : ARogueHeroBase
     UFUNCTION(BlueprintCallable)
     void DoMove(FVector2D Axis)
     {
+        if (IsIncapacitated())
+            return;
         FRotator YawRotation(0.0, GetControlRotation().Yaw, 0.0);
         AddMovementInput(YawRotation.GetForwardVector(), Axis.Y);
         AddMovementInput(YawRotation.GetRightVector(), Axis.X);
@@ -104,7 +147,7 @@ class AHeroCharacter : ARogueHeroBase
     // Jump/double-jump is natively client-predicted by ACharacter (saved moves), so no Server_ mirror
     // is needed; JumpMaxCount (set by the locomotion component) gates the second jump.
     UFUNCTION(BlueprintCallable)
-    void DoJump() { Jump(); }
+    void DoJump() { if (!IsIncapacitated()) Jump(); }
 
     UFUNCTION(BlueprintCallable)
     void DoStopJump() { StopJumping(); }
@@ -113,6 +156,8 @@ class AHeroCharacter : ARogueHeroBase
     // simulation matches and doesn't correct the client back.
     void SetSprint(bool bWants)
     {
+        if (IsIncapacitated())
+            return;
         Locomotion.SetSprint(bWants);
         Server_SetSprint(bWants);
     }
@@ -125,6 +170,8 @@ class AHeroCharacter : ARogueHeroBase
 
     void CrouchPressed()
     {
+        if (IsIncapacitated())
+            return;
         Locomotion.RequestCrouchOrSlide();
         Server_CrouchPressed();
     }
@@ -155,19 +202,27 @@ class AHeroCharacter : ARogueHeroBase
         if (IsLocallyControlled() || HasAuthority())
             Locomotion.TickLocomotion(DeltaSeconds);
 
-        if (HasAuthority() && Weapon != nullptr)
+        if (HasAuthority())
         {
-            Weapon.TickWeapon(DeltaSeconds);
+            // Down/revive bleed-out + revive-proximity (server-authoritative).
+            Down.TickDown(DeltaSeconds);
 
-            // Full-auto: keep re-activating the fire ability while held; CanFire() gates the rate.
-            if (bWantsToFire && Weapon.Definition != nullptr && Weapon.Definition.bFullAuto)
-                ActivateGrantedAbility(FireInputTag);
+            if (Weapon != nullptr)
+            {
+                Weapon.TickWeapon(DeltaSeconds);
+
+                // Full-auto: keep re-activating the fire ability while held; CanFire() gates the rate.
+                if (bWantsToFire && Weapon.Definition != nullptr && Weapon.Definition.bFullAuto)
+                    ActivateGrantedAbility(FireInputTag);
+            }
         }
     }
 
     // Resolve an input tag to the granted ability spec and activate it (server-authoritative).
     private void ActivateGrantedAbility(FGameplayTag InputTag)
     {
+        if (IsIncapacitated())
+            return;
         UAngelscriptAbilitySystemComponent ASC = GetRogueAbilitySystem();
         if (ASC == nullptr)
             return;
@@ -194,6 +249,11 @@ class AHeroCharacter : ARogueHeroBase
     UFUNCTION(Server)
     void Server_SetWantsToFire(bool bWants)
     {
+        if (IsIncapacitated())
+        {
+            bWantsToFire = false;
+            return;
+        }
         bWantsToFire = bWants;
         if (bWants)
             ActivateGrantedAbility(FireInputTag);
