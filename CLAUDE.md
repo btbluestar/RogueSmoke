@@ -41,6 +41,19 @@ This is **not** an AngelScript-only project. Do not refactor away the C++/Mass l
 - **No Unreal Interfaces** (UInterface/IInterface) in AngelScript — use base classes/components/tags.
 - Don't commit with broken script or C++ compilation.
 
+## Subagents & parallelism (superpowers)
+**There is ONE editor.** The build, `run_code_test`, and all PIE/MCP tools drive a single
+stateful Unreal instance — so anything that touches it MUST be serialized on the main session.
+- **Parallelize (safe, no shared state):** read-only codebase/doc research (`Explore`), and
+  *authoring* independent `.as`/`.cpp` files whose only verification is a later central compile.
+- **Never parallelize (shared editor = agents fight):** `ue-cpp build` (bounces the editor),
+  `as-helper run_code_test` (spawns its own editor-cmd; concurrent runs contend), and any
+  `unreal-test-mcp` PIE/actor/python call. One driver at a time.
+- **No git worktrees for editor work:** each worktree would need its own multi-GB engine build +
+  editor; the isolation isn't worth it. Branch in-place instead.
+- Pattern: fan out research/authoring to agents → funnel **all** build/test/PIE verification back
+  through this session, sequentially.
+
 ## Project documentation map
 - `Rogue_Smoke_GDD.md` — design intent (the "why" of the game).
 - `Rogue_Smoke_MVP_Architecture.md` — **authoritative technical reference**; read before
