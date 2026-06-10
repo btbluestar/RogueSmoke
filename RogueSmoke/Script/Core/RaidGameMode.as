@@ -17,6 +17,18 @@ class ARaidGameMode : AGameModeBase
     // owns the AngelScript-driven AbilitySystemComponent. No asset needed, so wire it here.
     default PlayerStateClass = ARoguePlayerState;
 
+    // Hero select: players enter as spectators and get their pawn from HandleHeroChoice once
+    // their (travel-surviving) pick arrives. Spawning the hero exactly ONCE matters: ability
+    // sets grant onto the PlayerState ASC, so a default-pawn-then-swap flow would double-grant
+    // kits. The lobby pick is stashed in URaidSessionSubsystem and re-sent by the raid PC's
+    // BeginPlay, so this also covers direct PIE play (choice -1 -> first/default hero).
+    default bStartPlayersAsSpectators = true;
+
+    // Pawn class per RogueHeroes roster index (0 = Vanguard, 1 = Bombardier). Content
+    // references, so they're assigned on BP_RaidGamemode, not here.
+    UPROPERTY(EditDefaultsOnly, Category = "Heroes")
+    TArray<TSubclassOf<AHeroCharacter>> HeroPawnClasses;
+
     // Server-only owner of the seed + run state machine. Created on BeginPlay.
     UPROPERTY(BlueprintReadOnly, Category = "Run")
     URunManager RunManager;
@@ -38,6 +50,64 @@ class ARaidGameMode : AGameModeBase
     URunManager GetRunManager()
     {
         return RunManager;
+    }
+
+    // Spawn the player's chosen hero (server only; called via the raid PC's Server_SetHeroChoice).
+    // One-shot per player: ignored if they already have a hero body (see bStartPlayersAsSpectators
+    // note above for why there is no default-then-swap).
+    void HandleHeroChoice(APlayerController Player, int HeroIndex)
+    {
+        if (!HasAuthority() || Player == nullptr)
+            return;
+        if (Cast<AHeroCharacter>(Player.GetControlledPawn()) != nullptr)
+            return;   // already embodied
+
+        TSubclassOf<AHeroCharacter> PawnClass;
+        if (HeroIndex >= 0 && HeroIndex < HeroPawnClasses.Num())
+            PawnClass = HeroPawnClasses[HeroIndex];
+        if (PawnClass.Get() == nullptr && HeroPawnClasses.Num() > 0)
+            PawnClass = HeroPawnClasses[0];
+
+        AHeroCharacter Hero;
+        if (PawnClass.Get() != nullptr)
+            Hero = Cast<AHeroCharacter>(SpawnActor(PawnClass, PickHeroSpawnPoint(), FRotator()));
+        else
+        {
+            // Content not wired yet — fall back to the GameMode's DefaultPawnClass (BP_Vanguard).
+            UClass FallbackClass = DefaultPawnClass.Get();
+            if (FallbackClass != nullptr)
+                Hero = Cast<AHeroCharacter>(SpawnActor(FallbackClass, PickHeroSpawnPoint(), FRotator()));
+        }
+        if (Hero == nullptr)
+            return;
+
+        APawn OldPawn = Player.GetControlledPawn();
+        Player.Possess(Hero);
+        if (OldPawn != nullptr && Cast<AHeroCharacter>(OldPawn) == nullptr)
+            OldPawn.DestroyActor();   // drop the spectator shell
+
+        FString HeroLabel = RogueHeroes::IsValidIndex(HeroIndex)
+            ? RogueHeroes::Get(HeroIndex).Name : "DEFAULT";
+        Print(f"[Raid] hero embodied: choice={HeroIndex} ({HeroLabel})", 4.0);
+    }
+
+    // PlayerStarts in placement order, offset per already-spawned hero so a squad doesn't
+    // stack inside one start point.
+    private FVector PickHeroSpawnPoint() const
+    {
+        TArray<AHeroCharacter> Existing;
+        GetAllActorsOfClass(Existing);
+
+        TArray<APlayerStart> Starts;
+        GetAllActorsOfClass(Starts);
+        if (Starts.Num() > 0)
+        {
+            APlayerStart Start = Starts[Existing.Num() % Starts.Num()];
+            FVector Base = Start.GetActorLocation();
+            int Wrap = Existing.Num() / Starts.Num();
+            return Base + FVector(120.0 * Wrap, 0.0, 0.0);
+        }
+        return FVector(0.0, 120.0 * Existing.Num(), 200.0);
     }
 
     // --- Roguelike upgrades (D-0013). Designer pool of URogueUpgradeDef (each carries a GameplayEffect);

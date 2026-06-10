@@ -54,6 +54,21 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Stats")
 	int32 UpgradesTaken = 0;
 
+	// --- Lobby state (hero select). Replicated so every client's lobby UI shows everyone's
+	// pick + ready flag. Index into the shared RogueHeroes roster; -1 = no pick yet. ---
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Lobby")
+	int32 SelectedHeroIndex = -1;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Lobby")
+	bool bLobbyReady = false;
+
+	UFUNCTION(BlueprintCallable, Category = "Lobby")
+	void SetSelectedHeroIndex(int32 Index);
+
+	UFUNCTION(BlueprintCallable, Category = "Lobby")
+	void SetLobbyReady(bool bReady);
+
 	UFUNCTION(BlueprintCallable, Category = "Stats")
 	void AddKill();
 

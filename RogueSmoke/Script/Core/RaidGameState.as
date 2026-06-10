@@ -42,6 +42,11 @@ class ARaidGameState : AGameStateBase
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Run")
     float RunEndTime = 0.0;
 
+    // Lobby launch countdown: 0 until the host hits START RAID, then the world time the travel
+    // fires at. Replicated so every lobby UI shows the same "Launching in N..." count.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Lobby")
+    float RaidLaunchAt = 0.0;
+
     // True once the server has rolled a real seed (0 means "not started yet").
     UFUNCTION(BlueprintPure, Category = "Run")
     bool HasValidSeed() const

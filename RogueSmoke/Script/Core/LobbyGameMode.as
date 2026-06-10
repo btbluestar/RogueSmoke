@@ -1,37 +1,99 @@
 // LobbyGameMode.as
-// Server-only rules for the pre-run lobby (ARCHITECTURE §3). The host opens the lobby map as
-// a listen server; joiners connect by IP (LAN / direct-connect for the MVP — D net-backend).
-// When the host starts, we ServerTravel the whole party into the raid map, which KEEPS the
-// existing connections (unlike OpenLevel, which would drop clients).
+// Server-only rules for the pre-run lobby + hero select (ARCHITECTURE §3). The host opens the
+// lobby map as a listen server; joiners connect by IP (LAN / direct-connect MVP). Everyone
+// picks a hero (pick = part of readying up, RoR2-style; duplicates blocked so the synergy
+// pairing stays legible), then the host starts a short countdown and the party ServerTravels
+// into the raid — KEEPING the connections (unlike OpenLevel, which would drop clients).
 //
-// SETUP: make BP_LobbyGameMode (child of this), assign PlayerControllerClass =
-// BP_RaidPlayerController (or a lobby-specific PC), set it as the GameMode Override in the
-// Lobby map's World Settings.
+// Set as the GameMode Override in L_Lobby's World Settings (pure-script class, no BP needed:
+// the hero PAWN classes are wired on BP_RaidGamemode, not here — the lobby only deals in
+// roster indexes).
 
 class ALobbyGameMode : AGameModeBase
 {
-    // Reuse the run GameState so the lobby UI can read GetConnectedPlayerCount() and so the
-    // class is consistent across the lobby->raid transition.
+    // Reuse the run GameState/PlayerState so lobby picks replicate the same way run state does
+    // and the classes stay consistent across the lobby -> raid transition.
     default GameStateClass = ARaidGameState;
+    default PlayerStateClass = ARoguePlayerState;
+    default PlayerControllerClass = ALobbyPlayerController;
+    default DefaultPawnClass = ASpectatorPawn;   // UI-only map; no body needed
 
-    // Where "Start" sends everyone. Set to the raid map's path on the BP.
+    // Where START RAID sends everyone.
     UPROPERTY(EditDefaultsOnly, Category = "Lobby")
-    FString RaidMapPath = "/Game/Maps/L_Raid";
+    FString RaidMapPath = "/Game/Levels/RaidArena";
 
-    // Host pressed Start. Authority-gated travel that carries connected clients along.
-    UFUNCTION(BlueprintCallable, Category = "Lobby")
-    void StartRaid()
+    // DRG drop-pod beat: a short shared countdown between START and the actual travel.
+    UPROPERTY(EditDefaultsOnly, Category = "Lobby")
+    float LaunchCountdownSeconds = 3.0;
+
+    private bool bLaunching = false;
+
+    // A pick is valid if it's a real roster index no OTHER player has claimed (duplicates
+    // blocked). Server-side validation for the lobby PC's Server_SelectHero RPC.
+    bool TrySelectHero(APlayerController Player, int HeroIndex)
     {
-        if (!HasAuthority())
+        if (!HasAuthority() || Player == nullptr || !RogueHeroes::IsValidIndex(HeroIndex))
+            return false;
+
+        ARoguePlayerState MyPS = Cast<ARoguePlayerState>(Player.PlayerState);
+        if (MyPS == nullptr)
+            return false;
+
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (GS != nullptr)
+        {
+            for (APlayerState BasePS : GS.PlayerArray)
+            {
+                ARoguePlayerState Other = Cast<ARoguePlayerState>(BasePS);
+                if (Other != nullptr && Other != MyPS && Other.SelectedHeroIndex == HeroIndex)
+                    return false;   // claimed by a teammate
+            }
+        }
+
+        MyPS.SetSelectedHeroIndex(HeroIndex);
+        return true;
+    }
+
+    // Everyone connected has picked a hero and toggled ready.
+    bool AreAllPlayersReady() const
+    {
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (GS == nullptr || GS.PlayerArray.Num() == 0)
+            return false;
+
+        for (APlayerState BasePS : GS.PlayerArray)
+        {
+            ARoguePlayerState PS = Cast<ARoguePlayerState>(BasePS);
+            if (PS == nullptr || !PS.bLobbyReady || PS.SelectedHeroIndex < 0)
+                return false;
+        }
+        return true;
+    }
+
+    // Host pressed START RAID: begin the shared countdown, then travel the whole party.
+    UFUNCTION(BlueprintCallable, Category = "Lobby")
+    void RequestStartRaid()
+    {
+        if (!HasAuthority() || bLaunching || !AreAllPlayersReady())
             return;
 
+        bLaunching = true;
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (GS != nullptr)
+            GS.RaidLaunchAt = Gameplay::GetTimeSeconds() + LaunchCountdownSeconds;
+
+        System::SetTimer(this, n"TravelToRaid", LaunchCountdownSeconds, false);
+        Print(f"[Lobby] launch in {LaunchCountdownSeconds}s", 3.0);
+    }
+
+    UFUNCTION()
+    private void TravelToRaid()
+    {
         UWorld LobbyWorld = GetWorld();
         if (LobbyWorld != nullptr)
             LobbyWorld.ServerTravel(RaidMapPath, true, false);
     }
 
-    // Player joined/left — hook for updating lobby UI or enforcing a max party size.
-    // (Max party size is still an open decision; see DECISIONS.md "Still open".)
     UFUNCTION(BlueprintOverride)
     void OnPostLogin(APlayerController NewPlayer)
     {

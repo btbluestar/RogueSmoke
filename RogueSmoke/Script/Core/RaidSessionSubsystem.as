@@ -13,6 +13,12 @@
 
 class URaidSessionSubsystem : UGameInstanceSubsystem
 {
+    // The LOCAL player's hero pick (index into RogueHeroes; -1 = none). Lives here because a
+    // GameInstance subsystem survives ServerTravel on each machine, while PlayerStates are
+    // rebuilt — the lobby stashes the pick, and after travel RaidPlayerController re-sends it
+    // to the server so the raid GameMode spawns the chosen hero.
+    int LocalSelectedHeroIndex = -1;
+
     // Become the host: open the lobby map as a listen server. Standalone -> listen server is
     // handled by OpenLevel's "listen" option.
     UFUNCTION(BlueprintCallable, Category = "Session")

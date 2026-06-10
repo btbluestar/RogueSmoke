@@ -96,6 +96,16 @@ class ARaidPlayerController : APlayerController
                 HUDWidget.AddToViewport();
         }
 
+        // Hero select: players start as spectators; send the lobby pick (stashed in the
+        // GameInstance subsystem, which survives ServerTravel) so the GameMode embodies us.
+        // -1 (no lobby / direct PIE) falls back to the first/default hero server-side.
+        if (IsLocalController())
+        {
+            URaidSessionSubsystem Session = URaidSessionSubsystem::Get();
+            int HeroChoice = (Session != nullptr) ? Session.LocalSelectedHeroIndex : -1;
+            Server_SetHeroChoice(HeroChoice);
+        }
+
         EnhancedInput = UEnhancedInputComponent::Create(this);
         PushInputComponent(EnhancedInput);
 
@@ -170,6 +180,16 @@ class ARaidPlayerController : APlayerController
     AHeroCharacter GetHero() const
     {
         return Cast<AHeroCharacter>(GetControlledPawn());
+    }
+
+    // Client -> server: my hero pick (RogueHeroes index; -1 = none). The GameMode validates and
+    // spawns the body — clients never decide outcomes (CODING_STANDARDS §4.2).
+    UFUNCTION(Server)
+    void Server_SetHeroChoice(int HeroIndex)
+    {
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        if (GameMode != nullptr)
+            GameMode.HandleHeroChoice(this, HeroIndex);
     }
 
     // Enhanced Input handlers carry 4 params (value, elapsed, triggered, source action).

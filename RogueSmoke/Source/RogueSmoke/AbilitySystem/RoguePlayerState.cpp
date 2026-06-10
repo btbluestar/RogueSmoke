@@ -32,6 +32,24 @@ void ARoguePlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(ARoguePlayerState, TimesDowned);
 	DOREPLIFETIME(ARoguePlayerState, Revives);
 	DOREPLIFETIME(ARoguePlayerState, UpgradesTaken);
+	DOREPLIFETIME(ARoguePlayerState, SelectedHeroIndex);
+	DOREPLIFETIME(ARoguePlayerState, bLobbyReady);
+}
+
+void ARoguePlayerState::SetSelectedHeroIndex(int32 Index)
+{
+	if (HasAuthority())
+	{
+		SelectedHeroIndex = Index;
+	}
+}
+
+void ARoguePlayerState::SetLobbyReady(bool bReady)
+{
+	if (HasAuthority())
+	{
+		bLobbyReady = bReady;
+	}
 }
 
 // Authority discipline (CODING_STANDARDS §4.4): stats only mutate on the server; clients read
