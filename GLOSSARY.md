@@ -61,6 +61,12 @@
   - **Team upgrade** — affects the whole squad.
   - **Synergy upgrade** — unlocks/strengthens a cross-player interaction (e.g. Chain Detonation).
 - **Rarity** — upgrade tier affecting power/availability.
+- **Weapon upgrade** — a personal upgrade on the *gun* track (`WeaponDamageBonus`, `FireRateBonus`,
+  pierce/chain/proc attributes on `URogueCombatSet`); distinct from ability upgrades (AbilityPower).
+  - **Pierce** — a bullet passes through extra enemies; world geometry always stops it.
+  - **Chain** — a hit arcs bonus damage to the nearest other enemies in range (rewards Density).
+  - **Burn / Poison** — on-hit DoT procs; magnitude derives from the hit's damage. Burn = fast and
+    short, Poison = slow and bigger total. One slot per type on `UHealthComponent` (refresh, no stacking).
 - **Meta-progression** — persistence *between* runs (scope still open).
 
 ## Technical / architecture
