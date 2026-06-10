@@ -338,4 +338,31 @@ class ARaidPlayerController : APlayerController
         float Dealt = Combat.ApplyRadialDamage(Center, 1000000.0, 999999.0, 1.0, Hero);
         Print(f"[Debug] RaidKillElites — dealt {Dealt}", 3.0);
     }
+
+    // --- Replay: type `RaidRestart` in the ~ console to reload the current level (fresh run + seed) ----
+    // Shown as the hint under the VICTORY/DEFEAT banner so a finished run is replayable without leaving PIE.
+    UFUNCTION(Exec)
+    void RaidRestart()
+    {
+        FString Level = Gameplay::GetCurrentLevelName();
+        if (!Level.IsEmpty())
+            Gameplay::OpenLevel(FName(Level));
+    }
+
+    // Debug: force the run result so you can check the VICTORY/DEFEAT banner + replay flow instantly,
+    // without clearing the arena. Host/authority only (sets the replicated run phase).
+    UFUNCTION(Exec)
+    void RaidWin() { ForceRunPhase(ERunPhase::Victory); }
+
+    UFUNCTION(Exec)
+    void RaidLose() { ForceRunPhase(ERunPhase::Defeat); }
+
+    private void ForceRunPhase(ERunPhase NewPhase)
+    {
+        if (!HasAuthority())
+            return;
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (GS != nullptr)
+            GS.Phase = NewPhase;
+    }
 }

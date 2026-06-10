@@ -24,6 +24,8 @@ class URogueHUDWidget : UUserWidget
     private UTextBlock ObjectiveText;
     private UTextBlock Crosshair;
     private UTextBlock HitMarker;
+    private UTextBlock ResultBanner;   // big VICTORY/DEFEAT on run end
+    private UTextBlock ResultHint;      // replay hint under the banner
 
     const float HitMarkerDuration = 0.12;   // seconds the hitmarker stays lit after a confirmed hit
 
@@ -78,6 +80,18 @@ class URogueHUDWidget : UUserWidget
         // Objective banner: top-center.
         ObjectiveText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
         AddChild(ObjectiveText, FAnchors(0.5, 0.0), FVector2D(0.5, 0.0), FVector2D(0.0, 28.0), FVector2D(), true);
+
+        // Run result: a big centered VICTORY/DEFEAT shown when the run resolves, with a replay hint just
+        // under it. Both collapsed until then (RefreshResultBanner reads the replicated ERunPhase).
+        ResultBanner = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
+        ResultBanner.SetRenderScale(FVector2D(3.2, 3.2));
+        ResultBanner.SetVisibility(ESlateVisibility::Collapsed);
+        AddChild(ResultBanner, FAnchors(0.5, 0.5), FVector2D(0.5, 0.5), FVector2D(0.0, -60.0), FVector2D(), true);
+
+        ResultHint = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
+        ResultHint.SetText(FText::FromString("Open the ~ console and type  RaidRestart  to play again"));
+        ResultHint.SetVisibility(ESlateVisibility::Collapsed);
+        AddChild(ResultHint, FAnchors(0.5, 0.5), FVector2D(0.5, 0.5), FVector2D(0.0, 20.0), FVector2D(), true);
 
         // Self vitals: bottom-left. Health number above the bar, shield as a thin bar above that.
         HealthText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
@@ -148,6 +162,39 @@ class URogueHUDWidget : UUserWidget
         RefreshEdgeIndicators();
         RefreshCrosshair();
         RefreshHitMarker();
+        RefreshResultBanner();
+    }
+
+    // Show a big VICTORY/DEFEAT when the run resolves (the run-level phase set by RunManager::EndRun),
+    // plus a replay hint. Collapsed while the run is in progress.
+    private void RefreshResultBanner()
+    {
+        if (ResultBanner == nullptr)
+            return;
+
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        ERunPhase Phase = (GS != nullptr) ? GS.Phase : ERunPhase::None;
+
+        if (Phase == ERunPhase::Victory)
+            ShowResult("VICTORY", Accent);
+        else if (Phase == ERunPhase::Defeat)
+            ShowResult("DEFEAT", Danger);
+        else if (ResultBanner.GetVisibility() != ESlateVisibility::Collapsed)
+        {
+            ResultBanner.SetVisibility(ESlateVisibility::Collapsed);
+            if (ResultHint != nullptr)
+                ResultHint.SetVisibility(ESlateVisibility::Collapsed);
+        }
+    }
+
+    private void ShowResult(FString Text, FLinearColor Color)
+    {
+        ResultBanner.SetText(FText::FromString(Text));
+        ResultBanner.SetColorAndOpacity(FSlateColor(Color));
+        if (ResultBanner.GetVisibility() == ESlateVisibility::Collapsed)
+            ResultBanner.SetVisibility(ESlateVisibility::HitTestInvisible);
+        if (ResultHint != nullptr && ResultHint.GetVisibility() == ESlateVisibility::Collapsed)
+            ResultHint.SetVisibility(ESlateVisibility::HitTestInvisible);
     }
 
     // Crosshair bloom proxy: tighten when focusing, widen while moving (hip-fire). Full heat-driven bloom
