@@ -71,6 +71,18 @@ restart. Reuse these as the manual "did my change break this unit?" check. To ad
 `EnemyTestStand`, set `EliteClass` (or `bFodder`), `Count`, `SpawnRadius`, `Label`. Verified headless:
 Carapace level spawns 2, Crawler level spawns 8, no fatals.
 
+## Regression smoke test (run this after enemy/loop/seam changes)
+**`Tools/SmokeTest.ps1`** boots the arena + all 6 enemy levels headless (`-game -nullrhi`, no window),
+and asserts each one (a) starts the run, (b) spawns its expected enemies (via the `[Raid]`/`[EnemyTest]`
+breadcrumbs), and (c) doesn't fatal. Prints a PASS/FAIL table and exits non-zero on any failure — so it
+can gate a change. Do a clean editor build first, then:
+```
+pwsh Tools/SmokeTest.ps1          # ~2 min (7 levels x ~14s)
+```
+Current status: **all 7 PASS**. If you add an archetype/level, add a row to the `$Cases` table. This is
+the cheap "did I break a unit or the loop?" check while the interactive PIE MCP is wedged; it catches
+crashes/regressions in spawn + boot, not feel (that's still your Play test).
+
 ## Known caveats (MVP-acceptable)
 - Elites are kinematic and hold spawn Z (no gravity); objective at z=100 keeps bodies roughly on the
   floor. If a creature looks half-sunk, nudge the objective's Z.
