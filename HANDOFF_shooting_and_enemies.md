@@ -1,10 +1,13 @@
 # Handoff — 3rd-person shooting + enemy roster (overnight 2026-06-09 → 10)
 
 Built while you slept. **Everything below is committed on `main` and compiles/builds clean**
-(`ue-cpp build` + `as-helper run_code_test` exit 0). What's left is **editor-only** work (content
-wiring + PIE feel-checks) because the in-editor MCP command path was wedged this session (see Notes).
+(`ue-cpp build` + `as-helper run_code_test` exit 0). The focus-input wiring (item 1) was finished
+headlessly via a python commandlet after the editor closed; what genuinely remains is **PIE feel-checks**
+(needs your hands — the in-editor MCP command path was wedged this session) and optional art/tuning.
 
 ## Commits (newest first)
+- `e8a1358` line-of-sight gate on ranged attacks (Spitter/Brood spit whiff through walls now)
+- `eeb3a56` wire focus-aim to hold-RMB (the editor input wiring below — done headlessly)
 - `6a603a2` Brood-mother mini-boss + wire elite roster into the raid loop
 - `5c5c4d8` bio-horde elite roster (Carapace/Spitter/Bloater/Lunger)
 - `f7ae989` enemy→player damage seam + Crawler melee (Plan 2 foundation)
@@ -41,11 +44,10 @@ wiring + PIE feel-checks) because the in-editor MCP command path was wedged this
 
 ## What YOU need to do (editor only)
 
-1. **Focus input (to make ADS-aim usable):**
-   - Create `IA_Focus` (duplicate an existing `IA_*`, e.g. `IA_Reload`; it's a digital/bool button).
-   - In `IMC_Default`, map **Right Mouse Button → IA_Focus** (UE5.7: `default_key_mappings`).
-   - On `BP_RaidPlayerController`, set **FocusAction = IA_Focus**, then **compile + save** (CDO edits
-     wipe on PIE otherwise — see memory `mcp-bp-cdo-needs-compile`).
+1. ~~**Focus input**~~ — ✅ **DONE** (`eeb3a56`, via a headless python commandlet once the editor was
+   closed): `IA_Focus` created, **RMB → IA_Focus** mapped in `IMC_Default.default_key_mappings` (the live
+   UE5.7 array — the deprecated top-level `Mappings` is ignored at runtime), `FocusAction = IA_Focus` set +
+   compiled on `BP_RaidPlayerController`. Only the **in-PIE feel-test** of focus remains (task #43).
 2. **(Optional) weapon art:** assign a `SkeletalMesh` + a `Muzzle` socket on the hero BPs and the
    `WeaponMesh` field on the `DA_Weapon_*` — gives a visible gun + exact muzzle. Until then the
    shoulder-offset fallback is used (convergence still works).
@@ -68,8 +70,9 @@ wiring + PIE feel-checks) because the in-editor MCP command path was wedged this
   juice pass (part of #24). Replace the `DrawDebug*` calls.
 - **Dynamic damage GE** allocates a `UGameplayEffect` per hit (GC pressure at scale) — fine for MVP;
   cache/pool or use a SetByCaller asset GE later.
-- **Spitter** is a delayed *hitscan* (no projectile/line-of-sight) and **Lunger** is a forward *pop*
-  (not a smooth dash) — both are feel upgrades.
+- **Spitter/Brood spit** now gate on **line of sight** (`e8a1358` — `HasLineOfSightToActor`; a blocked
+  shot whiffs), but the Spitter is still an instant hit, not an arcing *projectile*; **Lunger** is a
+  forward *pop*, not a smooth dash. Both remain feel upgrades (task #40).
 - **Brood-mother** can over-summon (its summons bypass the fodder soft-cap); tune `SummonCount`/cadence.
 - Elites are kinematic and hold their spawn Z (no gravity) — place the objective at ground level.
 
