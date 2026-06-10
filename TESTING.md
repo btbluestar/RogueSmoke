@@ -71,6 +71,10 @@ up to 30s so they survive firing before the hero spawns):
   and re-reads the victim 2s later.
 - `TelegraphSmoke` — rings a telegraph danger zone at the hero (cue-pass visual, no damage);
   headlessly, grep the log for `[Telegraph] zone`.
+- `RaidGiveXP <n>` — grant shared team XP (100 = one level at the base curve → paused offer);
+  `RaidKillOneElite` — kill the nearest objective elite (steps the XP/chest flow one kill at a
+  time); `RaidGoToChest` — teleport onto the dropped mini-boss chest so it proximity-opens.
+  Grep `[XP]`, `[Upgrades]`, `[Chest]`.
 - `RaidDebugCam`, `RaidKillElites` (prints live count + total dealt), `RaidRestart`,
   `RaidWin` / `RaidLose`, `RaidResults`, `RaidPause`.
 

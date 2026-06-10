@@ -282,6 +282,28 @@ Format per entry: ID, date, status, the decision, the reasoning, and consequence
   Spitter; smooth dash for Lunger; a boss healthbar. Cross-links D-0002 (seam), D-0003 (Mass fodder),
   D-0013 (upgrades as GEs), D-0014 (shooter), D-0015 (slide dodges the Lunger).
 
+### D-0018 — Upgrade acquisition loop: shared XP levels + mini-boss chest
+
+- **Status:** Decided — user's UpgradeLoop concept (flowchart, 2026-06-11). Supersedes the
+  interim "one offer on arena clear" flow from D-0013 (the clear offer remains as a bonus).
+- **Decision:** Two in-raid acquisition paths.
+  **(1) Shared XP levels:** every kill feeds ONE team pool (`XPValue` per archetype: fodder 5,
+  elites 25, boss 150; replicated on `ARaidGameState` as TeamLevel/TeamXP/XPToNextLevel). Each
+  level-up **pauses the raid for all players** and presents a 3-card pick; rarity is
+  level-weighted — default common-leaning, every 5th level boosts moderate (r2), every 10th
+  boosts rare (r3). **(2) Mini-boss chest:** the Brood-mother drops an `AUpgradeChest` where it
+  fell; any living player standing next to it opens it → paused pick rolled ONLY from
+  **synergy upgrades** (`bSynergyUpgrade` on `URogueUpgradeDef`; level offers exclude them).
+- **Mechanics:** pause = `UGameplayStatics::SetGamePaused` via `RogueGame::SetRaidPaused`
+  (WorldSettings pauser replicates → clients pause; UI input + RPCs still work). Resume when
+  every player picked, or a GameMode watchdog timeout (30s, ticks-while-paused). Kill event =
+  `USpawnDirector::OnEnemyKilled` (broadcast before pool recycle). Rolls stay seeded
+  (fresh stream salted by offer index — CODING_STANDARDS §5).
+- **Consequences:** builds grow DURING the fight (a pick every ~2 fodder waves at current
+  tuning); the synergy pool needs more cards (only Chain Detonation today); XP curve + weights
+  are balance-pass material; HUD shows `LVL n — x/y XP`. Cross-links D-0013 (upgrades as GEs),
+  D-0017 (roster XP values).
+
 ---
 
 ## Still open

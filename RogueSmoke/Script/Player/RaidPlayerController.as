@@ -370,6 +370,8 @@ class ARaidPlayerController : APlayerController
     // fight and test the back half of the loop — clear -> upgrade offer -> walk to the pad -> defend
     // timer -> EXTRACTED. Goes through the seam; server-authoritative, so it only does work on the
     // host/listen-server (a remote client typing it is a no-op).
+    private int KillElitesRetries = 0;
+
     UFUNCTION(Exec)
     void RaidKillElites()
     {
@@ -379,6 +381,14 @@ class ARaidPlayerController : APlayerController
         AHeroCharacter Hero = GetHero();
         FVector Center = Hero != nullptr ? Hero.GetActorLocation() : FVector();
         int Live = Combat.CountEnemiesInSphere(Center, 1000000.0);
+        if (Live == 0 && KillElitesRetries < 15)
+        {
+            // Boot-time friendliness: -ExecCmds fires before the arena populates — poll briefly.
+            KillElitesRetries++;
+            System::SetTimer(this, n"RaidKillElites", 1.0, false);
+            return;
+        }
+        KillElitesRetries = 15;   // armed once: typing it later never re-polls into a future wave
         float Dealt = Combat.ApplyRadialDamage(Center, 1000000.0, 999999.0, 1.0, Hero);
         Print(f"[Debug] RaidKillElites — {Live} live, dealt {Dealt}", 3.0);
     }
@@ -695,6 +705,82 @@ class ARaidPlayerController : APlayerController
         else
             Print(f"[Upgrade] {Upgrade.DisplayName}: NO ATTRIBUTE CHANGE (broken GE?)", 8.0);
         return Changed;
+    }
+
+    // --- Debug: grant shared team XP (host only). `RaidGiveXP 100` = exactly one level-up at the
+    // base curve -> pause + offer; `RaidGiveXP 1000` crosses several levels but offers once. ---
+    UFUNCTION(Exec)
+    void RaidGiveXP(float Amount)
+    {
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        if (GameMode == nullptr)
+        {
+            Print("[XP] host only", 4.0);
+            return;
+        }
+        GameMode.AddTeamXP(Amount);
+    }
+
+    // --- Debug: teleport the hero onto the mini-boss chest so its proximity-open fires through
+    // the real path (useful headlessly and to skip the walk in PIE). ---
+    private int GoToChestRetries = 0;
+
+    UFUNCTION(Exec)
+    void RaidGoToChest()
+    {
+        AHeroCharacter Hero = GetHero();
+        TArray<AUpgradeChest> Chests;
+        GetAllActorsOfClass(Chests);
+        if (Hero == nullptr || Chests.Num() == 0)
+        {
+            // Boot-time friendliness: the chest only exists after the boss dies — poll for it.
+            if (GoToChestRetries < 60)
+            {
+                GoToChestRetries++;
+                System::SetTimer(this, n"RaidGoToChest", 1.0, false);
+                return;
+            }
+            Print("[Chest] needs a hero and a dropped chest", 4.0);
+            return;
+        }
+        Hero.SetActorLocation(Chests[0].GetActorLocation());
+        Print("[Chest] teleported to the chest", 3.0);
+    }
+
+    // --- Debug: kill the nearest live OBJECTIVE elite (skips fodder) — steps the XP/kill flow
+    // one elite at a time (kills award XPValue; killing the boss drops the synergy chest). ---
+    UFUNCTION(Exec)
+    void RaidKillOneElite()
+    {
+        AHeroCharacter Hero = GetHero();
+        FVector From = Hero != nullptr ? Hero.GetActorLocation() : FVector();
+
+        TArray<AEliteEnemyBase> Enemies;
+        GetAllActorsOfClass(Enemies);
+        AEliteEnemyBase Target = nullptr;
+        float BestDistSq = 1.0e18;
+        for (AEliteEnemyBase Enemy : Enemies)
+        {
+            if (Enemy == nullptr || Enemy.Health == nullptr || Enemy.Health.IsDead())
+                continue;
+            if (Cast<AFodderEnemy>(Enemy) != nullptr)
+                continue;   // fodder doesn't gate the objective — skip it
+            float DistSq = Enemy.GetActorLocation().DistSquared(From);
+            if (DistSq < BestDistSq)
+            {
+                BestDistSq = DistSq;
+                Target = Enemy;
+            }
+        }
+        if (Target == nullptr)
+        {
+            Print("[Debug] RaidKillOneElite — no live objective elites", 3.0);
+            return;
+        }
+        Target.Health.ApplyDamage(9999999.0, Hero);
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
+        int Left = Combat != nullptr ? Combat.GetEliteCount() : -1;
+        Print(f"[Debug] RaidKillOneElite — killed {Target.GetName()}, {Left} objective elites left", 4.0);
     }
 
     // --- Debug: ring a telegraph danger zone at the hero (the cue-pass ground ring, no damage).

@@ -42,6 +42,19 @@ class ARaidGameState : AGameStateBase
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Run")
     float RunEndTime = 0.0;
 
+    // --- Shared team XP (UpgradeLoop concept, 2026-06-11): every kill feeds ONE team pool; each
+    // level-up pauses the raid and offers an upgrade pick to all players. Server-written by the
+    // GameMode; replicated so every HUD shows the same level/bar. ---
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Run")
+    int TeamLevel = 1;
+
+    // Progress INTO the current level (resets each level-up), not lifetime XP.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Run")
+    float TeamXP = 0.0;
+
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Run")
+    float XPToNextLevel = 100.0;
+
     // Lobby launch countdown: 0 until the host hits START RAID, then the world time the travel
     // fires at. Replicated so every lobby UI shows the same "Launching in N..." count.
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Lobby")

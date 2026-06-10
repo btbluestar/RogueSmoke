@@ -26,6 +26,12 @@ class URogueUpgradeDef : UPrimaryDataAsset
     UPROPERTY(EditDefaultsOnly, Category = "Upgrade")
     int Rarity = 1;        // tiers per GDD §6.1
 
+    // Synergy upgrades (cross-player interactions — see GLOSSARY) come ONLY from the mini-boss
+    // chest, never from level-up offers (UpgradeLoop concept, 2026-06-11). Level offers roll the
+    // non-synergy pool; the chest rolls only entries with this set.
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrade")
+    bool bSynergyUpgrade = false;
+
     // The effect applied when the player picks this upgrade. Infinite-duration; modifies attributes.
     UPROPERTY(EditDefaultsOnly, Category = "Upgrade")
     TSubclassOf<UGameplayEffect> Effect;

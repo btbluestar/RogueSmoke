@@ -23,6 +23,11 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Combat")
 	UHealthComponent* Health;
 
+	/** Shared team XP awarded when this enemy dies (the upgrade loop). Per-archetype via
+	 *  defaults: fodder 5, elites 25 (this default), boss 150, firing-range dummies 0. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Combat")
+	float XPValue = 25.f;
+
 	/** Flag this enemy as Clustered for Duration seconds (the synergy condition). Server-only. */
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	void MarkClustered(float Duration);

@@ -27,6 +27,7 @@ class URogueHUDWidget : UUserWidget
     private UTextBlock ResultBanner;   // big VICTORY/DEFEAT on run end
     private UTextBlock ResultHint;      // replay hint under the banner
     private UTextBlock TimerText;       // run clock, top-center under the objective
+    private UTextBlock TeamXPText;      // shared level + XP progress (upgrade loop), under the clock
 
     // Full results panel (stats table + buttons): the PC pushes it onto the Menu layer
     // ResultsDelaySeconds after the phase resolves, so the banner lands first and the
@@ -112,11 +113,16 @@ class URogueHUDWidget : UUserWidget
         TimerText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
         AddChild(TimerText, FAnchors(0.5, 0.0), FVector2D(0.5, 0.0), FVector2D(0.0, 56.0), FVector2D(), true);
 
-        // Join/leave toast: under the run clock.
+        // Shared team level + XP progress (upgrade loop): top-center, under the run clock.
+        TeamXPText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
+        TeamXPText.SetColorAndOpacity(FSlateColor(Accent));
+        AddChild(TeamXPText, FAnchors(0.5, 0.0), FVector2D(0.5, 0.0), FVector2D(0.0, 82.0), FVector2D(), true);
+
+        // Join/leave toast: under the XP line.
         ToastText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
         ToastText.SetColorAndOpacity(FSlateColor(Accent));
         ToastText.SetVisibility(ESlateVisibility::Collapsed);
-        AddChild(ToastText, FAnchors(0.5, 0.0), FVector2D(0.5, 0.0), FVector2D(0.0, 84.0), FVector2D(), true);
+        AddChild(ToastText, FAnchors(0.5, 0.0), FVector2D(0.5, 0.0), FVector2D(0.0, 108.0), FVector2D(), true);
 
         // Self vitals: bottom-left. Health number above the bar, shield as a thin bar above that.
         HealthText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
@@ -189,7 +195,23 @@ class URogueHUDWidget : UUserWidget
         RefreshHitMarker();
         RefreshResultBanner();
         RefreshTimer();
+        RefreshTeamXP();
         RefreshToast();
+    }
+
+    // Shared level + XP progress off the replicated GameState (same numbers on every machine).
+    private void RefreshTeamXP()
+    {
+        if (TeamXPText == nullptr)
+            return;
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (GS == nullptr)
+        {
+            TeamXPText.SetText(FText());
+            return;
+        }
+        TeamXPText.SetText(FText::FromString(
+            f"LVL {GS.TeamLevel}   {int(GS.TeamXP)} / {int(GS.XPToNextLevel)} XP"));
     }
 
     // "Player joined/left" feedback off the replicated PlayerArray size.

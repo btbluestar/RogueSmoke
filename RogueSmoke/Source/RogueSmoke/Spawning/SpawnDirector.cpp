@@ -108,6 +108,10 @@ void USpawnDirector::HandleEliteDeath(AActor* DeadActor)
 		return;
 	}
 
+	// Kill event BEFORE the recycle, while the corpse's class/location are still meaningful
+	// (the upgrade loop reads XPValue and spawns the mini-boss chest where the boss fell).
+	OnEnemyKilled.Broadcast(Elite);
+
 	Elite->Deactivate();
 	FreePool.FindOrAdd(Elite->GetClass()).Add(Elite);
 }

@@ -42,6 +42,25 @@ class ARaidGameMode : AGameModeBase
 
         RunManager = URunManager::Create(this);
         RunManager.StartRun();      // roll + replicate the master seed (D-0007)
+
+        // Upgrade loop (UpgradeLoop concept, 2026-06-11): shared XP from every kill + the
+        // mini-boss chest. The pick-pause watchdog below must tick while the game is paused.
+        SetTickableWhenPaused(true);
+        USpawnDirector Director = USpawnDirector::Get();
+        if (Director != nullptr)
+            Director.OnEnemyKilled.AddUFunction(this, n"HandleEnemyKilled");
+    }
+
+    // Pick-pause watchdog: resume even if a player never picks (disconnect / walked away).
+    UFUNCTION(BlueprintOverride)
+    void Tick(float DeltaSeconds)
+    {
+        if (PendingPicks > 0)
+        {
+            OfferPauseElapsed += DeltaSeconds;
+            if (OfferPauseElapsed >= OfferPauseTimeoutSeconds)
+                ResumeFromOffer("pick timeout");
+        }
     }
 
     // Convenience for ability/objective code: reach the seeded stream from anywhere on the
@@ -130,35 +149,166 @@ class ARaidGameMode : AGameModeBase
     UPROPERTY(EditDefaultsOnly, Category = "Upgrades")
     int OptionsPerOffer = 3;
 
-    private int OfferCounter = 0;
+    // --- Shared team XP (UpgradeLoop concept). Curve: level N -> N+1 needs
+    // XPBasePerLevel + XPGrowthPerLevel * (N - 1). Kills feed AddTeamXP via HandleEnemyKilled. ---
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrades|XP")
+    float XPBasePerLevel = 100.0;
 
-    // Roll OptionsPerOffer distinct upgrades and present them to every player's client. Server only.
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrades|XP")
+    float XPGrowthPerLevel = 25.0;
+
+    // Resume safety: if someone never picks (disconnect / AFK), unpause anyway after this long.
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrades")
+    float OfferPauseTimeoutSeconds = 30.0;
+
+    private int OfferCounter = 0;
+    private int PendingPicks = 0;
+    private float OfferPauseElapsed = 0.0;
+
+    // Every pooled enemy death lands here (SpawnDirector.OnEnemyKilled): XP for the team pool,
+    // and the mini-boss drops the synergy chest where it fell.
+    UFUNCTION()
+    private void HandleEnemyKilled(AEliteEnemyBase Enemy)
+    {
+        if (Enemy == nullptr)
+            return;
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (GS == nullptr || GS.Phase != ERunPhase::InProgress)
+            return;     // no XP once the run has resolved (or before it starts)
+
+        if (Enemy.XPValue > 0.0)
+            AddTeamXP(Enemy.XPValue);
+
+        if (Cast<ABroodMother>(Enemy) != nullptr)
+            SpawnUpgradeChest(Enemy.GetActorLocation() + FVector(0.0, 0.0, 60.0));
+    }
+
+    // Add to the shared pool; on level-up, pause and offer a pick with level-biased rarity:
+    // default common-leaning, every 5th level boosts moderate, every 10th boosts rare.
+    UFUNCTION(BlueprintCallable, Category = "Upgrades")
+    void AddTeamXP(float Amount)
+    {
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (!HasAuthority() || GS == nullptr || Amount <= 0.0)
+            return;
+
+        GS.TeamXP += Amount;
+        bool bLeveled = false;
+        while (GS.TeamXP >= GS.XPToNextLevel)
+        {
+            GS.TeamXP -= GS.XPToNextLevel;
+            GS.TeamLevel += 1;
+            GS.XPToNextLevel = XPBasePerLevel + XPGrowthPerLevel * float(GS.TeamLevel - 1);
+            bLeveled = true;
+        }
+        if (!bLeveled)
+            return;
+
+        // One offer per XP burst even if it crossed several levels (no stacked pick screens);
+        // the bias comes from the level REACHED. Weights are balance-pass numbers.
+        float W1 = 70.0; float W2 = 25.0; float W3 = 5.0;
+        FString Tier = "standard";
+        if (GS.TeamLevel % 10 == 0)
+        {
+            W1 = 15.0; W2 = 30.0; W3 = 55.0; Tier = "RARE-boosted";
+        }
+        else if (GS.TeamLevel % 5 == 0)
+        {
+            W1 = 30.0; W2 = 55.0; W3 = 15.0; Tier = "moderate-boosted";
+        }
+        Print(f"[XP] team level {GS.TeamLevel} — {Tier} upgrade offer", 5.0);
+        OfferUpgradesWeighted(W1, W2, W3, false);
+    }
+
+    // The mini-boss reward (UpgradeLoop right branch): chest where the boss fell; any living
+    // player standing next to it opens it -> paused synergy pick for everyone.
+    private void SpawnUpgradeChest(FVector Location)
+    {
+        AUpgradeChest Chest = Cast<AUpgradeChest>(SpawnActor(AUpgradeChest, Location, FRotator()));
+        if (Chest == nullptr)
+            return;
+        Chest.OnOpened.AddUFunction(this, n"HandleChestOpened");
+        Print("[Chest] mini-boss chest dropped — stand next to it to open", 6.0);
+    }
+
+    UFUNCTION()
+    private void HandleChestOpened(AUpgradeChest Chest)
+    {
+        Print("[Chest] opened — synergy upgrade pick", 5.0);
+        OfferUpgradesWeighted(1.0, 1.0, 1.0, true);   // synergy pool; rarity weights moot
+    }
+
+    // Roll OptionsPerOffer distinct upgrades (default weights) and present them to every player.
+    // Kept for the arena-clear reward path (RaidObjective). Server only.
     UFUNCTION(BlueprintCallable, Category = "Upgrades")
     void OfferUpgradesToAll()
+    {
+        OfferUpgradesWeighted(70.0, 25.0, 5.0, false);
+    }
+
+    // The real offer path: weighted roll, send to every client, then PAUSE the raid until every
+    // player has picked (or the watchdog timeout). Synergy-only offers are the chest's.
+    void OfferUpgradesWeighted(float W1, float W2, float W3, bool bSynergyOnly)
     {
         if (!HasAuthority() || UpgradePool.Num() == 0)
             return;
 
-        TArray<URogueUpgradeDef> Options = RollOptions(OptionsPerOffer, OfferCounter);
+        TArray<URogueUpgradeDef> Options = RollOptions(OptionsPerOffer, OfferCounter, W1, W2, W3, bSynergyOnly);
         OfferCounter += 1;
         if (Options.Num() == 0)
             return;
 
+        int Sent = 0;
         TArray<ARaidPlayerController> PCs;
         GetAllActorsOfClass(PCs);
         for (ARaidPlayerController PC : PCs)
         {
             if (PC != nullptr)
+            {
                 PC.Client_OfferUpgrades(Options);   // Client RPC -> shows the pick screen
+                Sent += 1;
+            }
+        }
+
+        if (Sent > 0)
+        {
+            PendingPicks = Sent;
+            OfferPauseElapsed = 0.0;
+            RogueGame::SetRaidPaused(true);   // URogueGameStatics — 'Statics' suffix stripped
+            Print(f"[Upgrades] raid paused for the pick ({Sent} player(s))", 4.0);
         }
     }
 
-    // Distinct picks via a FRESH stream salted by the offer index, so upgrade rolls reproduce per
-    // seed yet never perturb the run's master stream (CODING_STANDARDS §5; same trick as fodder waves).
-    private TArray<URogueUpgradeDef> RollOptions(int Count, int Salt)
+    // Called by Server_ApplyUpgrade for each pick; the raid resumes once everyone has chosen.
+    void NotifyUpgradePicked()
+    {
+        if (!HasAuthority() || PendingPicks <= 0)
+            return;
+        PendingPicks -= 1;
+        if (PendingPicks == 0)
+            ResumeFromOffer("all players picked");
+    }
+
+    private void ResumeFromOffer(FString Why)
+    {
+        PendingPicks = 0;
+        RogueGame::SetRaidPaused(false);
+        Print(f"[Upgrades] raid resumed ({Why})", 4.0);
+    }
+
+    // Distinct weighted picks via a FRESH stream salted by the offer index, so upgrade rolls
+    // reproduce per seed yet never perturb the run's master stream (CODING_STANDARDS §5).
+    // Weights apply per rarity tier (1 -> W1, 2 -> W2, 3+ -> W3); the synergy flag splits the
+    // pool (level offers never roll synergy cards; the chest rolls only them).
+    private TArray<URogueUpgradeDef> RollOptions(int Count, int Salt, float W1, float W2, float W3, bool bSynergyOnly)
     {
         TArray<URogueUpgradeDef> Result;
-        TArray<URogueUpgradeDef> Available = UpgradePool;
+        TArray<URogueUpgradeDef> Available;
+        for (URogueUpgradeDef Upgrade : UpgradePool)
+        {
+            if (Upgrade != nullptr && Upgrade.bSynergyUpgrade == bSynergyOnly)
+                Available.Add(Upgrade);
+        }
 
         int BaseSeed = (RunManager != nullptr) ? RunManager.GetStream().GetInitialSeed() : 1;
         FRandomStream Rng(BaseSeed + Salt * 6151);
@@ -166,10 +316,36 @@ class ARaidGameMode : AGameModeBase
         int Want = Math::Min(Count, Available.Num());
         for (int i = 0; i < Want; i++)
         {
-            int Idx = Rng.RandRange(0, Available.Num() - 1);
-            Result.Add(Available[Idx]);
-            Available.RemoveAt(Idx);
+            float Total = 0.0;
+            for (URogueUpgradeDef Upgrade : Available)
+                Total += RarityWeight(Upgrade.Rarity, W1, W2, W3);
+            if (Total <= 0.0)
+                break;
+
+            float Roll = Rng.RandRange(0.0, Total);
+            int PickIdx = Available.Num() - 1;
+            float Acc = 0.0;
+            for (int j = 0; j < Available.Num(); j++)
+            {
+                Acc += RarityWeight(Available[j].Rarity, W1, W2, W3);
+                if (Roll <= Acc)
+                {
+                    PickIdx = j;
+                    break;
+                }
+            }
+            Result.Add(Available[PickIdx]);
+            Available.RemoveAt(PickIdx);
         }
         return Result;
+    }
+
+    private float RarityWeight(int Rarity, float W1, float W2, float W3) const
+    {
+        if (Rarity >= 3)
+            return W3;
+        if (Rarity == 2)
+            return W2;
+        return W1;
     }
 }

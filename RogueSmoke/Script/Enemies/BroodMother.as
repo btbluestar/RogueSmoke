@@ -15,6 +15,7 @@ class ABroodMother : AAttackingElite
     default TelegraphSeconds = 1.0;     // big, readable wind-ups
     default BodyScale = FVector(2.6, 2.6, 2.8);   // unmistakable silhouette
     default BodyColor = FLinearColor(0.65, 0.10, 0.10, 1.0);   // dark-red boss
+    default XPValue = 150.0;            // boss kill = a big chunk of a team level
 
     UPROPERTY(EditDefaultsOnly, Category = "Boss")
     int SummonCount = 6;

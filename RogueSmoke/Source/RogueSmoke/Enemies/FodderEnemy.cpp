@@ -13,6 +13,8 @@
 
 AFodderEnemy::AFodderEnemy()
 {
+	XPValue = 5.f;   // swarm trickle (elites default 25, boss 150 — the upgrade loop's XP economy)
+
 	// Cheap visible body: a single static-mesh sphere as the root. No skeletal mesh, no
 	// CharacterMovementComponent, no AIController — the things that make 150 agents expensive.
 	Body = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Body"));

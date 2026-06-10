@@ -423,6 +423,11 @@ class AHeroCharacter : ARogueHeroBase
         ARoguePlayerState PS = Cast<ARoguePlayerState>(PlayerState);
         if (PS != nullptr)
             PS.AddUpgradeTaken();
+
+        // Pick bookkeeping: the GameMode resumes the pick-paused raid once everyone has chosen.
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        if (GameMode != nullptr)
+            GameMode.NotifyUpgradePicked();
     }
 
     // Route a remote client's "call extraction" through a player-owned RPC (clients can't

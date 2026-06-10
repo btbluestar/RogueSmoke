@@ -70,6 +70,11 @@
   - **Chain** — a hit arcs bonus damage to the nearest other enemies in range (rewards Density).
   - **Burn / Poison** — on-hit DoT procs; magnitude derives from the hit's damage. Burn = fast and
     short, Poison = slow and bigger total. One slot per type on `UHealthComponent` (refresh, no stacking).
+- **Team XP / Team level** — the shared pool every kill feeds (per-archetype `XPValue`); a level-up
+  pauses the raid for an upgrade pick, rarity-weighted by the level reached (D-0018). One pool for
+  the whole squad — leveling is a team event, not per-player.
+- **Upgrade chest** — `AUpgradeChest`, dropped where the mini-boss fell; any living player standing
+  next to it opens it for a squad-wide **synergy upgrade** pick (the only source of synergy cards).
 - **Meta-progression** — persistence *between* runs (scope still open).
 
 ## Technical / architecture

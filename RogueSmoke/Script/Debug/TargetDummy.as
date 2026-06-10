@@ -7,6 +7,7 @@
 class ATargetDummy : AAttackingElite
 {
     default MaxHealthOverride = 200.0;
+    default XPValue = 0.0;              // the firing range must not farm team XP
     default MoveSpeed = 0.0;            // never repositions
     default PreferredRange = 1000000.0; // "close enough" everywhere -> never approaches
     default AttackRange = 0.0;          // never in range -> never telegraphs or attacks

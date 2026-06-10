@@ -1,8 +1,9 @@
 // UpgradeSelectWidget.as
 // Choose-1-of-N upgrade screen: dimmed overlay + a centered row of UUpgradeCardWidget cards,
 // one per offered URogueUpgradeDef (the cards are populated at runtime — no per-upgrade
-// widgets). Pick by clicking a card or pressing its number key. The game does NOT pause
-// (genre convention + listen server: teammates are still fighting).
+// widgets). Pick by clicking a card or pressing its number key. The raid PAUSES while picks
+// are open (UpgradeLoop concept, 2026-06-11): the GameMode pauses on offer and resumes once
+// every player has picked (or its watchdog times out). UI input works fine while paused.
 //
 // CommonUI: an activatable pushed onto the GameMenu layer stack by RaidPlayerController, which
 // then calls Setup(Options) to build the cards. Its input config is All — menu input for the
@@ -84,7 +85,7 @@ class UUpgradeSelectWidget : UCommonActivatableWidget
         RowSlot.SetAlignment(FVector2D(0.5, 0.45));
         RowSlot.SetAutoSize(true);
 
-        UTextBlock Hint = RogueUITheme::MakeText(this, "Click a card or press its number — the raid does not pause", RogueUITheme::TextDim, 1.0);
+        UTextBlock Hint = RogueUITheme::MakeText(this, "Click a card or press its number — the raid is paused until everyone picks", RogueUITheme::TextDim, 1.0);
         UCanvasPanelSlot HintSlot = Root.AddChildToCanvas(Hint);
         HintSlot.SetAnchors(FAnchors(0.5, 0.82));
         HintSlot.SetAlignment(FVector2D(0.5, 0.5));
