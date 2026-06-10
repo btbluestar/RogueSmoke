@@ -60,6 +60,7 @@ class URogueDownComponent : UActorComponent
         BleedOutRemaining = BleedOutSeconds;
         ReviveProgress = 0.0;
         Hero.SetDownedState(true, false);   // downed, not yet dead
+        CreditStat(Hero, n"Downed");
         CheckPartyWipe();
     }
 
@@ -70,12 +71,13 @@ class URogueDownComponent : UActorComponent
             return;
 
         // Revive: a living teammate within range fills the bar; it decays if they step away.
-        if (IsLivingTeammateNearby())
+        AHeroCharacter Reviver = FindNearbyReviver();
+        if (Reviver != nullptr)
         {
             ReviveProgress += DeltaSeconds;
             if (ReviveProgress >= ReviveHoldSeconds)
             {
-                Revive();
+                Revive(Reviver);
                 return;
             }
         }
@@ -93,7 +95,7 @@ class URogueDownComponent : UActorComponent
         }
     }
 
-    private void Revive()
+    private void Revive(AHeroCharacter Reviver)
     {
         ReviveProgress = 0.0;
         UAngelscriptAbilitySystemComponent ASC = Hero.GetRogueAbilitySystem();
@@ -103,13 +105,16 @@ class URogueDownComponent : UActorComponent
             ASC.SetAttributeBaseValue(URogueHealthSet, n"Health", MaxHP * ReviveHealthFraction);
         }
         Hero.SetDownedState(false, false);   // back on your feet
+        CreditStat(Reviver, n"Revive");      // the TEAMMATE earns the revive stat
     }
 
-    // A non-incapacitated hero other than us, within ReviveRadius.
-    private bool IsLivingTeammateNearby() const
+    // The nearest non-incapacitated hero other than us within ReviveRadius (nullptr if none).
+    // Returned (not just a bool) so a completed revive credits the right teammate's stats.
+    private AHeroCharacter FindNearbyReviver() const
     {
         FVector Mine = Hero.GetActorLocation();
-        float RadiusSq = ReviveRadius * ReviveRadius;
+        float BestDistSq = ReviveRadius * ReviveRadius;
+        AHeroCharacter Best = nullptr;
 
         TArray<AHeroCharacter> Heroes;
         GetAllActorsOfClass(Heroes);
@@ -117,10 +122,28 @@ class URogueDownComponent : UActorComponent
         {
             if (Other == nullptr || Other == Hero || Other.IsIncapacitated())
                 continue;
-            if ((Mine - Other.GetActorLocation()).SizeSquared() <= RadiusSq)
-                return true;
+            float DistSq = (Mine - Other.GetActorLocation()).SizeSquared();
+            if (DistSq <= BestDistSq)
+            {
+                BestDistSq = DistSq;
+                Best = Other;
+            }
         }
-        return false;
+        return Best;
+    }
+
+    // Server-side stat bump on a hero's replicated PlayerState (results screen columns).
+    private void CreditStat(AHeroCharacter Who, FName Stat)
+    {
+        if (Who == nullptr)
+            return;
+        ARoguePlayerState PS = Cast<ARoguePlayerState>(Who.PlayerState);
+        if (PS == nullptr)
+            return;
+        if (Stat == n"Downed")
+            PS.AddDowned();
+        else if (Stat == n"Revive")
+            PS.AddRevive();
     }
 
     // Party wipe = every hero incapacitated. Ends the run in defeat via the objective hook (D-0010).

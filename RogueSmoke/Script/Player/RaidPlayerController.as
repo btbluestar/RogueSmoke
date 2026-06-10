@@ -360,6 +360,15 @@ class ARaidPlayerController : APlayerController
     UFUNCTION(Exec)
     void RaidLose() { ForceRunPhase(ERunPhase::Defeat); }
 
+    // Debug: pop the end-of-run results panel immediately (normally the HUD shows it ~2.5s after
+    // the phase resolves). Pair with RaidWin/RaidLose to preview either report.
+    UFUNCTION(Exec)
+    void RaidResults()
+    {
+        if (HUDWidget != nullptr)
+            HUDWidget.ShowResultsScreen();
+    }
+
     private void ForceRunPhase(ERunPhase NewPhase)
     {
         if (!HasAuthority())

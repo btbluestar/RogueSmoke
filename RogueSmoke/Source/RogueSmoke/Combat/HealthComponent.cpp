@@ -1,6 +1,8 @@
 // HealthComponent.cpp
 
 #include "Combat/HealthComponent.h"
+#include "AbilitySystem/RoguePlayerState.h"
+#include "GameFramework/Pawn.h"
 #include "Net/UnrealNetwork.h"
 
 UHealthComponent::UHealthComponent()
@@ -26,6 +28,25 @@ float UHealthComponent::ApplyDamage(float Amount, AActor* DamageInstigator)
 	const float Before = Health;
 	Health = FMath::Max(0.f, Health - Amount);
 	const float Applied = Before - Health;
+
+	// Stat credit: every player->enemy damage path (hitscan, radial, future ones) funnels through
+	// here, so this is the one place damage-dealt and kills attribute to the instigating player.
+	// Pool-safe: IsDead() early-outs above and ResetHealth() restores on recycle, so a given death
+	// credits exactly one kill.
+	if (Applied > 0.f && DamageInstigator != nullptr)
+	{
+		if (const APawn* InstigatorPawn = Cast<APawn>(DamageInstigator))
+		{
+			if (ARoguePlayerState* PS = InstigatorPawn->GetPlayerState<ARoguePlayerState>())
+			{
+				PS->AddDamageDealt(Applied);
+				if (IsDead())
+				{
+					PS->AddKill();
+				}
+			}
+		}
+	}
 
 	if (IsDead())
 	{

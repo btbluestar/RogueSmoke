@@ -30,6 +30,51 @@ public:
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	//~End IAbilitySystemInterface
 
+	// --- Per-player run stats (results screen / scoreboard). Replicated so every client can
+	// render everyone's column. Server-only accumulation via the Add* helpers: damage credit
+	// comes from UHealthComponent::ApplyDamage / UCombatSubsystem::ApplyDamageToPlayer (C++);
+	// downs/revives/upgrades from the AngelScript systems that own those moments. ---
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Stats")
+	int32 Kills = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Stats")
+	float DamageDealt = 0.f;
+
+	/** Incoming (pre-mitigation) damage — armor/shield resolve later in RogueHealthSet. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Stats")
+	float DamageTaken = 0.f;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Stats")
+	int32 TimesDowned = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Stats")
+	int32 Revives = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Stats")
+	int32 UpgradesTaken = 0;
+
+	UFUNCTION(BlueprintCallable, Category = "Stats")
+	void AddKill();
+
+	UFUNCTION(BlueprintCallable, Category = "Stats")
+	void AddDamageDealt(float Amount);
+
+	UFUNCTION(BlueprintCallable, Category = "Stats")
+	void AddDamageTaken(float Amount);
+
+	UFUNCTION(BlueprintCallable, Category = "Stats")
+	void AddDowned();
+
+	UFUNCTION(BlueprintCallable, Category = "Stats")
+	void AddRevive();
+
+	UFUNCTION(BlueprintCallable, Category = "Stats")
+	void AddUpgradeTaken();
+
+protected:
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AbilitySystem", meta = (AllowPrivateAccess = true))
 	TObjectPtr<UAngelscriptAbilitySystemComponent> AbilitySystem;

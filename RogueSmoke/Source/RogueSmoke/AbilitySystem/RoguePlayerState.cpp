@@ -3,6 +3,7 @@
 
 #include "AngelscriptAbilitySystemComponent.h"
 #include "AbilitySystemComponent.h"
+#include "Net/UnrealNetwork.h"
 
 ARoguePlayerState::ARoguePlayerState()
 {
@@ -20,4 +21,66 @@ ARoguePlayerState::ARoguePlayerState()
 UAbilitySystemComponent* ARoguePlayerState::GetAbilitySystemComponent() const
 {
 	return AbilitySystem;
+}
+
+void ARoguePlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ARoguePlayerState, Kills);
+	DOREPLIFETIME(ARoguePlayerState, DamageDealt);
+	DOREPLIFETIME(ARoguePlayerState, DamageTaken);
+	DOREPLIFETIME(ARoguePlayerState, TimesDowned);
+	DOREPLIFETIME(ARoguePlayerState, Revives);
+	DOREPLIFETIME(ARoguePlayerState, UpgradesTaken);
+}
+
+// Authority discipline (CODING_STANDARDS §4.4): stats only mutate on the server; clients read
+// the replicated values.
+
+void ARoguePlayerState::AddKill()
+{
+	if (HasAuthority())
+	{
+		++Kills;
+	}
+}
+
+void ARoguePlayerState::AddDamageDealt(float Amount)
+{
+	if (HasAuthority() && Amount > 0.f)
+	{
+		DamageDealt += Amount;
+	}
+}
+
+void ARoguePlayerState::AddDamageTaken(float Amount)
+{
+	if (HasAuthority() && Amount > 0.f)
+	{
+		DamageTaken += Amount;
+	}
+}
+
+void ARoguePlayerState::AddDowned()
+{
+	if (HasAuthority())
+	{
+		++TimesDowned;
+	}
+}
+
+void ARoguePlayerState::AddRevive()
+{
+	if (HasAuthority())
+	{
+		++Revives;
+	}
+}
+
+void ARoguePlayerState::AddUpgradeTaken()
+{
+	if (HasAuthority())
+	{
+		++UpgradesTaken;
+	}
 }

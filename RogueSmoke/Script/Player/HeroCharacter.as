@@ -391,6 +391,11 @@ class AHeroCharacter : ARogueHeroBase
         UAngelscriptAbilitySystemComponent ASC = GetRogueAbilitySystem();
         if (ASC != nullptr)
             ASC.ApplyGameplayEffectToTarget(Upgrade.Effect, ASC, 1.0, FGameplayEffectContextHandle());
+
+        // Stat credit (results screen "Upgrades" row). Server-side: this is a Server RPC.
+        ARoguePlayerState PS = Cast<ARoguePlayerState>(PlayerState);
+        if (PS != nullptr)
+            PS.AddUpgradeTaken();
     }
 
     // Route a remote client's "call extraction" through a player-owned RPC (clients can't

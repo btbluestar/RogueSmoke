@@ -13,6 +13,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GameplayEffect.h"
 #include "RogueHealthSet.h"
+#include "AbilitySystem/RoguePlayerState.h"
 
 bool UCombatSubsystem::IsServer() const
 {
@@ -208,6 +209,12 @@ void UCombatSubsystem::ApplyDamageToPlayer(APawn* Target, float Damage, AActor* 
 	FGameplayEffectContextHandle Ctx = ASC->MakeEffectContext();
 	Ctx.AddInstigator(DamageInstigator, DamageInstigator);
 	ASC->ApplyGameplayEffectToSelf(DamageGE, 1.0f, Ctx);
+
+	// Stat credit: incoming (pre-mitigation) damage on the victim's results-screen column.
+	if (ARoguePlayerState* TargetPS = Target->GetPlayerState<ARoguePlayerState>())
+	{
+		TargetPS->AddDamageTaken(Damage);
+	}
 }
 
 void UCombatSubsystem::ApplyRadialDamageToPlayers(FVector Center, float Radius, float Damage, AActor* DamageInstigator)

@@ -28,6 +28,12 @@ class URogueHUDWidget : UUserWidget
     private UTextBlock ResultHint;      // replay hint under the banner
     private UTextBlock TimerText;       // run clock, top-center under the objective
 
+    // Full results panel (stats table + buttons): shown ResultsDelaySeconds after the phase
+    // resolves, so the banner lands first and the replicated stats settle. Replaces the banner.
+    private UResultsScreenWidget ResultsScreen;
+    private float ResultElapsed = 0.0;
+    const float ResultsDelaySeconds = 2.5;
+
     const float HitMarkerDuration = 0.12;   // seconds the hitmarker stays lit after a confirmed hit
 
     private AHeroCharacter Hero;
@@ -212,6 +218,39 @@ class URogueHUDWidget : UUserWidget
             if (ResultHint != nullptr)
                 ResultHint.SetVisibility(ESlateVisibility::Collapsed);
         }
+
+        // Escalate banner -> full results panel once the delay has passed (once per run).
+        if (Phase == ERunPhase::Victory || Phase == ERunPhase::Defeat)
+        {
+            ResultElapsed += Gameplay::GetWorldDeltaSeconds();
+            if (ResultsScreen == nullptr && ResultElapsed >= ResultsDelaySeconds)
+                ShowResultsScreen();
+        }
+        else
+        {
+            ResultElapsed = 0.0;
+        }
+    }
+
+    // Public: also reachable via the RaidResults console command (debug / headless smoke,
+    // since the timer escalation above needs widget Ticks, which nullrhi boots don't run).
+    void ShowResultsScreen()
+    {
+        if (ResultsScreen != nullptr)
+            return;
+        APlayerController PC = GetOwningPlayer();
+        ResultsScreen = Cast<UResultsScreenWidget>(
+            WidgetBlueprint::CreateWidget(UResultsScreenWidget, PC));
+        if (ResultsScreen == nullptr)
+            return;
+        ResultsScreen.AddToViewport(10);   // above the HUD
+        if (PC != nullptr)
+            PC.bShowMouseCursor = true;    // the panel has buttons
+
+        // The panel owns the result presentation now — drop the interim banner + console hint.
+        ResultBanner.SetVisibility(ESlateVisibility::Collapsed);
+        if (ResultHint != nullptr)
+            ResultHint.SetVisibility(ESlateVisibility::Collapsed);
     }
 
     private void ShowResult(FString Text, FLinearColor Color)
