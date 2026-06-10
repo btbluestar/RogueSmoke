@@ -34,6 +34,14 @@ class ARaidGameState : AGameStateBase
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Run")
     int SharedScore = 0;
 
+    // Run clock (world seconds). Start is stamped when the run begins; End is 0 until it resolves, then
+    // stamped so the HUD freezes the final time. Replicated so clients show the same clock.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Run")
+    float RunStartTime = 0.0;
+
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Run")
+    float RunEndTime = 0.0;
+
     // True once the server has rolled a real seed (0 means "not started yet").
     UFUNCTION(BlueprintPure, Category = "Run")
     bool HasValidSeed() const

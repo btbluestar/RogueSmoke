@@ -47,6 +47,7 @@ class URunManager : UActorComponent
             GameState.MasterSeed = Seed;
             GameState.FloorNumber = 1;
             GameState.Phase = ERunPhase::InProgress;
+            GameState.RunStartTime = Gameplay::GetTimeSeconds();
         }
 
         Print(f"[RunManager] Run started — master seed {Seed}", 6.0);
@@ -65,6 +66,9 @@ class URunManager : UActorComponent
     {
         ARaidGameState GameState = Cast<ARaidGameState>(Gameplay::GetGameState());
         if (GameState != nullptr)
+        {
             GameState.Phase = bVictory ? ERunPhase::Victory : ERunPhase::Defeat;
+            GameState.RunEndTime = Gameplay::GetTimeSeconds();   // freeze the run clock
+        }
     }
 }

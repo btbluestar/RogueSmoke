@@ -26,6 +26,7 @@ class URogueHUDWidget : UUserWidget
     private UTextBlock HitMarker;
     private UTextBlock ResultBanner;   // big VICTORY/DEFEAT on run end
     private UTextBlock ResultHint;      // replay hint under the banner
+    private UTextBlock TimerText;       // run clock, top-center under the objective
 
     const float HitMarkerDuration = 0.12;   // seconds the hitmarker stays lit after a confirmed hit
 
@@ -92,6 +93,10 @@ class URogueHUDWidget : UUserWidget
         ResultHint.SetText(FText::FromString("Open the ~ console and type  RaidRestart  to play again"));
         ResultHint.SetVisibility(ESlateVisibility::Collapsed);
         AddChild(ResultHint, FAnchors(0.5, 0.5), FVector2D(0.5, 0.5), FVector2D(0.0, 20.0), FVector2D(), true);
+
+        // Run clock: just under the objective banner, top-center.
+        TimerText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
+        AddChild(TimerText, FAnchors(0.5, 0.0), FVector2D(0.5, 0.0), FVector2D(0.0, 56.0), FVector2D(), true);
 
         // Self vitals: bottom-left. Health number above the bar, shield as a thin bar above that.
         HealthText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
@@ -163,6 +168,28 @@ class URogueHUDWidget : UUserWidget
         RefreshCrosshair();
         RefreshHitMarker();
         RefreshResultBanner();
+        RefreshTimer();
+    }
+
+    // Run clock, mm:ss. Counts up from RunStartTime; freezes at RunEndTime once the run resolves.
+    private void RefreshTimer()
+    {
+        if (TimerText == nullptr)
+            return;
+
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (GS == nullptr || GS.RunStartTime <= 0.0)
+        {
+            TimerText.SetText(FText());
+            return;
+        }
+
+        float Now = (GS.RunEndTime > 0.0) ? GS.RunEndTime : Gameplay::GetTimeSeconds();
+        int Total = int(Math::Max(0.0, Now - GS.RunStartTime));
+        int Mins = Total / 60;
+        int Secs = Total % 60;
+        FString Pad = Secs < 10 ? "0" : "";
+        TimerText.SetText(FText::FromString(f"{Mins}:{Pad}{Secs}"));
     }
 
     // Show a big VICTORY/DEFEAT when the run resolves (the run-level phase set by RunManager::EndRun),
