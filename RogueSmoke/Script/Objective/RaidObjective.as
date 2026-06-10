@@ -77,6 +77,13 @@ class ARaidObjective : AActor
     UPROPERTY(EditAnywhere, Category = "Raid|Fodder Waves")
     int FodderPerWave = 8;
 
+    // Rising tension: each successive wave adds this many fodder over the first, capped by FodderMaxPerWave.
+    UPROPERTY(EditAnywhere, Category = "Raid|Fodder Waves")
+    float FodderEscalationPerWave = 0.5;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Fodder Waves")
+    int FodderMaxPerWave = 20;
+
     // How far from the targeted player a wave's ring is centered.
     UPROPERTY(EditAnywhere, Category = "Raid|Fodder Waves")
     float FodderSpawnDistance = 1400.0;
@@ -169,7 +176,8 @@ class ARaidObjective : AActor
         if (Director == nullptr)
             return;
 
-        Director.SpawnFodderWave(PickWaveCenter(WaveIndex), 300.0, FodderPerWave);
+        int WaveCount = Math::Min(FodderPerWave + int(WaveIndex * FodderEscalationPerWave), FodderMaxPerWave);
+        Director.SpawnFodderWave(PickWaveCenter(WaveIndex), 300.0, WaveCount);
         WaveIndex += 1;
     }
 
