@@ -14,6 +14,15 @@ class URogueUpgradeDef : UPrimaryDataAsset
     UPROPERTY(EditDefaultsOnly, Category = "Upgrade")
     FText Description;
 
+    // The short stat line shown big on the upgrade card ("+25 Max Health"). Description stays
+    // the longer flavor/detail text under it.
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrade")
+    FText ValueText;
+
+    // Card icon. Optional — the card falls back to a rarity-tinted block until art exists.
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrade")
+    UTexture2D Icon;
+
     UPROPERTY(EditDefaultsOnly, Category = "Upgrade")
     int Rarity = 1;        // tiers per GDD §6.1
 
