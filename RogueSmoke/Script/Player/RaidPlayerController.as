@@ -513,6 +513,189 @@ class ARaidPlayerController : APlayerController
         Print(f"[GrantAll] weapon attrs: dmg={DmgBonus} firerate={FireRate} pierce={Pierce} chain={Chain} burn={Burn} poison={Poison} mag={Mag} reload={Reload}", 10.0);
     }
 
+    // --- Debug: per-upgrade test commands (DL_Upgrades is the matching firing-range level). ---
+    // `ListUpgrades`          — print the GameMode pool with names/rarities.
+    // `GrantUpgrade <name>`   — apply ONE upgrade by (partial) name; repeat the command to stack.
+    // `UpgradeSmoke`          — automated battery: applies every pool upgrade one at a time and
+    //                           asserts its GE moved at least one tracked attribute. Final line
+    //                           `[UpgradeSmoke] RESULT n/n` is the SmokeTest.ps1 assertion.
+    // All host-only (GEs apply on the authority's ASC); all poll at boot so they work as -ExecCmds.
+
+    UFUNCTION(Exec)
+    void ListUpgrades()
+    {
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        if (GameMode == nullptr)
+        {
+            Print("[Upgrades] host only", 5.0);
+            return;
+        }
+        for (int i = 0; i < GameMode.UpgradePool.Num(); i++)
+        {
+            URogueUpgradeDef Upgrade = GameMode.UpgradePool[i];
+            if (Upgrade != nullptr)
+                Print(f"[Upgrades] {i}: {Upgrade.GetName()} \"{Upgrade.DisplayName}\" r{Upgrade.Rarity}", 12.0);
+        }
+    }
+
+    private FString PendingGrantFilter;
+    private int GrantOneRetries = 0;
+
+    UFUNCTION(Exec)
+    void GrantUpgrade(FString NameFilter)
+    {
+        if (NameFilter.IsEmpty())
+        {
+            Print("[Upgrade] usage: GrantUpgrade <part of the upgrade name> (see ListUpgrades)", 6.0);
+            return;
+        }
+        PendingGrantFilter = NameFilter;
+        GrantOneRetries = 0;
+        TryGrantUpgrade();
+    }
+
+    UFUNCTION()
+    private void TryGrantUpgrade()
+    {
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        AHeroCharacter Hero = GetHero();
+        UAngelscriptAbilitySystemComponent ASC = Hero != nullptr ? Hero.GetRogueAbilitySystem() : nullptr;
+        if (GameMode == nullptr || ASC == nullptr)
+        {
+            // Boot-time friendliness: -ExecCmds fires before the hero embodies, so poll (host only).
+            if (GameMode != nullptr && GrantOneRetries < 30)
+            {
+                GrantOneRetries++;
+                System::SetTimer(this, n"TryGrantUpgrade", 1.0, false);
+                return;
+            }
+            Print("[Upgrade] host only, and needs a hero pawn", 5.0);
+            return;
+        }
+
+        FString Filter = PendingGrantFilter.ToLower();
+        for (URogueUpgradeDef Upgrade : GameMode.UpgradePool)
+        {
+            if (Upgrade == nullptr || Upgrade.Effect.Get() == nullptr)
+                continue;
+            FString AssetName = FString(f"{Upgrade.GetName()}").ToLower();
+            FString Display = Upgrade.DisplayName.ToString().ToLower();
+            if (AssetName.Contains(Filter) || Display.Contains(Filter))
+            {
+                ApplyUpgradeAndReport(ASC, Upgrade);
+                return;
+            }
+        }
+        FString Candidates;
+        for (URogueUpgradeDef Upgrade : GameMode.UpgradePool)
+        {
+            if (Upgrade != nullptr)
+                Candidates += f" {Upgrade.GetName()}";
+        }
+        Print(f"[Upgrade] no pool entry matches '{PendingGrantFilter}' — pool:{Candidates}", 8.0);
+    }
+
+    private int UpgradeSmokeRetries = 0;
+
+    UFUNCTION(Exec)
+    void UpgradeSmoke()
+    {
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        AHeroCharacter Hero = GetHero();
+        UAngelscriptAbilitySystemComponent ASC = Hero != nullptr ? Hero.GetRogueAbilitySystem() : nullptr;
+        if (GameMode == nullptr || ASC == nullptr)
+        {
+            if (GameMode != nullptr && UpgradeSmokeRetries < 30)
+            {
+                UpgradeSmokeRetries++;
+                System::SetTimer(this, n"UpgradeSmoke", 1.0, false);
+                return;
+            }
+            Print("[UpgradeSmoke] host only, and needs a hero pawn", 5.0);
+            return;
+        }
+
+        int Total = 0;
+        int Ok = 0;
+        for (URogueUpgradeDef Upgrade : GameMode.UpgradePool)
+        {
+            if (Upgrade == nullptr || Upgrade.Effect.Get() == nullptr)
+                continue;
+            Total++;
+            if (ApplyUpgradeAndReport(ASC, Upgrade) > 0)
+                Ok++;
+        }
+        Print(f"[UpgradeSmoke] RESULT {Ok}/{Total} upgrades moved attributes", 12.0);
+    }
+
+    // Every attribute an upgrade GE may legally touch. The diff battery snapshots these around
+    // each apply; an upgrade whose GE moves none of them is a broken asset (wrong attribute path,
+    // wrong op — see memory ge-modifier-editing-via-python).
+    private void GetTrackedAttributes(TArray<FName>& OutNames, TArray<bool>& OutIsHealthSet)
+    {
+        OutNames.Empty();
+        OutIsHealthSet.Empty();
+        // URogueCombatSet
+        OutNames.Add(n"MoveSpeed");           OutIsHealthSet.Add(false);
+        OutNames.Add(n"AbilityPower");        OutIsHealthSet.Add(false);
+        OutNames.Add(n"CooldownReduction");   OutIsHealthSet.Add(false);
+        OutNames.Add(n"BarrageRadiusBonus");  OutIsHealthSet.Add(false);
+        OutNames.Add(n"BarrageClusterBonus"); OutIsHealthSet.Add(false);
+        OutNames.Add(n"WeaponDamageBonus");   OutIsHealthSet.Add(false);
+        OutNames.Add(n"FireRateBonus");       OutIsHealthSet.Add(false);
+        OutNames.Add(n"PierceCount");         OutIsHealthSet.Add(false);
+        OutNames.Add(n"ChainCount");          OutIsHealthSet.Add(false);
+        OutNames.Add(n"BurnChance");          OutIsHealthSet.Add(false);
+        OutNames.Add(n"PoisonChance");        OutIsHealthSet.Add(false);
+        OutNames.Add(n"MagazineBonus");       OutIsHealthSet.Add(false);
+        OutNames.Add(n"ReloadSpeedBonus");    OutIsHealthSet.Add(false);
+        // URogueHealthSet
+        OutNames.Add(n"Health");              OutIsHealthSet.Add(true);
+        OutNames.Add(n"MaxHealth");           OutIsHealthSet.Add(true);
+        OutNames.Add(n"Shield");              OutIsHealthSet.Add(true);
+        OutNames.Add(n"MaxShield");           OutIsHealthSet.Add(true);
+        OutNames.Add(n"Armor");               OutIsHealthSet.Add(true);
+    }
+
+    private float ReadTrackedAttribute(UAngelscriptAbilitySystemComponent ASC, bool bHealthSet, FName Attr)
+    {
+        if (bHealthSet)
+            return ASC.GetAttributeCurrentValue(URogueHealthSet, Attr, 0.0);
+        return ASC.GetAttributeCurrentValue(URogueCombatSet, Attr, 0.0);
+    }
+
+    // Apply one upgrade's GE and print exactly which attributes moved. Returns how many moved.
+    private int ApplyUpgradeAndReport(UAngelscriptAbilitySystemComponent ASC, URogueUpgradeDef Upgrade)
+    {
+        TArray<FName> Names;
+        TArray<bool> bHealthSet;
+        GetTrackedAttributes(Names, bHealthSet);
+
+        TArray<float> Before;
+        for (int i = 0; i < Names.Num(); i++)
+            Before.Add(ReadTrackedAttribute(ASC, bHealthSet[i], Names[i]));
+
+        ASC.ApplyGameplayEffectToTarget(Upgrade.Effect, ASC, 1.0, FGameplayEffectContextHandle());
+
+        int Changed = 0;
+        FString Moves;
+        for (int i = 0; i < Names.Num(); i++)
+        {
+            float After = ReadTrackedAttribute(ASC, bHealthSet[i], Names[i]);
+            if (Math::Abs(After - Before[i]) > 0.0001)
+            {
+                Changed++;
+                Moves += f" {Names[i]} {Before[i]}->{After}";
+            }
+        }
+
+        if (Changed > 0)
+            Print(f"[Upgrade] {Upgrade.DisplayName}:{Moves}", 8.0);
+        else
+            Print(f"[Upgrade] {Upgrade.DisplayName}: NO ATTRIBUTE CHANGE (broken GE?)", 8.0);
+        return Changed;
+    }
+
     // --- Replay: type `RaidRestart` in the ~ console to reload the current level (fresh run + seed) ----
     // Shown as the hint under the VICTORY/DEFEAT banner so a finished run is replayable without leaving PIE.
     UFUNCTION(Exec)

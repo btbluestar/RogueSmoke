@@ -28,7 +28,9 @@ $Project   = "C:\Users\btblu\Documents\RogueSmoke\RogueSmoke\RogueSmoke.uproject
 $LogDir    = Join-Path $env:TEMP "rs_smoke"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
-# Each: map path, and the spawn breadcrumb that proves its content spawned.
+# Each: map path, and the spawn breadcrumb(s) that prove its content spawned (Expect may be an
+# array — all must appear). Optional: Exec (passed as -ExecCmds, for debug-exec batteries) and
+# Window (per-case spawn window in seconds, when the exec needs longer than the default).
 $Cases = @(
     @{ Name = "RaidArena";          Map = "/Game/Levels/RaidArena";                       Expect = "[Raid] spawned 4 ring elites + boss" }
     @{ Name = "Enemy_Crawler";      Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Crawler";     Expect = "CRAWLER (fodder): spawned 8" }
@@ -37,6 +39,10 @@ $Cases = @(
     @{ Name = "Enemy_Bloater";      Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Bloater";     Expect = "BLOATER: spawned 2" }
     @{ Name = "Enemy_Lunger";       Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Lunger";      Expect = "LUNGER: spawned 2" }
     @{ Name = "Enemy_BroodMother";  Map = "/Game/Levels/DebuggingLevels/DL_Enemy_BroodMother"; Expect = "BROOD-MOTHER (boss): spawned 1" }
+    # Upgrade firing range + the GE->attribute battery: every pool upgrade must move an attribute.
+    @{ Name = "Upgrades";           Map = "/Game/Levels/DebuggingLevels/DL_Upgrades";
+       Expect = @("[UpgradeTest] range ready: solo=1 line=4 cluster=5", "[UpgradeSmoke] RESULT 16/16")
+       Exec = "UpgradeSmoke"; Window = 45 }
 )
 
 $FatalPatterns = @("Fatal error", "Assertion failed", "Script call stack", "LogScript: Error")
@@ -46,14 +52,17 @@ foreach ($c in $Cases) {
     $log = Join-Path $LogDir ("$($c.Name).log")
     if (Test-Path $log) { Remove-Item $log }
     $a = @($Project, $c.Map, "-game", "-unattended", "-nullrhi", "-nosound", "-nosplash", "-abslog=$log")
+    if ($c.Exec) { $a += "-ExecCmds=`"$($c.Exec)`"" }
+    $win = if ($c.Window) { $c.Window } else { $SpawnWindowSec }
     $p = Start-Process -FilePath $EditorCmd -ArgumentList $a -PassThru -WindowStyle Hidden
-    Start-Sleep -Seconds $SpawnWindowSec
+    Start-Sleep -Seconds $win
     if (-not $p.HasExited) { $p.Kill() }
     Start-Sleep -Milliseconds 400  # let the log flush
 
     $text = if (Test-Path $log) { Get-Content $log -Raw } else { "" }
     $started = $text -match "\[RunManager\] Run started"
-    $spawned = $text.Contains($c.Expect)
+    $spawned = $true
+    foreach ($e in @($c.Expect)) { if (-not $text.Contains($e)) { $spawned = $false } }
     $fatal   = $false
     foreach ($fp in $FatalPatterns) { if ($text -match [regex]::Escape($fp)) { $fatal = $true } }
 
