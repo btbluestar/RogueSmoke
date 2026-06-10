@@ -306,5 +306,15 @@ void AAttackingElite::DrawEnemyDebug() const
 		// Show the slam/explosion footprint during the wind-up so players can clear it.
 		DrawDebugSphere(GetWorld(), GetActorLocation(), AttackRadius, 16, FColor(255, 100, 25), false, -1.f, 0, 1.5f);
 	}
+
+	// Live HP% above the head (green/yellow/red) — see damage land while debugging; doubles as the
+	// Brood-mother's boss health readout. Billboards to the camera; refreshed each frame.
+	if (Health != nullptr && Health->MaxHealth > 0.f)
+	{
+		const float Frac = FMath::Clamp(Health->Health / Health->MaxHealth, 0.f, 1.f);
+		const FColor HpColor = Frac > 0.5f ? FColor::Green : (Frac > 0.25f ? FColor(255, 215, 25) : FColor::Red);
+		const FString HpText = FString::Printf(TEXT("HP %d%%"), FMath::RoundToInt(Frac * 100.f));
+		DrawDebugString(GetWorld(), GetActorLocation() + FVector(0.f, 0.f, 210.f), HpText, nullptr, HpColor, 0.f, true);
+	}
 #endif
 }
