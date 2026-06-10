@@ -34,6 +34,13 @@ class URogueHUDWidget : UUserWidget
     private float ResultElapsed = 0.0;
     const float ResultsDelaySeconds = 2.5;
 
+    // Join/leave toast: PlayerArray is replicated, so polling its size works on every machine
+    // (mandatory listen-server feedback; no RPC needed).
+    private UTextBlock ToastText;
+    private int LastPlayerCount = -1;
+    private float ToastRemaining = 0.0;
+    const float ToastSeconds = 4.0;
+
     const float HitMarkerDuration = 0.12;   // seconds the hitmarker stays lit after a confirmed hit
 
     private AHeroCharacter Hero;
@@ -103,6 +110,12 @@ class URogueHUDWidget : UUserWidget
         // Run clock: just under the objective banner, top-center.
         TimerText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
         AddChild(TimerText, FAnchors(0.5, 0.0), FVector2D(0.5, 0.0), FVector2D(0.0, 56.0), FVector2D(), true);
+
+        // Join/leave toast: under the run clock.
+        ToastText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
+        ToastText.SetColorAndOpacity(FSlateColor(Accent));
+        ToastText.SetVisibility(ESlateVisibility::Collapsed);
+        AddChild(ToastText, FAnchors(0.5, 0.0), FVector2D(0.5, 0.0), FVector2D(0.0, 84.0), FVector2D(), true);
 
         // Self vitals: bottom-left. Health number above the bar, shield as a thin bar above that.
         HealthText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
@@ -175,6 +188,39 @@ class URogueHUDWidget : UUserWidget
         RefreshHitMarker();
         RefreshResultBanner();
         RefreshTimer();
+        RefreshToast();
+    }
+
+    // "Player joined/left" feedback off the replicated PlayerArray size.
+    private void RefreshToast()
+    {
+        if (ToastText == nullptr)
+            return;
+
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        int Count = (GS != nullptr) ? GS.PlayerArray.Num() : 0;
+
+        if (LastPlayerCount < 0)
+        {
+            LastPlayerCount = Count;   // first sample: no toast for the initial roster
+        }
+        else if (Count != LastPlayerCount)
+        {
+            FString Message = (Count > LastPlayerCount)
+                ? f"Player joined — {Count} in squad"
+                : f"Player left — {Count} in squad";
+            ToastText.SetText(FText::FromString(Message));
+            ToastText.SetVisibility(ESlateVisibility::HitTestInvisible);
+            ToastRemaining = ToastSeconds;
+            LastPlayerCount = Count;
+        }
+
+        if (ToastRemaining > 0.0)
+        {
+            ToastRemaining -= Gameplay::GetWorldDeltaSeconds();
+            if (ToastRemaining <= 0.0)
+                ToastText.SetVisibility(ESlateVisibility::Collapsed);
+        }
     }
 
     // Run clock, mm:ss. Counts up from RunStartTime; freezes at RunEndTime once the run resolves.

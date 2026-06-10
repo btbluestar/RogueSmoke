@@ -41,6 +41,10 @@ class ARaidPlayerController : APlayerController
     UPROPERTY(EditDefaultsOnly, Category = "Input")
     UInputAction FocusAction;
 
+    // Escape menu (Esc / P). Note: Esc also stops PIE in-editor — P is the PIE-friendly key.
+    UPROPERTY(EditDefaultsOnly, Category = "Input")
+    UInputAction PauseAction;
+
     // Maps ability input actions -> gameplay input tags (Lyra-style). Each ability action's tag is
     // matched against the abilities the hero was granted from its AbilitySet.
     UPROPERTY(EditDefaultsOnly, Category = "Input")
@@ -164,6 +168,10 @@ class ARaidPlayerController : APlayerController
             EnhancedInput.BindAction(FocusAction, ETriggerEvent::Completed,
                 FEnhancedInputActionHandlerDynamicSignature(this, n"HandleFocusOff"));
         }
+
+        if (PauseAction != nullptr)
+            EnhancedInput.BindAction(PauseAction, ETriggerEvent::Started,
+                FEnhancedInputActionHandlerDynamicSignature(this, n"HandlePause"));
 
         // Bind every ability action; the shared handler resolves which by the source action's tag.
         if (InputConfig != nullptr)
@@ -387,6 +395,43 @@ class ARaidPlayerController : APlayerController
     {
         if (HUDWidget != nullptr)
             HUDWidget.ShowResultsScreen();
+    }
+
+    // --- Escape menu (Esc / P, or this console command). An overlay — nothing pauses. ---
+    private UEscapeMenuWidget PauseMenu;
+
+    UFUNCTION(Exec)
+    void RaidPause() { TogglePauseMenu(); }
+
+    UFUNCTION()
+    private void HandlePause(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+    {
+        TogglePauseMenu();
+    }
+
+    void TogglePauseMenu()
+    {
+        if (PauseMenu != nullptr)
+        {
+            ClosePauseMenu();
+            return;
+        }
+        PauseMenu = Cast<UEscapeMenuWidget>(WidgetBlueprint::CreateWidget(UEscapeMenuWidget, this));
+        if (PauseMenu == nullptr)
+            return;
+        PauseMenu.AddToViewport(20);   // above HUD + results
+        bShowMouseCursor = true;
+        Print("[Menu] escape menu shown", 2.0);
+    }
+
+    void ClosePauseMenu()
+    {
+        if (PauseMenu == nullptr)
+            return;
+        PauseMenu.RemoveFromParent();
+        PauseMenu = nullptr;
+        // Restore cursor only if no other screen needs it (upgrade pick keeps it on).
+        bShowMouseCursor = ActiveUpgradeWidget != nullptr;
     }
 
     private void ForceRunPhase(ERunPhase NewPhase)

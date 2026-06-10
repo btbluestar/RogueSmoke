@@ -91,6 +91,18 @@ class ARaidGameMode : AGameModeBase
         Print(f"[Raid] hero embodied: choice={HeroIndex} ({HeroLabel})", 4.0);
     }
 
+    // Host action (results / escape menu): take the whole party back to the hero-select lobby.
+    // ServerTravel keeps clients connected (same mechanism as the lobby -> raid launch).
+    UFUNCTION(BlueprintCallable, Category = "Run")
+    void TravelToLobby()
+    {
+        if (!HasAuthority())
+            return;
+        UWorld World = GetWorld();
+        if (World != nullptr)
+            World.ServerTravel("/Game/Levels/L_Lobby", true, false);
+    }
+
     // PlayerStarts in placement order, offset per already-spawned hero so a squad doesn't
     // stack inside one start point.
     private FVector PickHeroSpawnPoint() const

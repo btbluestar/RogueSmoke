@@ -173,19 +173,45 @@ class UResultsScreenWidget : UUserWidget
             PlayAgain.OnClicked.AddUFunction(this, n"HandlePlayAgain");
             UHorizontalBoxSlot PlaySlot = ButtonRow.AddChildToHorizontalBox(PlayAgain);
             PlaySlot.SetPadding(FMargin(10.0, 0.0, 10.0, 0.0));
+
+            UButton Lobby = RogueUITheme::MakeTextButton(this, "  RETURN TO LOBBY  ", RogueUITheme::TextPrimary);
+            Lobby.OnClicked.AddUFunction(this, n"HandleLobby");
+            UHorizontalBoxSlot LobbySlot = ButtonRow.AddChildToHorizontalBox(Lobby);
+            LobbySlot.SetPadding(FMargin(10.0, 0.0, 10.0, 0.0));
         }
         else
         {
             UTextBlock Waiting = RogueUITheme::MakeText(
-                this, "Waiting for the host to restart...", RogueUITheme::TextDim, 1.1);
+                this, "Waiting for the host...", RogueUITheme::TextDim, 1.1);
             UHorizontalBoxSlot WaitSlot = ButtonRow.AddChildToHorizontalBox(Waiting);
             WaitSlot.SetPadding(FMargin(10.0, 8.0, 10.0, 0.0));
+
+            UButton Leave = RogueUITheme::MakeTextButton(this, "  LEAVE TO MENU  ", RogueUITheme::TextPrimary);
+            Leave.OnClicked.AddUFunction(this, n"HandleLeave");
+            UHorizontalBoxSlot LeaveSlot = ButtonRow.AddChildToHorizontalBox(Leave);
+            LeaveSlot.SetPadding(FMargin(10.0, 0.0, 10.0, 0.0));
         }
 
         UButton Quit = RogueUITheme::MakeTextButton(this, "  QUIT  ", RogueUITheme::TextDim);
         Quit.OnClicked.AddUFunction(this, n"HandleQuit");
         UHorizontalBoxSlot QuitSlot = ButtonRow.AddChildToHorizontalBox(Quit);
         QuitSlot.SetPadding(FMargin(10.0, 0.0, 10.0, 0.0));
+    }
+
+    // Host: whole squad back to hero select (ServerTravel keeps clients connected).
+    UFUNCTION()
+    private void HandleLobby()
+    {
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        if (GameMode != nullptr)
+            GameMode.TravelToLobby();
+    }
+
+    // Client: back to the local front-end (disconnects from the host).
+    UFUNCTION()
+    private void HandleLeave()
+    {
+        Gameplay::OpenLevel(n"L_MainMenu");
     }
 
     // Host: reload the level for a fresh run + seed (same path as the RaidRestart console command).
