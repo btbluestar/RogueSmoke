@@ -67,6 +67,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Enemy")
 	FVector BodyScale = FVector(1.f, 1.f, 2.f);
 
+	/** Per-archetype body tint (readability — tell archetypes apart at a glance). Applied at BeginPlay. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Enemy")
+	FLinearColor BodyColor = FLinearColor::White;
+
 	UPROPERTY(EditDefaultsOnly, Category="Enemy")
 	bool bShowDebug = true;
 

@@ -14,4 +14,5 @@ class ACarapace : AAttackingElite
     default AttackInterval = 3.0;
     default TelegraphSeconds = 0.9;     // slow, very readable wind-up
     default BodyScale = FVector(1.7, 1.7, 2.2);
+    default BodyColor = FLinearColor(0.20, 0.40, 0.90, 1.0);   // steel-blue shield/tank
 }

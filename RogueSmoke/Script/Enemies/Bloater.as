@@ -15,6 +15,7 @@ class ABloater : AAttackingElite
     default AttackInterval = 1.0;
     default TelegraphSeconds = 0.7;     // the swell tell
     default BodyScale = FVector(1.4, 1.4, 1.4);
+    default BodyColor = FLinearColor(1.0, 0.45, 0.10, 1.0);    // volatile orange exploder
 
     UFUNCTION(BlueprintOverride)
     void BeginPlay()

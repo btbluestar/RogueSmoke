@@ -14,6 +14,7 @@ class ALunger : AAttackingElite
     default AttackInterval = 3.5;
     default TelegraphSeconds = 0.8;
     default BodyScale = FVector(0.8, 0.8, 1.7);
+    default BodyColor = FLinearColor(0.85, 0.20, 0.85, 1.0);   // magenta fast charger
     default DashContactRange = 220.0;   // bite window during the leap
 
     // DashSpeed * DashDuration ~= leap distance (~650u, matching the old pop) but spread over frames so

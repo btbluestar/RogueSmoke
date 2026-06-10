@@ -14,6 +14,7 @@ class ASpitter : AAttackingElite
     default AttackInterval = 2.2;
     default TelegraphSeconds = 0.6;
     default BodyScale = FVector(0.9, 0.9, 1.5);
+    default BodyColor = FLinearColor(0.30, 0.85, 0.20, 1.0);   // acid-green ranged
 
     UPROPERTY(EditDefaultsOnly, Category = "Enemy")
     float ProjectileSpeed = 1500.0;

@@ -9,6 +9,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -60,6 +61,13 @@ void AAttackingElite::BeginPlay()
 	Super::BeginPlay();
 
 	Body->SetRelativeScale3D(BodyScale);
+
+	// Per-archetype tint via a dynamic instance of BasicShapeMaterial (it exposes a "Color" param), so
+	// Carapace/Spitter/Bloater/Lunger/boss read differently at a glance even as placeholder cubes.
+	if (UMaterialInstanceDynamic* DynMat = Body->CreateDynamicMaterialInstance(0))
+	{
+		DynMat->SetVectorParameterValue(FName(TEXT("Color")), BodyColor);
+	}
 
 	if (MaxHealthOverride > 0.f && Health != nullptr)
 	{
