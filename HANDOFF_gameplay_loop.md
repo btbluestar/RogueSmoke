@@ -19,6 +19,8 @@ headless** (`-game -nullrhi`): the run starts and the objective spawns the roste
      (sphere red, final defend wave spawns). Survive it → **EXTRACTED = run won** (sphere blue;
      `ARaidGameState.Phase = Victory`).
    - If the whole party goes down/bleeds out first → **party wipe = run lost** (`Phase = Defeat`).
+   - On either outcome a big **VICTORY / DEFEAT banner** shows centre-screen with a replay hint; type
+     **`RaidRestart`** in the `~` console to play again. (Test the banner instantly with `RaidWin`/`RaidLose`.)
 
 ## Commits (newest first)
 - `fffcd3a` playable RaidArena level + `[Raid] spawned` breadcrumb
@@ -46,6 +48,8 @@ headless** (`-game -nullrhi`): the run starts and the objective spawns the roste
 - **`RaidKillElites`** — console command (host/listen-server only) that nukes every registered enemy via
   the seam, so you can skip the fight and test the back half of the loop (clear → upgrade → walk to pad →
   defend → EXTRACTED) without grinding.
+- **`RaidWin` / `RaidLose`** — force the run result (host only) to check the VICTORY/DEFEAT banner instantly.
+- **`RaidRestart`** — reload the current level for a fresh run + seed (the replay hint under the banner).
 - **Enemy readability:** archetypes are color-coded (Carapace blue / Spitter green / Bloater orange /
   Lunger magenta / boss dark-red) with a live **HP%** label above each (debug draw).
 - **In-world debug draw is on** (`RaidDebug::bEnabled = true`): objective phase sphere+label
