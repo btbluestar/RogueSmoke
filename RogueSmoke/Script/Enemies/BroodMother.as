@@ -58,9 +58,13 @@ class ABroodMother : AAttackingElite
         }
         else
         {
-            // Ranged spit at the target.
+            // Ranged spit at the target — only if the boss has a clear line (break LoS to dodge it).
             if (Combat != nullptr && Hero != nullptr)
-                Combat.ApplyDamageToPlayer(Hero, AttackDamage, this);
+            {
+                FVector From = GetActorLocation() + FVector(0.0, 0.0, 60.0);
+                if (Combat.HasLineOfSightToActor(From, Hero, this))
+                    Combat.ApplyDamageToPlayer(Hero, AttackDamage, this);
+            }
         }
 
         AttackPhase = (AttackPhase + 1) % 3;

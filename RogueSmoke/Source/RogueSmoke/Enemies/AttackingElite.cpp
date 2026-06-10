@@ -228,7 +228,14 @@ void AAttackingElite::PerformAttack_Implementation()
 	}
 	else if (Target.IsValid())
 	{
-		Combat->ApplyDamageToPlayer(Target.Get(), AttackDamage, this);
+		// Ranged single-target (e.g. the Spitter): only land the hit if the shot has a clear line. Trace
+		// from the elite's upper body — not its feet, which sit in the floor — so cover actually blocks it.
+		const FVector From = GetActorLocation() + FVector(0.f, 0.f, 60.f);
+		if (Combat->HasLineOfSightToActor(From, Target.Get(), this))
+		{
+			Combat->ApplyDamageToPlayer(Target.Get(), AttackDamage, this);
+		}
+		// else: blocked by cover -> the shot whiffs (intended counterplay: break line of sight)
 	}
 }
 

@@ -160,6 +160,25 @@ FVector UCombatSubsystem::ResolveAimPoint(FVector CamStart, FVector CamDir, floa
 	return End;
 }
 
+bool UCombatSubsystem::HasLineOfSightToActor(FVector From, AActor* Target, AActor* IgnoreActor) const
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr || Target == nullptr)
+	{
+		return false;
+	}
+
+	const FVector To = Target->GetActorLocation();
+	// Ignore the shooter and the target's own collision, so any *blocking* hit is geometry (or a third
+	// actor) standing between them — i.e. the shot is obstructed. No damage here; callers gate on the bool.
+	FCollisionQueryParams Params(FName(TEXT("EnemyLineOfSight")), /*bTraceComplex=*/false, IgnoreActor);
+	Params.AddIgnoredActor(Target);
+
+	FHitResult Hit;
+	const bool bBlocked = World->LineTraceSingleByChannel(Hit, From, To, ECC_Visibility, Params);
+	return !bBlocked;
+}
+
 void UCombatSubsystem::ApplyDamageToPlayer(APawn* Target, float Damage, AActor* DamageInstigator)
 {
 	if (!IsServer() || Target == nullptr || Damage <= 0.f)

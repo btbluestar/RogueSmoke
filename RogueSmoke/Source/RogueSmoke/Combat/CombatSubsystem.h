@@ -98,6 +98,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	FVector ResolveAimPoint(FVector CamStart, FVector CamDir, float MaxDist, AActor* IgnoreActor) const;
 
+	/**
+	 * True if nothing blocks the Visibility channel between From and Target (the target's own body is
+	 * ignored, so only world geometry / a third actor count as cover). Ranged enemies gate their shot on
+	 * this so they can't snipe through walls — breaking line of sight is the counterplay. Read-only.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	bool HasLineOfSightToActor(FVector From, AActor* Target, AActor* IgnoreActor) const;
+
 	// --- Enemy -> player damage (server-authoritative). The outbound analog of FireHitscan: enemies
 	// damage the players' GAS health through here instead of touching the ASC directly. Applies a
 	// transient instant Damage GE, so RogueHealthSet resolves armor/shield/health uniformly. ---
