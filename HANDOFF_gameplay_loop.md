@@ -58,6 +58,19 @@ headless** (`-game -nullrhi`): the run starts and the objective spawns the roste
   defend 30s → EXTRACTED** transitions fire, and the party-wipe → DEFEAT path. The logic compiles and the
   spawn/start half is confirmed; the rest is straightforward phase transitions but unproven in real play.
 
+## Per-enemy debug levels (use now + regression later)
+Under **`Content/Levels/DebuggingLevels/`**, one isolation level per archetype — open and **Play** to
+fight/observe just that enemy (full hero kit + GAS; debug telegraphs draw; `RaidDebugCam` for overhead):
+- `DL_Enemy_Crawler` (8 fodder) · `DL_Enemy_Carapace` (×2) · `DL_Enemy_Spitter` (×2) ·
+  `DL_Enemy_Bloater` (×2) · `DL_Enemy_Lunger` (×2) · `DL_Enemy_BroodMother` (boss ×1)
+
+Each is `RaidArena` minus the RaidObjective, plus one **`AEnemyTestStand`** (`Script/Debug/EnemyTestStand.as`)
+that spawns the configured archetype through the **real `USpawnDirector` seam** (so behavior matches a
+raid) and **auto-respawns** the batch once the field is clear, so the behavior keeps repeating without a
+restart. Reuse these as the manual "did my change break this unit?" check. To add/retune: place an
+`EnemyTestStand`, set `EliteClass` (or `bFodder`), `Count`, `SpawnRadius`, `Label`. Verified headless:
+Carapace level spawns 2, Crawler level spawns 8, no fatals.
+
 ## Known caveats (MVP-acceptable)
 - Elites are kinematic and hold spawn Z (no gravity); objective at z=100 keeps bodies roughly on the
   floor. If a creature looks half-sunk, nudge the objective's Z.
