@@ -306,13 +306,21 @@ void AAttackingElite::DrawEnemyDebug() const
 	{
 		return;
 	}
-	// Yellow = telegraphing (incoming hit), green = clustered (taunted), white = idle/normal.
+	// Telegraph progress 0->1 across the wind-up, so the readout reads as a countdown to the hit.
+	const float TeleProgress = (bTelegraphing && TelegraphSeconds > 0.f)
+		? FMath::Clamp(1.f - TelegraphRemaining / TelegraphSeconds, 0.f, 1.f) : 0.f;
+
+	// Yellow = telegraphing (incoming hit), green = clustered (taunted), white = idle/normal. The head
+	// marker grows as the strike nears, so the wind-up reads as a timer even without VFX.
 	const FColor Color = bTelegraphing ? FColor(255, 215, 25) : (IsClustered() ? FColor::Green : FColor::White);
-	DrawDebugSphere(GetWorld(), GetActorLocation() + FVector(0.f, 0.f, 160.f), 45.f, 10, Color, false, -1.f, 0, 2.f);
+	const float HeadRadius = bTelegraphing ? FMath::Lerp(25.f, 70.f, TeleProgress) : 45.f;
+	DrawDebugSphere(GetWorld(), GetActorLocation() + FVector(0.f, 0.f, 160.f), HeadRadius, 10, Color, false, -1.f, 0, 2.f);
 	if (bTelegraphing && AttackRadius > 0.f)
 	{
-		// Show the slam/explosion footprint during the wind-up so players can clear it.
+		// Danger footprint (outline) + a filling zone that reaches the edge exactly at impact, so you can
+		// time the dodge: clear the area before the inner zone touches the outline.
 		DrawDebugSphere(GetWorld(), GetActorLocation(), AttackRadius, 16, FColor(255, 100, 25), false, -1.f, 0, 1.5f);
+		DrawDebugSphere(GetWorld(), GetActorLocation(), AttackRadius * TeleProgress, 16, FColor::Red, false, -1.f, 0, 2.5f);
 	}
 
 	// Live HP% above the head (green/yellow/red) — see damage land while debugging; doubles as the
