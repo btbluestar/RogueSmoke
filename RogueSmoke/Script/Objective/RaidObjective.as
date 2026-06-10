@@ -216,9 +216,14 @@ class ARaidObjective : AActor
             return;
 
         FVector Center = GetActorLocation();
+        int Spawned = 0;
+        bool bBoss = false;
 
         if (BossClass.Get() != nullptr)
+        {
             Director.SpawnElite(BossClass, Center, FRotator());
+            bBoss = true;
+        }
 
         if (EliteRoster.Num() > 0 && InitialEliteCount > 0)
         {
@@ -231,8 +236,13 @@ class ARaidObjective : AActor
                 float Angle = (2.0 * 3.14159265 * i) / InitialEliteCount;
                 FVector Offset = FVector(Math::Cos(Angle), Math::Sin(Angle), 0.0) * EliteSpawnRadius;
                 Director.SpawnElite(Cls, Center + Offset, FRotator());
+                Spawned += 1;
             }
         }
+
+        // Loop-debug breadcrumb: confirms the gating elites placed (and how many gate the clear).
+        FString BossNote = bBoss ? " + boss" : "";
+        Print(f"[Raid] spawned {Spawned} ring elites{BossNote} — clear them to open extraction", 5.0);
     }
 
     private void UpdateObjective()
