@@ -346,7 +346,10 @@ class ARaidPlayerController : APlayerController
     {
         FString Level = Gameplay::GetCurrentLevelName();
         if (!Level.IsEmpty())
+        {
+            Print(f"[Debug] RaidRestart — reloading {Level}", 2.0);
             Gameplay::OpenLevel(FName(Level));
+        }
     }
 
     // Debug: force the run result so you can check the VICTORY/DEFEAT banner + replay flow instantly,
@@ -363,6 +366,9 @@ class ARaidPlayerController : APlayerController
             return;
         ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
         if (GS != nullptr)
+        {
             GS.Phase = NewPhase;
+            Print("[Debug] Forced run phase (check the VICTORY/DEFEAT banner)", 3.0);
+        }
     }
 }
