@@ -70,9 +70,12 @@ headlessly via a python commandlet after the editor closed; what genuinely remai
   juice pass (part of #24). Replace the `DrawDebug*` calls.
 - **Dynamic damage GE** allocates a `UGameplayEffect` per hit (GC pressure at scale) — fine for MVP;
   cache/pool or use a SetByCaller asset GE later.
-- **Spitter/Brood spit** now gate on **line of sight** (`e8a1358` — `HasLineOfSightToActor`; a blocked
-  shot whiffs), but the Spitter is still an instant hit, not an arcing *projectile*; **Lunger** is a
-  forward *pop*, not a smooth dash. Both remain feel upgrades (task #40).
+- **Ranged/charge feel upgrades DONE (task #40):** Spitter/Brood spit gate on **line of sight**
+  (`HasLineOfSightToActor`); the **Spitter now lobs an arcing `ASpitterProjectile`** (visible glob, splash
+  on landing at the target's fire-time position — move to dodge); the **Lunger** leaps via a reusable
+  `AAttackingElite::StartDash` (smooth dodgeable slide, not a teleport). Arc/dash *feel* tuning is PIE (#43).
+- **Readability:** each archetype now has a distinct **body color** (Carapace blue / Spitter green /
+  Bloater orange / Lunger magenta / boss dark-red) and a live **HP%** label above it (debug draw).
 - **Brood-mother** can over-summon (its summons bypass the fodder soft-cap); tune `SummonCount`/cadence.
 - Elites are kinematic and hold their spawn Z (no gravity) — place the objective at ground level.
 

@@ -43,6 +43,11 @@ headless** (`-game -nullrhi`): the run starts and the objective spawns the roste
 - **`RaidDebugCam`** — type it in the **`~` console** during play to toggle a **top-down overhead view**
   of the whole arena (watch the objective phase ring/label, elite telegraph spheres, fodder waves), then
   type it again to return to the over-shoulder camera. Works in any level, no input binding needed.
+- **`RaidKillElites`** — console command (host/listen-server only) that nukes every registered enemy via
+  the seam, so you can skip the fight and test the back half of the loop (clear → upgrade → walk to pad →
+  defend → EXTRACTED) without grinding.
+- **Enemy readability:** archetypes are color-coded (Carapace blue / Spitter green / Bloater orange /
+  Lunger magenta / boss dark-red) with a live **HP%** label above each (debug draw).
 - **In-world debug draw is on** (`RaidDebug::bEnabled = true`): objective phase sphere+label
   (white=clearing, green=ready, red=defending, blue=extracted), elite telegraph spheres (yellow) + slam
   footprints. Flip `Script/Debug/DebugConfig.as` to `false` + save to kill all of it.
