@@ -35,4 +35,37 @@ class URogueUpgradeDef : UPrimaryDataAsset
     // The effect applied when the player picks this upgrade. Infinite-duration; modifies attributes.
     UPROPERTY(EditDefaultsOnly, Category = "Upgrade")
     TSubclassOf<UGameplayEffect> Effect;
+
+    // --- Loop v2 (D-0019): stacking, prerequisites, milestone/utility/squad behavior ---
+
+    // How many times ONE player may pick this card. <= 0 means unlimited (utility filler cards).
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrade|LoopV2")
+    int MaxStacks = 5;
+
+    // Milestone modifier (DRG-overclock style): once eligible and not yet owned, it gets a
+    // guaranteed slot in that player's next hand instead of competing in the weighted roll.
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrade|LoopV2")
+    bool bMilestone = false;
+
+    // Apply the Effect to EVERY hero in the squad (team/synergy cards), not just the picker.
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrade|LoopV2")
+    bool bApplyToSquad = false;
+
+    // Prerequisites. bPrereqSelf = true: the PICKING player must hold both (milestone gating).
+    // bPrereqSelf = false: A and B must be held by two DIFFERENT players (duo/synergy gating,
+    // Hades-style); in a solo squad one player holding both counts, so solo runs still see synergies.
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrade|Prereqs")
+    URogueUpgradeDef PrereqA;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrade|Prereqs")
+    int PrereqAStacks = 1;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrade|Prereqs")
+    URogueUpgradeDef PrereqB;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrade|Prereqs")
+    int PrereqBStacks = 1;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrade|Prereqs")
+    bool bPrereqSelf = false;
 }

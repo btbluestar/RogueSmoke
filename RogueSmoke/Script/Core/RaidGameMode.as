@@ -7,6 +7,34 @@
 // BP_RaidPlayerController and DefaultPawnClass = a BP_HeroCharacter, then set it as the
 // GameMode Override in the Raid map's World Settings. GameStateClass is wired in script.
 
+// Per-player upgrade bookkeeping (Loop v2, D-0019). Server-only — lives on the GameMode, never
+// replicated; the UI gets what it needs in the offer RPC payload instead.
+struct FUpgradeStackEntry
+{
+    UPROPERTY()
+    URogueUpgradeDef Def;
+
+    UPROPERTY()
+    int Count = 0;
+}
+
+struct FPlayerUpgradeRecord
+{
+    UPROPERTY()
+    APlayerState Player;
+
+    UPROPERTY()
+    ARaidPlayerController PC;
+
+    UPROPERTY()
+    TArray<FUpgradeStackEntry> Stacks;
+
+    // Non-empty while this player owes a pick; the server validates picks against it and
+    // auto-applies entry 0 on watchdog timeout.
+    UPROPERTY()
+    TArray<URogueUpgradeDef> PendingHand;
+}
+
 class ARaidGameMode : AGameModeBase
 {
     // Pure-script class, no asset needed, so we can wire it here (the rest stay BP — they
@@ -164,6 +192,121 @@ class ARaidGameMode : AGameModeBase
     private int OfferCounter = 0;
     private int PendingPicks = 0;
     private float OfferPauseElapsed = 0.0;
+
+    private TArray<FPlayerUpgradeRecord> PlayerRecords;
+
+    private int FindOrAddRecord(ARaidPlayerController PC)
+    {
+        APlayerState PS = PC.PlayerState;
+        for (int i = 0; i < PlayerRecords.Num(); i++)
+        {
+            if (PlayerRecords[i].Player == PS)
+            {
+                PlayerRecords[i].PC = PC;
+                return i;
+            }
+        }
+        FPlayerUpgradeRecord Rec;
+        Rec.Player = PS;
+        Rec.PC = PC;
+        PlayerRecords.Add(Rec);
+        return PlayerRecords.Num() - 1;
+    }
+
+    // Public for the flow-smoke exec; gameplay code only calls it from ApplyUpgradeFor.
+    int GetStackCount(APlayerState Player, URogueUpgradeDef Def) const
+    {
+        for (int i = 0; i < PlayerRecords.Num(); i++)
+        {
+            if (PlayerRecords[i].Player != Player)
+                continue;
+            for (int j = 0; j < PlayerRecords[i].Stacks.Num(); j++)
+            {
+                if (PlayerRecords[i].Stacks[j].Def == Def)
+                    return PlayerRecords[i].Stacks[j].Count;
+            }
+            return 0;
+        }
+        return 0;
+    }
+
+    // Public for the flow-smoke exec (it fabricates build states to test filtering).
+    void AddStack(APlayerState Player, URogueUpgradeDef Def)
+    {
+        if (Player == nullptr || Def == nullptr)
+            return;
+        for (int i = 0; i < PlayerRecords.Num(); i++)
+        {
+            if (PlayerRecords[i].Player != Player)
+                continue;
+            for (int j = 0; j < PlayerRecords[i].Stacks.Num(); j++)
+            {
+                if (PlayerRecords[i].Stacks[j].Def == Def)
+                {
+                    PlayerRecords[i].Stacks[j].Count += 1;
+                    return;
+                }
+            }
+            FUpgradeStackEntry Entry;
+            Entry.Def = Def;
+            Entry.Count = 1;
+            PlayerRecords[i].Stacks.Add(Entry);
+            return;
+        }
+        // No record yet (flow-smoke before any offer): create one without a PC.
+        FPlayerUpgradeRecord Rec;
+        Rec.Player = Player;
+        FUpgradeStackEntry Entry;
+        Entry.Def = Def;
+        Entry.Count = 1;
+        Rec.Stacks.Add(Entry);
+        PlayerRecords.Add(Rec);
+    }
+
+    // Cap + prerequisite gate. Self-scope prereqs check the candidate player; squad-scope (duo)
+    // prereqs need A and B on two different players — except solo, where one player may hold both.
+    bool IsEligible(URogueUpgradeDef Def, APlayerState ForPlayer) const
+    {
+        if (Def == nullptr)
+            return false;
+        if (Def.MaxStacks > 0 && GetStackCount(ForPlayer, Def) >= Def.MaxStacks)
+            return false;
+
+        if (Def.bPrereqSelf)
+        {
+            if (Def.PrereqA != nullptr && GetStackCount(ForPlayer, Def.PrereqA) < Def.PrereqAStacks)
+                return false;
+            if (Def.PrereqB != nullptr && GetStackCount(ForPlayer, Def.PrereqB) < Def.PrereqBStacks)
+                return false;
+            return true;
+        }
+
+        if (Def.PrereqA == nullptr)
+            return true;   // no squad gate authored
+
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (GS == nullptr)
+            return false;
+        bool bSolo = GS.PlayerArray.Num() <= 1;
+
+        for (int a = 0; a < GS.PlayerArray.Num(); a++)
+        {
+            APlayerState HolderA = GS.PlayerArray[a];
+            if (HolderA == nullptr || GetStackCount(HolderA, Def.PrereqA) < Def.PrereqAStacks)
+                continue;
+            if (Def.PrereqB == nullptr)
+                return true;
+            for (int b = 0; b < GS.PlayerArray.Num(); b++)
+            {
+                APlayerState HolderB = GS.PlayerArray[b];
+                if (HolderB == nullptr || GetStackCount(HolderB, Def.PrereqB) < Def.PrereqBStacks)
+                    continue;
+                if (HolderA != HolderB || bSolo)
+                    return true;
+            }
+        }
+        return false;
+    }
 
     // Every pooled enemy death lands here (SpawnDirector.OnEnemyKilled): XP for the team pool,
     // and the mini-boss drops the synergy chest where it fell.
