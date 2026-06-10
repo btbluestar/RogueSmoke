@@ -1,5 +1,18 @@
 # Handoff — full UI suite (2026-06-10)
 
+> **Update (same day): CommonUI compliance refactor (commit `6c42a18`).** The suite now follows
+> canonical Common UI practice: `CommonGameViewportClient` is the viewport class (input routing
+> actually runs), `URogueUILayout` is a per-player root with **Game / GameMenu / Menu layer
+> stacks** — the only `AddToViewport` in the project — and every screen is a
+> `UCommonActivatableWidget` pushed onto a layer. Input mode + cursor come from each screen's
+> `GetDesiredInputConfig` (HUD = Game+capture, upgrade overlay = All so you can fight while
+> choosing, menus = Menu+cursor); all manual `bShowMouseCursor` code is gone. **Esc/gamepad-B
+> (the CommonUI back action) now closes the escape menu**; screens close via `DeactivateWidget()`.
+> Focus targets are set per screen, keeping the gamepad door open. Remaining SHOULD-tier item:
+> migrating `UButton` → `UCommonButtonBase` + style classes — deferred until after your visual
+> PIE pass (AS-defined style brushes can't be verified headless). Details in
+> `Script/UI/RogueUILayout.as` header + memory `commonui-in-as-fork`.
+
 Built the complete front-end + in-run UI pass (tasks #50–#54, plan in `UI_PLAN.md`): main menu,
 hero-select lobby with ready/start, data-driven upgrade cards, end-of-run results with per-player
 stats, escape menu, and join/leave toasts. **All committed on `main`; C++ + script compile clean;
