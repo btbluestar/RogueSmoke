@@ -321,4 +321,21 @@ class ARaidPlayerController : APlayerController
             bDebugCamActive = true;
         }
     }
+
+    // --- Debug: type `RaidKillElites` in the ~ console to clear the arena instantly ----------------
+    // Nukes every registered enemy (elites + fodder share the combat registry) so you can skip the
+    // fight and test the back half of the loop — clear -> upgrade offer -> walk to the pad -> defend
+    // timer -> EXTRACTED. Goes through the seam; server-authoritative, so it only does work on the
+    // host/listen-server (a remote client typing it is a no-op).
+    UFUNCTION(Exec)
+    void RaidKillElites()
+    {
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
+        if (Combat == nullptr)
+            return;
+        AHeroCharacter Hero = GetHero();
+        FVector Center = Hero != nullptr ? Hero.GetActorLocation() : FVector();
+        float Dealt = Combat.ApplyRadialDamage(Center, 1000000.0, 999999.0, 1.0, Hero);
+        Print(f"[Debug] RaidKillElites — dealt {Dealt}", 3.0);
+    }
 }
