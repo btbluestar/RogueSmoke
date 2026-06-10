@@ -294,4 +294,31 @@ class ARaidPlayerController : APlayerController
         if (InputTag.IsValid())
             Hero.Server_ActivateAbilityInput(InputTag);
     }
+
+    // --- Debug camera: type `RaidDebugCam` in the ~ console during play to toggle ------------------
+    // A top-down overhead view of the whole arena so you can watch the loop from above — objective
+    // phase ring/label, elite telegraph spheres, fodder waves — then back to the over-shoulder pawn
+    // camera. Local/cosmetic on the owning client only; no replication, no gameplay effect.
+    private bool bDebugCamActive = false;
+    private ACameraActor DebugCam;
+
+    UFUNCTION(Exec)
+    void RaidDebugCam()
+    {
+        if (bDebugCamActive)
+        {
+            SetViewTargetWithBlend(GetControlledPawn(), 0.25);
+            bDebugCamActive = false;
+            return;
+        }
+
+        if (DebugCam == nullptr)
+            DebugCam = Cast<ACameraActor>(SpawnActor(ACameraActor, FVector(0.0, 0.0, 5000.0), FRotator(-90.0, 0.0, 0.0)));
+
+        if (DebugCam != nullptr)
+        {
+            SetViewTargetWithBlend(DebugCam, 0.25);
+            bDebugCamActive = true;
+        }
+    }
 }

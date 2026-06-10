@@ -30,6 +30,12 @@ class ARaidObjective : AActor
     UPROPERTY(EditAnywhere, Category = "Raid")
     float ExtractionDefendSeconds = 30.0;
 
+    // Stand-on-the-pad extraction: once the arena is clear, a living hero standing within this radius
+    // of the objective calls extraction in. Gives solo/host play a trigger with no extra input binding
+    // (remote clients also keep AHeroCharacter::Server_CallExtraction). GDD §3.1 "call extraction".
+    UPROPERTY(EditAnywhere, Category = "Raid")
+    float ExtractZoneRadius = 450.0;
+
     // The final defend wave spawned when extraction is called (D-0010). Leave the class
     // unset to skip spawning (e.g. while testing the timer alone).
     UPROPERTY(EditAnywhere, Category = "Raid|Defend Wave")
@@ -132,6 +138,10 @@ class ARaidObjective : AActor
         {
             UpdateObjective();
             TickFodderWaves(DeltaSeconds);    // swarm pressure while clearing
+        }
+        else if (Phase == ERaidPhase::ExtractionReady)
+        {
+            UpdateExtractionReady();          // a living hero on the pad calls extraction
         }
         else if (Phase == ERaidPhase::Extracting)
         {
@@ -247,6 +257,26 @@ class ARaidObjective : AActor
             SetPhase(ERaidPhase::ExtractionReady);
     }
 
+    // Once the arena is clear, any living hero standing inside the extraction zone calls it in.
+    private void UpdateExtractionReady()
+    {
+        const float RadiusSq = ExtractZoneRadius * ExtractZoneRadius;
+        const FVector Center = GetActorLocation();
+
+        TArray<AHeroCharacter> Heroes;
+        GetAllActorsOfClass(Heroes);
+        for (AHeroCharacter H : Heroes)
+        {
+            if (H == nullptr || H.IsIncapacitated())
+                continue;
+            if ((H.GetActorLocation() - Center).SizeSquared() <= RadiusSq)
+            {
+                CallExtraction();
+                return;
+            }
+        }
+    }
+
     // Authority entry point. Host calls directly; remote clients route via
     // AHeroCharacter::Server_CallExtraction (clients can't RPC this unowned actor).
     UFUNCTION(BlueprintCallable, Category = "Raid")
@@ -346,8 +376,27 @@ class ARaidObjective : AActor
                 GameMode.OfferUpgradesToAll();
         }
         else if (NewPhase == ERaidPhase::Extracted)
+        {
             Print("EXTRACTED - raid won!", 8.0);
+            EndRunResult(true);              // resolve the RUN-level phase -> Victory
+        }
         else if (NewPhase == ERaidPhase::Failed)
+        {
             Print("PARTY WIPED - raid failed", 8.0);
+            EndRunResult(false);             // resolve the RUN-level phase -> Defeat
+        }
+    }
+
+    // Bridge the in-raid outcome to the run state machine: the RunManager flips ARaidGameState.Phase
+    // to Victory/Defeat, which replicates so every client's results UI can react. Without this the
+    // run-level phase would sit on InProgress forever even though the raid is over.
+    private void EndRunResult(bool bVictory)
+    {
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        if (GameMode == nullptr)
+            return;
+        URunManager RunManager = GameMode.GetRunManager();
+        if (RunManager != nullptr)
+            RunManager.EndRun(bVictory);
     }
 }
