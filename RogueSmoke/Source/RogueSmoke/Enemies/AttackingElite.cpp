@@ -50,6 +50,9 @@ void AAttackingElite::ClearTransientState()
 	AttackCooldown = 0.f;
 	TelegraphRemaining = 0.f;
 	bTelegraphing = false;
+	bDashing = false;
+	DashTimeRemaining = 0.f;
+	bDashHitApplied = false;
 }
 
 void AAttackingElite::BeginPlay()
@@ -83,6 +86,14 @@ void AAttackingElite::Tick(float DeltaSeconds)
 	}
 
 	AcquireTarget();
+
+	// A dash in progress owns movement: slide it out (and bite on contact), ignoring approach/telegraph.
+	if (bDashing)
+	{
+		UpdateDash(DeltaSeconds);
+		return;
+	}
+
 	if (!Target.IsValid())
 	{
 		return;
@@ -123,6 +134,47 @@ void AAttackingElite::Tick(float DeltaSeconds)
 	else
 	{
 		ApproachTarget(DeltaSeconds);
+	}
+}
+
+void AAttackingElite::StartDash(FVector Direction, float Speed, float Duration)
+{
+	FVector Dir = Direction;
+	Dir.Z = 0.f;
+	Dir = Dir.GetSafeNormal();
+	if (Dir.IsNearlyZero() || Speed <= 0.f || Duration <= 0.f)
+	{
+		return;
+	}
+	DashDir = Dir;
+	DashSpeed = Speed;
+	DashTimeRemaining = Duration;
+	bDashHitApplied = false;
+	bDashing = true;
+	SetActorRotation(Dir.Rotation());
+}
+
+void AAttackingElite::UpdateDash(float DeltaSeconds)
+{
+	DashTimeRemaining -= DeltaSeconds;
+	SetActorLocation(GetActorLocation() + DashDir * DashSpeed * DeltaSeconds, /*bSweep=*/false);
+
+	// Bite once, the first frame the dash brings us into contact with the (still-living) target.
+	if (!bDashHitApplied && Target.IsValid())
+	{
+		if (FVector::Dist(Target->GetActorLocation(), GetActorLocation()) <= DashContactRange)
+		{
+			if (UCombatSubsystem* Combat = GetWorld() ? GetWorld()->GetSubsystem<UCombatSubsystem>() : nullptr)
+			{
+				Combat->ApplyDamageToPlayer(Target.Get(), AttackDamage, this);
+			}
+			bDashHitApplied = true;
+		}
+	}
+
+	if (DashTimeRemaining <= 0.f)
+	{
+		bDashing = false;
 	}
 }
 

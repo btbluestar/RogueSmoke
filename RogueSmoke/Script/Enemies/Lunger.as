@@ -1,7 +1,8 @@
 // Lunger.as
 // Charger / gap-closer: hangs at mid-range, then telegraphs and lunges at the target to break kiting and
-// threaten the backline. Counterplay: dodge the lunge with the slide (D-0015). The lunge is a forward pop
-// for the MVP; a smooth dash arc over several frames is a feel upgrade (see SUPERPOWERS_HANDOFF).
+// threaten the backline. Counterplay: dodge the lunge with the slide (D-0015). The lunge is now a smooth
+// multi-frame dash (AAttackingElite::StartDash) rather than a teleport; the base applies the bite on
+// contact during the slide (DashContactRange).
 class ALunger : AAttackingElite
 {
     default MaxHealthOverride = 90.0;
@@ -13,12 +14,15 @@ class ALunger : AAttackingElite
     default AttackInterval = 3.5;
     default TelegraphSeconds = 0.8;
     default BodyScale = FVector(0.8, 0.8, 1.7);
+    default DashContactRange = 220.0;   // bite window during the leap
+
+    // DashSpeed * DashDuration ~= leap distance (~650u, matching the old pop) but spread over frames so
+    // the slide is dodgeable with the slide move instead of an instant blink.
+    UPROPERTY(EditDefaultsOnly, Category = "Enemy")
+    float DashSpeed = 1700.0;
 
     UPROPERTY(EditDefaultsOnly, Category = "Enemy")
-    float LungeDistance = 600.0;
-
-    UPROPERTY(EditDefaultsOnly, Category = "Enemy")
-    float LungeHitRange = 220.0;
+    float DashDuration = 0.38;
 
     UFUNCTION(BlueprintOverride)
     void PerformAttack()
@@ -27,23 +31,7 @@ class ALunger : AAttackingElite
         if (Hero == nullptr)
             return;
 
-        FVector Mine = GetActorLocation();
-        FVector ToTarget = Hero.GetActorLocation() - Mine;
-        ToTarget.Z = 0.0;
-        FVector Dir = ToTarget.GetSafeNormal();
-        if (Dir.IsNearlyZero())
-            return;
-
-        float Step = Math::Min(ToTarget.Size(), LungeDistance);
-        SetActorLocation(Mine + Dir * Step);
-        SetActorRotation(Dir.Rotation());
-
-        // Bite if the lunge closed to contact.
-        if ((Hero.GetActorLocation() - GetActorLocation()).Size() <= LungeHitRange)
-        {
-            UCombatSubsystem Combat = UCombatSubsystem::Get();
-            if (Combat != nullptr)
-                Combat.ApplyDamageToPlayer(Hero, AttackDamage, this);
-        }
+        FVector ToTarget = Hero.GetActorLocation() - GetActorLocation();
+        StartDash(ToTarget, DashSpeed, DashDuration);
     }
 }

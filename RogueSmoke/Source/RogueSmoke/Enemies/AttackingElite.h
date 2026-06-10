@@ -52,6 +52,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Enemy")
 	float AttackRadius = 0.f;
 
+	/** During a dash (e.g. the Lunger's leap), deal AttackDamage on first contact within this range. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Enemy")
+	float DashContactRange = 160.f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Enemy")
 	float AttackInterval = 2.5f;
 
@@ -82,6 +86,19 @@ public:
 	void PerformAttack();
 	virtual void PerformAttack_Implementation();
 
+	/**
+	 * Begin a self-propelled dash (charge) along Direction (flattened) at Speed for Duration seconds. While
+	 * dashing the elite ignores normal approach/telegraph and slides smoothly; on first contact within
+	 * DashContactRange of the target it deals AttackDamage once. Archetypes trigger this from their attack
+	 * (the Lunger's leap) instead of teleporting; reusable for any future charger.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	void StartDash(FVector Direction, float Speed, float Duration);
+
+	/** True while a dash is in progress (for cues / gating). */
+	UFUNCTION(BlueprintPure, Category="Enemy")
+	bool IsDashing() const { return bDashing; }
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -95,6 +112,14 @@ protected:
 	float AttackCooldown = 0.f;
 	float TelegraphRemaining = 0.f;
 	bool bTelegraphing = false;
+
+	// Dash (charge) state — see StartDash. Slides the actor over several frames instead of teleporting.
+	bool bDashing = false;
+	FVector DashDir = FVector::ZeroVector;
+	float DashSpeed = 0.f;
+	float DashTimeRemaining = 0.f;
+	bool bDashHitApplied = false;
+	void UpdateDash(float DeltaSeconds);
 
 	void AcquireTarget();
 	bool IsTargetInAttackRange() const;
