@@ -28,9 +28,10 @@ class URogueHUDWidget : UUserWidget
     private UTextBlock ResultHint;      // replay hint under the banner
     private UTextBlock TimerText;       // run clock, top-center under the objective
 
-    // Full results panel (stats table + buttons): shown ResultsDelaySeconds after the phase
-    // resolves, so the banner lands first and the replicated stats settle. Replaces the banner.
-    private UResultsScreenWidget ResultsScreen;
+    // Full results panel (stats table + buttons): the PC pushes it onto the Menu layer
+    // ResultsDelaySeconds after the phase resolves, so the banner lands first and the
+    // replicated stats settle. The HUD only owns the timer + banner handoff.
+    private bool bResultsShown = false;
     private float ResultElapsed = 0.0;
     const float ResultsDelaySeconds = 2.5;
 
@@ -254,11 +255,12 @@ class URogueHUDWidget : UUserWidget
         ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
         ERunPhase Phase = (GS != nullptr) ? GS.Phase : ERunPhase::None;
 
-        if (Phase == ERunPhase::Victory)
+        if (Phase == ERunPhase::Victory && !bResultsShown)
             ShowResult("VICTORY", Accent);
-        else if (Phase == ERunPhase::Defeat)
+        else if (Phase == ERunPhase::Defeat && !bResultsShown)
             ShowResult("DEFEAT", Danger);
-        else if (ResultBanner.GetVisibility() != ESlateVisibility::Collapsed)
+        else if (Phase != ERunPhase::Victory && Phase != ERunPhase::Defeat
+                 && ResultBanner.GetVisibility() != ESlateVisibility::Collapsed)
         {
             ResultBanner.SetVisibility(ESlateVisibility::Collapsed);
             if (ResultHint != nullptr)
@@ -269,8 +271,14 @@ class URogueHUDWidget : UUserWidget
         if (Phase == ERunPhase::Victory || Phase == ERunPhase::Defeat)
         {
             ResultElapsed += Gameplay::GetWorldDeltaSeconds();
-            if (ResultsScreen == nullptr && ResultElapsed >= ResultsDelaySeconds)
-                ShowResultsScreen();
+            if (!bResultsShown && ResultElapsed >= ResultsDelaySeconds)
+            {
+                bResultsShown = true;
+                ARaidPlayerController PC = Cast<ARaidPlayerController>(GetOwningPlayer());
+                if (PC != nullptr)
+                    PC.ShowResultsScreen();   // CommonUI: PC pushes it onto the Menu layer
+                HideResultBanner();
+            }
         }
         else
         {
@@ -278,23 +286,12 @@ class URogueHUDWidget : UUserWidget
         }
     }
 
-    // Public: also reachable via the RaidResults console command (debug / headless smoke,
-    // since the timer escalation above needs widget Ticks, which nullrhi boots don't run).
-    void ShowResultsScreen()
+    // The results panel owns the presentation once it's up — drop the interim banner + hint.
+    void HideResultBanner()
     {
-        if (ResultsScreen != nullptr)
-            return;
-        APlayerController PC = GetOwningPlayer();
-        ResultsScreen = Cast<UResultsScreenWidget>(
-            WidgetBlueprint::CreateWidget(UResultsScreenWidget, PC));
-        if (ResultsScreen == nullptr)
-            return;
-        ResultsScreen.AddToViewport(10);   // above the HUD
-        if (PC != nullptr)
-            PC.bShowMouseCursor = true;    // the panel has buttons
-
-        // The panel owns the result presentation now — drop the interim banner + console hint.
-        ResultBanner.SetVisibility(ESlateVisibility::Collapsed);
+        bResultsShown = true;
+        if (ResultBanner != nullptr)
+            ResultBanner.SetVisibility(ESlateVisibility::Collapsed);
         if (ResultHint != nullptr)
             ResultHint.SetVisibility(ESlateVisibility::Collapsed);
     }

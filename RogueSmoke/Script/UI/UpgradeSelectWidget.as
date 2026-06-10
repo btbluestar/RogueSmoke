@@ -4,19 +4,23 @@
 // widgets). Pick by clicking a card or pressing its number key. The game does NOT pause
 // (genre convention + listen server: teammates are still fighting).
 //
-// Tree is runtime-built (RogueHUDWidget pattern). Flow: RaidPlayerController creates the
-// widget (OnInitialized builds the static frame), sets OfferedUpgrades, then AddToViewport
-// (Construct builds the cards from the now-known offer).
-class UUpgradeSelectWidget : UUserWidget
+// CommonUI: an activatable pushed onto the GameMenu layer stack by RaidPlayerController, which
+// then calls Setup(Options) to build the cards. Its input config is All — menu input for the
+// cards AND game input underneath, because the raid keeps running while you choose. NOT a back
+// handler: you commit to a pick. Closes itself with DeactivateWidget() (the stack pops it; the
+// HUD host restores Game capture).
+class UUpgradeSelectWidget : UCommonActivatableWidget
 {
-    // The upgrades offered this pick. Set by Client_OfferUpgrades BEFORE AddToViewport.
+    // The upgrades offered this pick. Set via Setup() right after the stack push.
     UPROPERTY(EditAnywhere, Category = "Upgrades")
     TArray<URogueUpgradeDef> OfferedUpgrades;
 
-    default bIsFocusable = true;   // so number-key picks reach OnKeyDown
+    default bIsFocusable = true;     // so number-key picks reach OnKeyDown
+    default bIsBackHandler = false;  // no backing out of the pick
 
     private UCanvasPanel Root;
     private UHorizontalBox CardRow;
+    private TArray<UUpgradeCardWidget> Cards;
     private bool bBuilt = false;
     private bool bCardsBuilt = false;
 
@@ -26,10 +30,28 @@ class UUpgradeSelectWidget : UUserWidget
         BuildFrame();
     }
 
-    UFUNCTION(BlueprintOverride)
-    void Construct()
+    // Called by the PC right after pushing this onto the GameMenu stack (the stack constructs
+    // the widget itself, so the offer can't be set before creation like the old flow did).
+    void Setup(TArray<URogueUpgradeDef> Options)
     {
+        OfferedUpgrades = Options;
         BuildCards();
+    }
+
+    // Game keeps running under the overlay: route input to BOTH, cursor free for the cards.
+    UFUNCTION(BlueprintOverride)
+    FUIInputConfig GetDesiredInputConfig() const
+    {
+        FUIInputConfig Config;
+        Config.InputMode = ECommonInputMode::All;
+        Config.MouseCaptureMode = EMouseCaptureMode::NoCapture;
+        return Config;
+    }
+
+    UFUNCTION(BlueprintOverride)
+    UWidget BP_GetDesiredFocusTarget() const
+    {
+        return Cards.Num() > 0 ? Cards[0].GetFocusWidget() : nullptr;
     }
 
     private void BuildFrame()
@@ -84,6 +106,7 @@ class UUpgradeSelectWidget : UUserWidget
             Card.Populate(OfferedUpgrades[i], i, this);
             UHorizontalBoxSlot CardSlot = CardRow.AddChildToHorizontalBox(Card);
             CardSlot.SetPadding(FMargin(12.0, 0.0, 12.0, 0.0));
+            Cards.Add(Card);
         }
 
         SetKeyboardFocus();
@@ -124,11 +147,10 @@ class UUpgradeSelectWidget : UUserWidget
         if (Hero != nullptr)
             Hero.Server_ApplyUpgrade(OfferedUpgrades[Index]);
 
-        // Hand input back to gameplay (the PC owns the cursor + active-widget bookkeeping).
         ARaidPlayerController PC = Cast<ARaidPlayerController>(GetOwningPlayer());
         if (PC != nullptr)
-            PC.CloseUpgradeScreen();
+            PC.CloseUpgradeScreen();   // bookkeeping only; input/cursor is CommonUI's job now
 
-        RemoveFromParent();
+        DeactivateWidget();   // the GameMenu stack pops us
     }
 }

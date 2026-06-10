@@ -26,7 +26,10 @@ public class RogueSmoke : ModuleRules
 			"GameplayTasks",
 			// AngelscriptGAS exposes UAngelscriptAbilitySystemComponent / UAngelscriptAttributeSet etc.
 			// (the C++ bases our PlayerState/HeroBase/attribute sets build on).
-			"AngelscriptGAS"
+			"AngelscriptGAS",
+			// CommonUI: layer-stack push shim (BP_AddWidget is private, so AngelScript can't
+			// reflect it — RogueUIStatics wraps the public C++ template AddWidget instead).
+			"CommonUI"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

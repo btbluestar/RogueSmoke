@@ -66,38 +66,53 @@ class ARaidPlayerController : APlayerController
 
     private URogueHUDWidget HUDWidget;
 
+    // The CommonUI root layout (per local player). Screens push onto its layer stacks; nothing
+    // else calls AddToViewport.
+    private URogueUILayout Layout;
+
     // Server -> owning client: present a choose-1-of-N upgrade screen with the rolled options.
+    // CommonUI: pushed onto the GameMenu layer (input config All — the raid keeps running),
+    // then fed the offer via Setup(). No manual cursor code; the widget's config handles it.
     UFUNCTION(Client)
     void Client_OfferUpgrades(TArray<URogueUpgradeDef> Options)
     {
-        if (UpgradeWidgetClass.Get() == nullptr || Options.Num() == 0 || ActiveUpgradeWidget != nullptr)
+        if (Layout == nullptr || Options.Num() == 0 || ActiveUpgradeWidget != nullptr)
             return;
 
-        ActiveUpgradeWidget = Cast<UUpgradeSelectWidget>(WidgetBlueprint::CreateWidget(UpgradeWidgetClass, this));
+        ActiveUpgradeWidget = Cast<UUpgradeSelectWidget>(
+            Layout.PushToLayer(ERogueUILayer::GameMenu, UUpgradeSelectWidget));
         if (ActiveUpgradeWidget == nullptr)
             return;
-
-        ActiveUpgradeWidget.OfferedUpgrades = Options;
-        ActiveUpgradeWidget.AddToViewport();
-        bShowMouseCursor = true;
+        ActiveUpgradeWidget.Setup(Options);
     }
 
-    // Called by the widget after a pick (it grants + removes itself): return to gameplay.
+    // Called by the widget after a pick (it deactivates itself; the stack pops it).
     void CloseUpgradeScreen()
     {
         ActiveUpgradeWidget = nullptr;
-        bShowMouseCursor = false;
     }
 
     UFUNCTION(BlueprintOverride)
     void BeginPlay()
     {
-        // HUD belongs to the local player only (the owning client / the host's own controller).
-        if (IsLocalController() && HUDWidgetClass.Get() != nullptr && HUDWidget == nullptr)
+        // UI root (local player only): the CommonUI layout is the single AddToViewport; the HUD
+        // rides the Game layer inside an always-active host whose input config (Game mode,
+        // capture) is what menus fall back to when they pop.
+        if (IsLocalController() && Layout == nullptr)
         {
-            HUDWidget = Cast<URogueHUDWidget>(WidgetBlueprint::CreateWidget(HUDWidgetClass, this));
-            if (HUDWidget != nullptr)
-                HUDWidget.AddToViewport();
+            Layout = Cast<URogueUILayout>(WidgetBlueprint::CreateWidget(URogueUILayout, this));
+            if (Layout != nullptr)
+            {
+                Layout.AddToViewport();
+                URogueHUDHost HUDHost = Cast<URogueHUDHost>(
+                    Layout.PushToLayer(ERogueUILayer::Game, URogueHUDHost));
+                if (HUDHost != nullptr && HUDWidgetClass.Get() != nullptr && HUDWidget == nullptr)
+                {
+                    HUDWidget = Cast<URogueHUDWidget>(WidgetBlueprint::CreateWidget(HUDWidgetClass, this));
+                    if (HUDWidget != nullptr)
+                        HUDHost.SetHUD(HUDWidget);
+                }
+            }
         }
 
         // Hero select: players start as spectators; send the lobby pick (stashed in the
@@ -388,16 +403,29 @@ class ARaidPlayerController : APlayerController
     UFUNCTION(Exec)
     void RaidLose() { ForceRunPhase(ERunPhase::Defeat); }
 
-    // Debug: pop the end-of-run results panel immediately (normally the HUD shows it ~2.5s after
-    // the phase resolves). Pair with RaidWin/RaidLose to preview either report.
+    // --- End-of-run results (CommonUI: pushed onto the Menu layer). Triggered by the HUD's
+    // banner->panel timer, or instantly via the RaidResults console command. ---
+    private UResultsScreenWidget ResultsScreen;
+
+    void ShowResultsScreen()
+    {
+        if (Layout == nullptr || ResultsScreen != nullptr)
+            return;
+        ResultsScreen = Cast<UResultsScreenWidget>(
+            Layout.PushToLayer(ERogueUILayer::Menu, UResultsScreenWidget));
+    }
+
     UFUNCTION(Exec)
     void RaidResults()
     {
+        ShowResultsScreen();
         if (HUDWidget != nullptr)
-            HUDWidget.ShowResultsScreen();
+            HUDWidget.HideResultBanner();
     }
 
-    // --- Escape menu (Esc / P, or this console command). An overlay — nothing pauses. ---
+    // --- Escape menu (Esc / P, or this console command). An overlay — nothing pauses.
+    // CommonUI: pushed onto the Menu layer; the back action (Esc/B) pops it, any deactivation
+    // path notifies us via NotifyPauseMenuClosed. Cursor/input mode = the widget's config. ---
     private UEscapeMenuWidget PauseMenu;
 
     UFUNCTION(Exec)
@@ -416,22 +444,24 @@ class ARaidPlayerController : APlayerController
             ClosePauseMenu();
             return;
         }
-        PauseMenu = Cast<UEscapeMenuWidget>(WidgetBlueprint::CreateWidget(UEscapeMenuWidget, this));
-        if (PauseMenu == nullptr)
+        if (Layout == nullptr)
             return;
-        PauseMenu.AddToViewport(20);   // above HUD + results
-        bShowMouseCursor = true;
-        Print("[Menu] escape menu shown", 2.0);
+        PauseMenu = Cast<UEscapeMenuWidget>(
+            Layout.PushToLayer(ERogueUILayer::Menu, UEscapeMenuWidget));
+        if (PauseMenu != nullptr)
+            Print("[Menu] escape menu shown", 2.0);
     }
 
     void ClosePauseMenu()
     {
-        if (PauseMenu == nullptr)
-            return;
-        PauseMenu.RemoveFromParent();
+        if (PauseMenu != nullptr)
+            PauseMenu.DeactivateWidget();   // stack pops it; OnDeactivated calls back below
+    }
+
+    // Called from the widget's OnDeactivated — covers RESUME, the Esc/B back action, and travel.
+    void NotifyPauseMenuClosed()
+    {
         PauseMenu = nullptr;
-        // Restore cursor only if no other screen needs it (upgrade pick keeps it on).
-        bShowMouseCursor = ActiveUpgradeWidget != nullptr;
     }
 
     private void ForceRunPhase(ERunPhase NewPhase)

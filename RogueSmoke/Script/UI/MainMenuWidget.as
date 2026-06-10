@@ -24,12 +24,29 @@ class UMainMenuWidget : UCommonActivatableWidget
     private UCanvasPanel Root;
     private UHorizontalBox JoinRow;       // hidden until JOIN GAME is clicked
     private UEditableTextBox AddressBox;
+    private UButton HostButton;           // CommonUI focus target
     private bool bBuilt = false;
 
     UFUNCTION(BlueprintOverride)
     void OnInitialized()
     {
         BuildLayout();
+    }
+
+    // Pure menu screen: UI input only, cursor free.
+    UFUNCTION(BlueprintOverride)
+    FUIInputConfig GetDesiredInputConfig() const
+    {
+        FUIInputConfig Config;
+        Config.InputMode = ECommonInputMode::Menu;
+        Config.MouseCaptureMode = EMouseCaptureMode::NoCapture;
+        return Config;
+    }
+
+    UFUNCTION(BlueprintOverride)
+    UWidget BP_GetDesiredFocusTarget() const
+    {
+        return HostButton;
     }
 
     private void BuildLayout()
@@ -69,7 +86,7 @@ class UMainMenuWidget : UCommonActivatableWidget
         StackSlot.SetAlignment(FVector2D(0.0, 0.0));
         StackSlot.SetAutoSize(true);
 
-        AddMenuButton(Stack, "  HOST GAME  ", n"HandleHost", RogueUITheme::TextPrimary);
+        HostButton = AddMenuButton(Stack, "  HOST GAME  ", n"HandleHost", RogueUITheme::TextPrimary);
         AddMenuButton(Stack, "  JOIN GAME  ", n"HandleToggleJoin", RogueUITheme::TextPrimary);
 
         // Join row: IP box + CONNECT, collapsed until JOIN GAME is clicked.
@@ -90,15 +107,16 @@ class UMainMenuWidget : UCommonActivatableWidget
         AddMenuButton(Stack, "  QUIT  ", n"HandleQuit", RogueUITheme::TextDim);
     }
 
-    private void AddMenuButton(UVerticalBox Stack, FString Label, FName Handler, FLinearColor Color)
+    private UButton AddMenuButton(UVerticalBox Stack, FString Label, FName Handler, FLinearColor Color)
     {
         UButton Button = RogueUITheme::MakeTextButton(this, Label, Color);
         if (Button == nullptr)
-            return;
+            return nullptr;
         Button.OnClicked.AddUFunction(this, Handler);
         UVerticalBoxSlot ButtonSlot = Stack.AddChildToVerticalBox(Button);
         ButtonSlot.SetPadding(FMargin(0.0, 0.0, 0.0, 12.0));
         ButtonSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Left);
+        return Button;
     }
 
     UFUNCTION()

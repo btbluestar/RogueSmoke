@@ -1,12 +1,19 @@
 // EscapeMenuWidget.as
 // In-run escape menu. NOTHING PAUSES (genre convention + listen server — teammates keep
 // fighting), so this is just an overlay: RESUME / RETURN TO LOBBY (host) / LEAVE TO MENU /
-// QUIT. Opened by RaidPlayerController (Esc or P, or the RaidPause console command).
+// QUIT. Opened by RaidPlayerController (Esc or P, or the RaidPause console command), which
+// pushes it onto the Menu layer stack.
 //
-// Runtime-built tree (RogueHUDWidget pattern).
-class UEscapeMenuWidget : UUserWidget
+// CommonUI: an activatable, back-handling screen — Esc/gamepad-B (the configured back action)
+// pops it via the default back behavior (deactivate -> the stack removes it), and its input
+// config (Menu) is what shows the cursor; the HUD host underneath restores Game mode when this
+// deactivates. No manual cursor code anywhere.
+class UEscapeMenuWidget : UCommonActivatableWidget
 {
+    default bIsBackHandler = true;   // Esc/B = RESUME (default back behavior deactivates)
+
     private UCanvasPanel Root;
+    private UButton ResumeButton;
     private bool bBuilt = false;
 
     UFUNCTION(BlueprintOverride)
@@ -44,7 +51,7 @@ class UEscapeMenuWidget : UUserWidget
         StackSlot.SetAlignment(FVector2D(0.5, 0.0));
         StackSlot.SetAutoSize(true);
 
-        AddButton(Stack, "  RESUME  ", n"HandleResume", RogueUITheme::Accent);
+        ResumeButton = AddButton(Stack, "  RESUME  ", n"HandleResume", RogueUITheme::Accent);
 
         APlayerController PC = GetOwningPlayer();
         if (PC != nullptr && PC.HasAuthority())
@@ -54,23 +61,48 @@ class UEscapeMenuWidget : UUserWidget
         AddButton(Stack, "  QUIT  ", n"HandleQuit", RogueUITheme::TextDim);
     }
 
-    private void AddButton(UVerticalBox Stack, FString Label, FName Handler, FLinearColor Color)
+    private UButton AddButton(UVerticalBox Stack, FString Label, FName Handler, FLinearColor Color)
     {
         UButton Button = RogueUITheme::MakeTextButton(this, Label, Color);
         if (Button == nullptr)
-            return;
+            return nullptr;
         Button.OnClicked.AddUFunction(this, Handler);
         UVerticalBoxSlot ButtonSlot = Stack.AddChildToVerticalBox(Button);
         ButtonSlot.SetPadding(FMargin(0.0, 0.0, 0.0, 10.0));
         ButtonSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
+        return Button;
+    }
+
+    // Menus own the cursor; the HUD host underneath restores Game capture on close.
+    UFUNCTION(BlueprintOverride)
+    FUIInputConfig GetDesiredInputConfig() const
+    {
+        FUIInputConfig Config;
+        Config.InputMode = ECommonInputMode::Menu;
+        Config.MouseCaptureMode = EMouseCaptureMode::NoCapture;
+        return Config;
+    }
+
+    UFUNCTION(BlueprintOverride)
+    UWidget BP_GetDesiredFocusTarget() const
+    {
+        return ResumeButton;
+    }
+
+    // Any close path (RESUME click, Esc/B back action, travel) lands here — tell the PC so its
+    // toggle bookkeeping stays correct.
+    UFUNCTION(BlueprintOverride)
+    void OnDeactivated()
+    {
+        ARaidPlayerController PC = Cast<ARaidPlayerController>(GetOwningPlayer());
+        if (PC != nullptr)
+            PC.NotifyPauseMenuClosed();
     }
 
     UFUNCTION()
     private void HandleResume()
     {
-        ARaidPlayerController PC = Cast<ARaidPlayerController>(GetOwningPlayer());
-        if (PC != nullptr)
-            PC.ClosePauseMenu();
+        DeactivateWidget();   // the stack pops us; OnDeactivated notifies the PC
     }
 
     // Host: take the whole squad back to hero select (ServerTravel keeps clients connected).

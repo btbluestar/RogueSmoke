@@ -141,4 +141,10 @@ class UUpgradeCardWidget : UUserWidget
         if (OwnerScreen != nullptr)
             OwnerScreen.ChooseUpgrade(OfferIndex);
     }
+
+    // The select screen's CommonUI focus target (gamepad/keyboard) is the first card's button.
+    UWidget GetFocusWidget() const
+    {
+        return RootButton;
+    }
 }

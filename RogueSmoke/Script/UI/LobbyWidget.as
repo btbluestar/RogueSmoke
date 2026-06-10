@@ -32,6 +32,22 @@ class ULobbyWidget : UCommonActivatableWidget
         BuildLayout();
     }
 
+    // Pure menu screen: UI input only, cursor free.
+    UFUNCTION(BlueprintOverride)
+    FUIInputConfig GetDesiredInputConfig() const
+    {
+        FUIInputConfig Config;
+        Config.InputMode = ECommonInputMode::Menu;
+        Config.MouseCaptureMode = EMouseCaptureMode::NoCapture;
+        return Config;
+    }
+
+    UFUNCTION(BlueprintOverride)
+    UWidget BP_GetDesiredFocusTarget() const
+    {
+        return ReadyButton;
+    }
+
     private void BuildLayout()
     {
         if (bBuilt)

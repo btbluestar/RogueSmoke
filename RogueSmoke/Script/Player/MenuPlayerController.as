@@ -4,7 +4,7 @@
 // standalone until the player hosts/joins).
 class AMenuPlayerController : APlayerController
 {
-    private UMainMenuWidget Menu;
+    private URogueUILayout Layout;
 
     UFUNCTION(BlueprintOverride)
     void BeginPlay()
@@ -12,11 +12,14 @@ class AMenuPlayerController : APlayerController
         if (!IsLocalController())
             return;
 
-        Menu = Cast<UMainMenuWidget>(WidgetBlueprint::CreateWidget(UMainMenuWidget, this));
-        if (Menu == nullptr)
+        // CommonUI: the layout is the only AddToViewport; the menu is pushed onto its Menu
+        // layer stack, whose input config (Menu mode) shows the cursor — no manual toggles.
+        Layout = Cast<URogueUILayout>(WidgetBlueprint::CreateWidget(URogueUILayout, this));
+        if (Layout == nullptr)
             return;
-        Menu.AddToViewport();
-        bShowMouseCursor = true;
-        Print("[Menu] main menu shown", 3.0);
+        Layout.AddToViewport();
+        UCommonActivatableWidget Menu = Layout.PushToLayer(ERogueUILayer::Menu, UMainMenuWidget);
+        if (Menu != nullptr)
+            Print("[Menu] main menu shown", 3.0);
     }
 }

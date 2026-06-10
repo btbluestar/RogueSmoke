@@ -4,17 +4,36 @@
 // the most-missed stat in DRG's end screen). Shown by the HUD a couple of seconds after the
 // replicated ERunPhase resolves, so the banner lands first and replication has settled.
 //
-// Runtime-built tree (RogueHUDWidget pattern). Built in Construct — by then the phase and the
-// replicated ARoguePlayerState stats it renders are known.
-class UResultsScreenWidget : UUserWidget
+// CommonUI: an activatable pushed onto the Menu layer stack (input config Menu = cursor on,
+// game input off — the run is over). Not a back handler: you leave via its buttons. Built in
+// Construct — by then the phase and the replicated ARoguePlayerState stats it renders are known.
+class UResultsScreenWidget : UCommonActivatableWidget
 {
+    default bIsBackHandler = false;
+
     private UCanvasPanel Root;
+    private UButton FirstButton;   // CommonUI focus target (PLAY AGAIN on host, LEAVE on clients)
     private bool bBuilt = false;
 
     UFUNCTION(BlueprintOverride)
     void Construct()
     {
         BuildLayout();
+    }
+
+    UFUNCTION(BlueprintOverride)
+    FUIInputConfig GetDesiredInputConfig() const
+    {
+        FUIInputConfig Config;
+        Config.InputMode = ECommonInputMode::Menu;
+        Config.MouseCaptureMode = EMouseCaptureMode::NoCapture;
+        return Config;
+    }
+
+    UFUNCTION(BlueprintOverride)
+    UWidget BP_GetDesiredFocusTarget() const
+    {
+        return FirstButton;
     }
 
     private void BuildLayout()
@@ -171,6 +190,7 @@ class UResultsScreenWidget : UUserWidget
         {
             UButton PlayAgain = RogueUITheme::MakeTextButton(this, "  PLAY AGAIN  ", RogueUITheme::Accent);
             PlayAgain.OnClicked.AddUFunction(this, n"HandlePlayAgain");
+            FirstButton = PlayAgain;
             UHorizontalBoxSlot PlaySlot = ButtonRow.AddChildToHorizontalBox(PlayAgain);
             PlaySlot.SetPadding(FMargin(10.0, 0.0, 10.0, 0.0));
 
@@ -188,6 +208,7 @@ class UResultsScreenWidget : UUserWidget
 
             UButton Leave = RogueUITheme::MakeTextButton(this, "  LEAVE TO MENU  ", RogueUITheme::TextPrimary);
             Leave.OnClicked.AddUFunction(this, n"HandleLeave");
+            FirstButton = Leave;
             UHorizontalBoxSlot LeaveSlot = ButtonRow.AddChildToHorizontalBox(Leave);
             LeaveSlot.SetPadding(FMargin(10.0, 0.0, 10.0, 0.0));
         }

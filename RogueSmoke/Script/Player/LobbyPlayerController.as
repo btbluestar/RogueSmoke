@@ -5,7 +5,7 @@
 // which every client's lobby UI reads.
 class ALobbyPlayerController : APlayerController
 {
-    private ULobbyWidget Lobby;
+    private URogueUILayout Layout;
 
     UFUNCTION(BlueprintOverride)
     void BeginPlay()
@@ -13,12 +13,14 @@ class ALobbyPlayerController : APlayerController
         if (!IsLocalController())
             return;
 
-        Lobby = Cast<ULobbyWidget>(WidgetBlueprint::CreateWidget(ULobbyWidget, this));
-        if (Lobby == nullptr)
+        // CommonUI: layout root + Menu-layer push; the lobby's input config owns the cursor.
+        Layout = Cast<URogueUILayout>(WidgetBlueprint::CreateWidget(URogueUILayout, this));
+        if (Layout == nullptr)
             return;
-        Lobby.AddToViewport();
-        bShowMouseCursor = true;
-        Print("[Lobby] lobby shown", 3.0);
+        Layout.AddToViewport();
+        UCommonActivatableWidget Lobby = Layout.PushToLayer(ERogueUILayer::Menu, ULobbyWidget);
+        if (Lobby != nullptr)
+            Print("[Lobby] lobby shown", 3.0);
     }
 
     // Local entry point for the UI: stash the pick for the post-travel respawn (the
