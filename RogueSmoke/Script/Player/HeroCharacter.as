@@ -138,6 +138,14 @@ class AHeroCharacter : ARogueHeroBase
             }
             if (Weapon != nullptr && DefaultWeapon != nullptr)
                 Weapon.EquipWeapon(DefaultWeapon);
+
+            // Weapon-state upgrades (fire rate / reload / magazine) live on the server-only weapon
+            // component; mirror the attributes into it and keep them live (same pattern as MoveSpeed
+            // below, but server-only since that's where weapon timing runs).
+            PushWeaponBonuses();
+            ASC.RegisterAttributeChangedCallback(URogueCombatSet, n"FireRateBonus", this, n"OnWeaponBonusChanged");
+            ASC.RegisterAttributeChangedCallback(URogueCombatSet, n"ReloadSpeedBonus", this, n"OnWeaponBonusChanged");
+            ASC.RegisterAttributeChangedCallback(URogueCombatSet, n"MagazineBonus", this, n"OnWeaponBonusChanged");
         }
 
         // Server + clients: the locomotion component owns MaxWalkSpeed (base + sprint/crouch). Seed its
@@ -182,6 +190,25 @@ class AHeroCharacter : ARogueHeroBase
     void OnMoveSpeedChanged(FAngelscriptAttributeChangedData Data)
     {
         Locomotion.SetBaseSpeed(Data.GetNewValue());
+    }
+
+    // Any of the three weapon-state attributes changed (an upgrade GE applied): re-read all three
+    // and push them into the weapon component. Server-only by registration.
+    UFUNCTION()
+    void OnWeaponBonusChanged(FAngelscriptAttributeChangedData Data)
+    {
+        PushWeaponBonuses();
+    }
+
+    private void PushWeaponBonuses()
+    {
+        UAngelscriptAbilitySystemComponent ASC = GetRogueAbilitySystem();
+        if (ASC == nullptr || Weapon == nullptr)
+            return;
+        Weapon.SetUpgradeBonuses(
+            ASC.GetAttributeCurrentValue(URogueCombatSet, n"FireRateBonus", 0.0),
+            ASC.GetAttributeCurrentValue(URogueCombatSet, n"ReloadSpeedBonus", 0.0),
+            ASC.GetAttributeCurrentValue(URogueCombatSet, n"MagazineBonus", 0.0));
     }
 
     // Called by ARaidPlayerController from the IA_Move action value.

@@ -21,10 +21,34 @@ class URogueWeaponComponent : UActorComponent
     private bool bIsReloading = false;
     private float ReloadRemaining = 0.0;
 
+    // Weapon-upgrade bonuses (WEAPON_UPGRADES_PLAN.md): additive fractions mirrored from the
+    // owner's URogueCombatSet by the hero's attribute-changed callbacks (server-side, where all
+    // weapon state lives). Applied at the choke points below, never baked into the Definition —
+    // the DataAsset stays the designer's source of truth.
+    private float FireRateBonus = 0.0;
+    private float ReloadSpeedBonus = 0.0;
+    private float MagazineBonus = 0.0;
+
+    // Pushed by AHeroCharacter when the matching attributes change (upgrade GEs applying).
+    // A magazine upgrade mid-life takes effect on the next reload — no retroactive top-up.
+    void SetUpgradeBonuses(float InFireRateBonus, float InReloadSpeedBonus, float InMagazineBonus)
+    {
+        FireRateBonus = Math::Max(InFireRateBonus, 0.0);
+        ReloadSpeedBonus = Math::Max(InReloadSpeedBonus, 0.0);
+        MagazineBonus = Math::Max(InMagazineBonus, 0.0);
+    }
+
+    int GetEffectiveMagazineSize() const
+    {
+        if (Definition == nullptr)
+            return 0;
+        return Math::CeilToInt(float(Definition.MagazineSize) * (1.0 + MagazineBonus));
+    }
+
     void EquipWeapon(URogueWeaponDefinition NewDefinition)
     {
         Definition = NewDefinition;
-        AmmoInMag = (Definition != nullptr) ? Definition.MagazineSize : 0;
+        AmmoInMag = GetEffectiveMagazineSize();
         CurrentHeat = 0.0;
         RefireCooldown = 0.0;
         TimeSinceLastShot = 1000.0;
@@ -62,7 +86,8 @@ class URogueWeaponComponent : UActorComponent
 
         if (AmmoInMag > 0)
             AmmoInMag -= 1;
-        RefireCooldown = Definition.FireInterval;
+        // Fire-rate upgrades shrink the refire gate (works for semi and full-auto alike).
+        RefireCooldown = Definition.FireInterval / (1.0 + FireRateBonus);
         TimeSinceLastShot = 0.0;
         CurrentHeat = Math::Min(1.0, CurrentHeat + Definition.HeatPerShot);
 
@@ -74,11 +99,11 @@ class URogueWeaponComponent : UActorComponent
     {
         if (Definition == nullptr || bIsReloading)
             return;
-        if (AmmoInMag >= Definition.MagazineSize)
+        if (AmmoInMag >= GetEffectiveMagazineSize())
             return;
 
         bIsReloading = true;
-        ReloadRemaining = Definition.ReloadSeconds;
+        ReloadRemaining = Definition.ReloadSeconds / (1.0 + ReloadSpeedBonus);
     }
 
     // Driven by the owning hero's Tick (server only). Advances refire, reload, and heat recovery.
@@ -97,7 +122,7 @@ class URogueWeaponComponent : UActorComponent
             ReloadRemaining -= DeltaSeconds;
             if (ReloadRemaining <= 0.0)
             {
-                AmmoInMag = Definition.MagazineSize;
+                AmmoInMag = GetEffectiveMagazineSize();
                 bIsReloading = false;
             }
         }

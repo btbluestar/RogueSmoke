@@ -10,6 +10,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "Combat/HealthComponent.h"   // ERogueDotType
 #include "CombatSubsystem.generated.h"
 
 class AEliteEnemyBase;
@@ -44,6 +45,60 @@ struct FHitscanResult
 	/** The actor hit, if any. */
 	UPROPERTY(BlueprintReadOnly, Category="Combat")
 	TObjectPtr<AActor> HitActor = nullptr;
+
+	/** Enemies damaged by this shot beyond the first: pierced bodies + chain-arc targets. */
+	UPROPERTY(BlueprintReadOnly, Category="Combat")
+	int32 ExtraEnemiesHit = 0;
+};
+
+/**
+ * Per-shot behavior bundle for FireWeaponShot (WEAPON_UPGRADES_PLAN.md). GA_WeaponFire fills this
+ * from the shooter's URogueCombatSet weapon attributes; defaults mean "behave exactly like the old
+ * FireHitscan". Fractions/durations for chain + DoT magnitudes live here (not per-upgrade data) so
+ * the cards stay one-number GEs and balance is one struct away.
+ */
+USTRUCT(BlueprintType)
+struct FWeaponShotParams
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
+	float Damage = 0.f;
+
+	/** Extra enemies the bullet passes through (world geometry always stops it). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
+	int32 PierceCount = 0;
+
+	/** Chain arcs per enemy hit: nearest others within ChainRadius take Damage * ChainDamageFraction. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
+	int32 ChainCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
+	float ChainDamageFraction = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
+	float ChainRadius = 600.f;
+
+	/** Per-enemy-hit proc chances (0..1). DoT totals derive from the hit damage (Gunfire Reborn model). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
+	float BurnChance = 0.f;
+
+	/** Burn: BurnDamageFraction * Damage dealt over BurnDuration seconds. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
+	float BurnDamageFraction = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
+	float BurnDuration = 3.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
+	float PoisonChance = 0.f;
+
+	/** Poison: PoisonDamageFraction * Damage dealt over PoisonDuration seconds (slow, bigger total). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
+	float PoisonDamageFraction = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
+	float PoisonDuration = 6.f;
 };
 
 UCLASS()
@@ -90,6 +145,18 @@ public:
 	FHitscanResult FireHitscan(FVector Start, FVector End, float Damage, AActor* DamageInstigator);
 
 	/**
+	 * FireHitscan's upgrade-aware big sibling (WEAPON_UPGRADES_PLAN.md): one bullet that can pierce
+	 * through enemies, arc chain damage to neighbors of each victim, and proc burn/poison DoTs.
+	 * Defaults reproduce FireHitscan exactly. Pierce re-traces past each enemy hit (full damage
+	 * each, world geometry stops it); chains hit the nearest registered enemies within ChainRadius
+	 * of the victim for a damage fraction (plain damage, no recursive procs — bounded by design).
+	 * Server-authoritative; the returned impact is the bullet's final stop for tracer FX.
+	 */
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	FHitscanResult FireWeaponShot(FVector Start, FVector End, const FWeaponShotParams& Params,
+	                              AActor* DamageInstigator);
+
+	/**
 	 * Camera-origin visibility trace returning the world point under the crosshair — the convergence
 	 * target for third-person muzzle fire (D-0014). Returns the impact point, or CamStart + CamDir*MaxDist
 	 * if nothing is hit. Read-only query (no damage), so abilities don't world-trace themselves: the
@@ -118,6 +185,10 @@ public:
 
 private:
 	bool IsServer() const;
+
+	/** Chain arcs + burn/poison proc rolls for one directly-hit enemy (FireWeaponShot). */
+	void ProcOnHitEffects(AEliteEnemyBase* Victim, const FWeaponShotParams& Params,
+	                      AActor* DamageInstigator, FHitscanResult& Result);
 
 	// Stub backend. Weak ptrs so destroyed elites drop out without dangling.
 	TArray<TWeakObjectPtr<AEliteEnemyBase>> Elites;

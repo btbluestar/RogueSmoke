@@ -60,13 +60,23 @@ class UGA_WeaponFire : UGA_RogueAbility
         bool bMoving = Hero.CharacterMovement != nullptr && Hero.CharacterMovement.Velocity.Size() > 50.0;
         float HalfAngleRad = Weapon.GetSpreadDegrees(bMoving, Hero.bFocusing) * HalfAngleDegToRad;
 
+        // Weapon upgrades (WEAPON_UPGRADES_PLAN.md): per-shot behavior from URogueCombatSet
+        // attributes, executed by the seam. Defaults (all attributes 0) = a plain hitscan.
+        // WeaponDamageBonus is the weapon track; AbilityPower stays ability-only.
+        FWeaponShotParams Shot;
+        Shot.Damage = Def.Damage * (1.0 + GetCombatAttribute(n"WeaponDamageBonus"));
+        Shot.PierceCount = int(GetCombatAttribute(n"PierceCount"));
+        Shot.ChainCount = int(GetCombatAttribute(n"ChainCount"));
+        Shot.BurnChance = GetCombatAttribute(n"BurnChance");
+        Shot.PoisonChance = GetCombatAttribute(n"PoisonChance");
+
         TArray<FVector> Impacts;
         bool bHitEnemy = false;
         for (int i = 0; i < Def.BulletsPerCartridge; i++)
         {
             FVector Dir = (HalfAngleRad > 0.0) ? Math::VRandCone(BaseDir, HalfAngleRad) : BaseDir;
             FVector End = MuzzleLoc + Dir * Def.MaxRange;
-            FHitscanResult Result = Combat.FireHitscan(MuzzleLoc, End, Def.Damage, Avatar);
+            FHitscanResult Result = Combat.FireWeaponShot(MuzzleLoc, End, Shot, Avatar);
             Impacts.Add(Result.ImpactPoint);
             if (Result.bHitEnemy)
                 bHitEnemy = true;

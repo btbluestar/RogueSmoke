@@ -382,6 +382,137 @@ class ARaidPlayerController : APlayerController
         Print(f"[Debug] RaidKillElites — dealt {Dealt}", 3.0);
     }
 
+    // --- Debug: weapon-upgrade seam smoke (WEAPON_UPGRADES_PLAN.md). Fires one synthetic upgraded
+    // shot (pierce 1, chain 2, guaranteed burn+poison) from the hero's muzzle at the nearest live
+    // enemy, prints the seam result, then re-reads the victim 2s later to prove the DoTs ticked.
+    // Host-only (the seam no-ops on clients). ---
+    private AEliteEnemyBase SmokeTarget;
+    private float SmokeStartHealth = 0.0;
+    private int SmokeRetries = 0;
+
+    UFUNCTION(Exec)
+    void WeaponSmoke()
+    {
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
+        AHeroCharacter Hero = GetHero();
+        if (Combat == nullptr || Hero == nullptr)
+        {
+            RetrySmoke("waiting for hero");
+            return;
+        }
+
+        TArray<AEliteEnemyBase> Enemies;
+        GetAllActorsOfClass(Enemies);
+        AEliteEnemyBase Target = nullptr;
+        float BestDistSq = 1.0e18;
+        for (AEliteEnemyBase Enemy : Enemies)
+        {
+            if (Enemy == nullptr || Enemy.Health == nullptr || Enemy.Health.IsDead())
+                continue;
+            float DistSq = Enemy.GetActorLocation().DistSquared(Hero.GetActorLocation());
+            if (DistSq < BestDistSq)
+            {
+                BestDistSq = DistSq;
+                Target = Enemy;
+            }
+        }
+        if (Target == nullptr)
+        {
+            RetrySmoke("waiting for enemies");
+            return;
+        }
+
+        SmokeTarget = Target;
+        SmokeStartHealth = Target.Health.Health;
+
+        FWeaponShotParams Shot;
+        Shot.Damage = 10.0;
+        Shot.PierceCount = 1;
+        Shot.ChainCount = 2;
+        Shot.ChainRadius = 100000.0;   // arena-wide so the arcs always find the ring elites
+        Shot.BurnChance = 1.0;         // guaranteed procs so the check is deterministic
+        Shot.PoisonChance = 1.0;
+
+        FVector From = Hero.GetMuzzleLocation();
+        FVector Dir = (Target.GetActorLocation() - From).GetSafeNormal();
+        FHitscanResult Result = Combat.FireWeaponShot(From, From + Dir * 20000.0, Shot, Hero);
+        Print(f"[WeaponSmoke] shot: hitEnemy={Result.bHitEnemy} dealt={Result.DamageDealt} extraEnemies={Result.ExtraEnemiesHit} startHP={SmokeStartHealth}", 8.0);
+
+        System::SetTimer(this, n"WeaponSmokeReport", 2.0, false);
+    }
+
+    // Boot-time friendliness: -ExecCmds fires before the hero/enemies spawn, so poll for up to 30s.
+    private void RetrySmoke(FString Why)
+    {
+        if (SmokeRetries >= 30)
+        {
+            Print(f"[WeaponSmoke] gave up: {Why}", 8.0);
+            return;
+        }
+        SmokeRetries++;
+        System::SetTimer(this, n"WeaponSmoke", 1.0, false);
+    }
+
+    UFUNCTION()
+    private void WeaponSmokeReport()
+    {
+        if (SmokeTarget == nullptr || SmokeTarget.Health == nullptr)
+        {
+            Print("[WeaponSmoke] dot check: target gone (died/level change)", 5.0);
+            return;
+        }
+        float HealthNow = SmokeTarget.Health.Health;
+        bool bBurn = SmokeTarget.Health.HasActiveDot(ERogueDotType::Burn);
+        bool bPoison = SmokeTarget.Health.HasActiveDot(ERogueDotType::Poison);
+        Print(f"[WeaponSmoke] dot check: health {SmokeStartHealth} -> {HealthNow} burnActive={bBurn} poisonActive={bPoison}", 8.0);
+    }
+
+    // --- Debug: apply EVERY upgrade in the GameMode pool to the host hero, then print the weapon
+    // attribute values — proves the GE assets actually move the URogueCombatSet attributes. ---
+    private int GrantRetries = 0;
+
+    UFUNCTION(Exec)
+    void GrantAllUpgrades()
+    {
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        AHeroCharacter Hero = GetHero();
+        if (GameMode == nullptr || Hero == nullptr)
+        {
+            // Boot-time friendliness: poll until the hero is embodied (host only — clients give up).
+            if (GameMode != nullptr && GrantRetries < 30)
+            {
+                GrantRetries++;
+                System::SetTimer(this, n"GrantAllUpgrades", 1.0, false);
+                return;
+            }
+            Print("[GrantAll] host only, and needs a hero pawn", 5.0);
+            return;
+        }
+        UAngelscriptAbilitySystemComponent ASC = Hero.GetRogueAbilitySystem();
+        if (ASC == nullptr)
+            return;
+
+        int Applied = 0;
+        for (URogueUpgradeDef Upgrade : GameMode.UpgradePool)
+        {
+            if (Upgrade == nullptr || Upgrade.Effect.Get() == nullptr)
+                continue;
+            ASC.ApplyGameplayEffectToTarget(Upgrade.Effect, ASC, 1.0, FGameplayEffectContextHandle());
+            Applied++;
+        }
+
+        float DmgBonus = ASC.GetAttributeCurrentValue(URogueCombatSet, n"WeaponDamageBonus", -1.0);
+        float FireRate = ASC.GetAttributeCurrentValue(URogueCombatSet, n"FireRateBonus", -1.0);
+        float Pierce = ASC.GetAttributeCurrentValue(URogueCombatSet, n"PierceCount", -1.0);
+        float Chain = ASC.GetAttributeCurrentValue(URogueCombatSet, n"ChainCount", -1.0);
+        float Burn = ASC.GetAttributeCurrentValue(URogueCombatSet, n"BurnChance", -1.0);
+        float Poison = ASC.GetAttributeCurrentValue(URogueCombatSet, n"PoisonChance", -1.0);
+        float Mag = ASC.GetAttributeCurrentValue(URogueCombatSet, n"MagazineBonus", -1.0);
+        float Reload = ASC.GetAttributeCurrentValue(URogueCombatSet, n"ReloadSpeedBonus", -1.0);
+        Print(f"[GrantAll] applied {Applied} GEs", 8.0);
+        Print(f"[GrantAll] weapon attrs: dmg={DmgBonus} firerate={FireRate} pierce={Pierce} chain={Chain} burn={Burn} poison={Poison} mag={Mag} reload={Reload}", 10.0);
+    }
+
     // --- Replay: type `RaidRestart` in the ~ console to reload the current level (fresh run + seed) ----
     // Shown as the hint under the VICTORY/DEFEAT banner so a finished run is replayable without leaving PIE.
     UFUNCTION(Exec)

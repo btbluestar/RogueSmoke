@@ -9,6 +9,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "CollisionQueryParams.h"
+#include "DrawDebugHelpers.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GameplayEffect.h"
@@ -243,6 +244,15 @@ void UCombatSubsystem::ApplyRadialDamageToPlayers(FVector Center, float Radius, 
 
 FHitscanResult UCombatSubsystem::FireHitscan(FVector Start, FVector End, float Damage, AActor* DamageInstigator)
 {
+	// Thin wrapper: default params reproduce the historical single-trace behavior exactly.
+	FWeaponShotParams Params;
+	Params.Damage = Damage;
+	return FireWeaponShot(Start, End, Params, DamageInstigator);
+}
+
+FHitscanResult UCombatSubsystem::FireWeaponShot(FVector Start, FVector End, const FWeaponShotParams& Params,
+                                                AActor* DamageInstigator)
+{
 	FHitscanResult Result;
 	Result.ImpactPoint = End; // default: nothing hit -> tracer reaches the trace end
 
@@ -252,27 +262,120 @@ FHitscanResult UCombatSubsystem::FireHitscan(FVector Start, FVector End, float D
 		return Result;
 	}
 
-	FCollisionQueryParams Params(FName(TEXT("FireHitscan")), /*bTraceComplex=*/false, DamageInstigator);
-	Params.AddIgnoredActor(DamageInstigator);
+	FCollisionQueryParams QueryParams(FName(TEXT("FireWeaponShot")), /*bTraceComplex=*/false, DamageInstigator);
+	QueryParams.AddIgnoredActor(DamageInstigator);
 
-	FHitResult Hit;
-	if (World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+	// Pierce loop: re-trace past each enemy hit (the victim joins the ignore list, so no epsilon
+	// nudging). World geometry — or any non-enemy actor — always stops the bullet.
+	FVector TraceStart = Start;
+	int32 RemainingPierces = FMath::Max(0, Params.PierceCount);
+
+	for (;;)
 	{
+		FHitResult Hit;
+		if (!World->LineTraceSingleByChannel(Hit, TraceStart, End, ECC_Visibility, QueryParams))
+		{
+			// Flew to max range (possibly after piercing bodies): the tracer ends at the trace end.
+			Result.ImpactPoint = End;
+			break;
+		}
+
 		Result.bBlockingHit = true;
 		Result.ImpactPoint = Hit.ImpactPoint;
 		Result.ImpactNormal = Hit.ImpactNormal;
-		Result.HitActor = Hit.GetActor();
+		if (Result.HitActor == nullptr)
+		{
+			Result.HitActor = Hit.GetActor(); // first thing struck, matching FireHitscan semantics
+		}
 
 		// Actor-elite backend (D-0003). The Mass-agent raycast resolves here later, behind the same call.
-		if (AEliteEnemyBase* Elite = Cast<AEliteEnemyBase>(Hit.GetActor()))
+		AEliteEnemyBase* Elite = Cast<AEliteEnemyBase>(Hit.GetActor());
+		if (Elite == nullptr || Elite->Health == nullptr)
 		{
-			if (Elite->Health != nullptr)
-			{
-				Result.DamageDealt = Elite->Health->ApplyDamage(Damage, DamageInstigator);
-				Result.bHitEnemy = true;
-			}
+			break;
 		}
+
+		if (Result.bHitEnemy)
+		{
+			Result.ExtraEnemiesHit++; // a pierced body beyond the first victim
+		}
+		Result.bHitEnemy = true;
+		Result.DamageDealt += Elite->Health->ApplyDamage(Params.Damage, DamageInstigator);
+
+		ProcOnHitEffects(Elite, Params, DamageInstigator, Result);
+
+		if (RemainingPierces <= 0)
+		{
+			break;
+		}
+		RemainingPierces--;
+		QueryParams.AddIgnoredActor(Elite);
+		TraceStart = Hit.ImpactPoint;
 	}
 
 	return Result;
+}
+
+void UCombatSubsystem::ProcOnHitEffects(AEliteEnemyBase* Victim, const FWeaponShotParams& Params,
+                                        AActor* DamageInstigator, FHitscanResult& Result)
+{
+	// Status procs: every directly-hit enemy rolls independently (per pellet, per pierced body).
+	// Unseeded FRand is fine here — combat resolves server-side only, like the spread VRandCone;
+	// the procgen determinism rule covers world generation, not authoritative combat rolls.
+	if (Params.BurnChance > 0.f && Params.BurnDuration > 0.f && FMath::FRand() < Params.BurnChance)
+	{
+		Victim->Health->ApplyDot(ERogueDotType::Burn,
+		                         Params.Damage * Params.BurnDamageFraction / Params.BurnDuration,
+		                         Params.BurnDuration, DamageInstigator);
+	}
+	if (Params.PoisonChance > 0.f && Params.PoisonDuration > 0.f && FMath::FRand() < Params.PoisonChance)
+	{
+		Victim->Health->ApplyDot(ERogueDotType::Poison,
+		                         Params.Damage * Params.PoisonDamageFraction / Params.PoisonDuration,
+		                         Params.PoisonDuration, DamageInstigator);
+	}
+
+	// Chain arcs (RoR2-ukulele shape): nearest ChainCount other live enemies within ChainRadius of
+	// the victim take a damage fraction. Plain damage only — chains never pierce, chain, or proc,
+	// so the cascade is bounded. Fodder shares the registry, so chains reward dense swarms.
+	if (Params.ChainCount <= 0 || Params.ChainDamageFraction <= 0.f)
+	{
+		return;
+	}
+
+	const FVector Origin = Victim->GetActorLocation();
+	const float RadiusSq = Params.ChainRadius * Params.ChainRadius;
+
+	TArray<AEliteEnemyBase*> Candidates;
+	for (const TWeakObjectPtr<AEliteEnemyBase>& Ptr : Elites)
+	{
+		AEliteEnemyBase* Other = Ptr.Get();
+		if (Other == nullptr || Other == Victim || Other->Health == nullptr || Other->Health->IsDead())
+		{
+			continue;
+		}
+		if (FVector::DistSquared(Other->GetActorLocation(), Origin) <= RadiusSq)
+		{
+			Candidates.Add(Other);
+		}
+	}
+
+	Candidates.Sort([&Origin](const AEliteEnemyBase& A, const AEliteEnemyBase& B)
+	{
+		return FVector::DistSquared(A.GetActorLocation(), Origin) <
+		       FVector::DistSquared(B.GetActorLocation(), Origin);
+	});
+
+	const int32 Arcs = FMath::Min(Params.ChainCount, Candidates.Num());
+	const float ChainDamage = Params.Damage * Params.ChainDamageFraction;
+	for (int32 i = 0; i < Arcs; ++i)
+	{
+		Result.DamageDealt += Candidates[i]->Health->ApplyDamage(ChainDamage, DamageInstigator);
+		Result.ExtraEnemiesHit++;
+
+		// MVP readability: debug arc on the host. The Niagara beam lands with the cue pass (#39).
+		DrawDebugLine(GetWorld(), Origin + FVector(0, 0, 50.f),
+		              Candidates[i]->GetActorLocation() + FVector(0, 0, 50.f),
+		              FColor::Cyan, false, 0.2f, 0, 2.f);
+	}
 }
