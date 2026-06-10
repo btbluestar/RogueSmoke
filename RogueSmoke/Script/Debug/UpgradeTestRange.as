@@ -14,10 +14,10 @@ class AUpgradeTestRange : AActor
 {
     default bReplicates = true;
 
-    // The target-dummy archetype. Default is the passive ClusterableElite; swap to an attacking
-    // elite on the placed instance if you want live-fire pressure while testing.
+    // The target-dummy archetype. Default is the passive (but hittable) ATargetDummy; swap to an
+    // attacking elite on the placed instance if you want live-fire pressure while testing.
     UPROPERTY(EditAnywhere, Category = "Upgrade Range")
-    TSubclassOf<AEliteEnemyBase> DummyClass = AClusterableElite;
+    TSubclassOf<AEliteEnemyBase> DummyClass = ATargetDummy;
 
     UPROPERTY(EditAnywhere, Category = "Upgrade Range")
     int LineCount = 4;

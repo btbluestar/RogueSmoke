@@ -2,6 +2,7 @@
 
 #include "Combat/HealthComponent.h"
 #include "AbilitySystem/RoguePlayerState.h"
+#include "Enemies/EliteEnemyBase.h"
 #include "GameFramework/Pawn.h"
 #include "Net/UnrealNetwork.h"
 
@@ -16,7 +17,11 @@ UHealthComponent::UHealthComponent()
 void UHealthComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	Health = MaxHealth;
+	if (GetOwner() != nullptr && GetOwner()->HasAuthority())
+	{
+		Health = MaxHealth;
+	}
+	LastSeenHealth = Health;
 }
 
 float UHealthComponent::ApplyDamage(float Amount, AActor* DamageInstigator)
@@ -48,6 +53,14 @@ float UHealthComponent::ApplyDamage(float Amount, AActor* DamageInstigator)
 				}
 			}
 		}
+	}
+
+	// Cosmetic hook BEFORE OnDeath: the death broadcast may pool/hide the actor, and the burst
+	// wants the actor's final live location. Host/server view; clients get theirs via OnRep.
+	if (Applied > 0.f)
+	{
+		LastSeenHealth = Health;
+		NotifyOwnerHealthVisual(true, IsDead());
 	}
 
 	if (IsDead())
@@ -142,7 +155,23 @@ void UHealthComponent::ClearDots()
 
 void UHealthComponent::OnRep_Health()
 {
-	// Hook for clients to update health bars / cosmetics. No gameplay logic here.
+	// Client-side cosmetics: flash on visible drops, death burst when it reaches zero. Increases
+	// (pool recycle via ResetHealth) just update the bookkeeping. No gameplay logic here.
+	const bool bDamaged = Health < LastSeenHealth - KINDA_SMALL_NUMBER;
+	const bool bDiedNow = bDamaged && Health <= 0.f && LastSeenHealth > 0.f;
+	LastSeenHealth = Health;
+	if (bDamaged)
+	{
+		NotifyOwnerHealthVisual(true, bDiedNow);
+	}
+}
+
+void UHealthComponent::NotifyOwnerHealthVisual(bool bDamaged, bool bDied)
+{
+	if (AEliteEnemyBase* Enemy = Cast<AEliteEnemyBase>(GetOwner()))
+	{
+		Enemy->NotifyHealthVisual(bDamaged, bDied);
+	}
 }
 
 void UHealthComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

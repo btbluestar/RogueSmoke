@@ -81,4 +81,11 @@ private:
 	FActiveDot Dots[2];
 
 	void ClearDots();
+
+	/** Last Health value this machine saw, so OnRep can tell decreases (flash/death cues) from
+	 *  pool-recycle increases. Cosmetic bookkeeping only. */
+	float LastSeenHealth = 100.f;
+
+	/** Route a visible health drop to the owner's cosmetic hook (every machine). */
+	void NotifyOwnerHealthVisual(bool bDamaged, bool bDied);
 };

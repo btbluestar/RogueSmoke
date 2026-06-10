@@ -14,6 +14,7 @@ class ABloater : AAttackingElite
     default AttackRadius = 320.0;       // large blast
     default AttackInterval = 1.0;
     default TelegraphSeconds = 0.7;     // the swell tell
+    default TelegraphSwell = 1.5;       // visibly inflates across the wind-up (cue pass)
     default BodyScale = FVector(1.4, 1.4, 1.4);
     default BodyColor = FLinearColor(1.0, 0.45, 0.10, 1.0);    // volatile orange exploder
 

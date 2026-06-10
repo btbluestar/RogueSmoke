@@ -3,6 +3,7 @@
 #include "Combat/CombatSubsystem.h"
 #include "Combat/HealthComponent.h"
 #include "Enemies/EliteEnemyBase.h"
+#include "VFX/TelegraphZoneFX.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -121,9 +122,14 @@ float UCombatSubsystem::ApplyRadialDamage(FVector Center, float Radius, float Ba
 		return 0.f;
 	}
 
+	// Iterate a SNAPSHOT: a kill inside ApplyDamage fires OnDeath -> pool Deactivate ->
+	// UnregisterElite, which RemoveAll()s from Elites — mutating the live array mid-iteration
+	// skipped every neighbor of a kill (half the blast's targets survived).
+	const TArray<TWeakObjectPtr<AEliteEnemyBase>> Snapshot = Elites;
+
 	const float RadiusSq = Radius * Radius;
 	float TotalDealt = 0.f;
-	for (const TWeakObjectPtr<AEliteEnemyBase>& Ptr : Elites)
+	for (const TWeakObjectPtr<AEliteEnemyBase>& Ptr : Snapshot)
 	{
 		AEliteEnemyBase* Elite = Ptr.Get();
 		if (Elite == nullptr || Elite->Health == nullptr)
@@ -239,6 +245,19 @@ void UCombatSubsystem::ApplyRadialDamageToPlayers(FVector Center, float Radius, 
 		{
 			ApplyDamageToPlayer(Pawn, Damage, DamageInstigator);
 		}
+	}
+}
+
+void UCombatSubsystem::ShowTelegraphZone(FVector Center, float Radius, float DurationSeconds)
+{
+	if (!IsServer() || Radius <= 0.f)
+	{
+		return;
+	}
+	if (ATelegraphZoneFX* Zone = ATelegraphZoneFX::SpawnZone(GetWorld(), Center, Radius, DurationSeconds))
+	{
+		// Breadcrumb for headless verification (cosmetics can't be screenshotted under nullrhi).
+		UE_LOG(LogTemp, Log, TEXT("[Telegraph] zone r=%.0f dur=%.2fs at %s"), Radius, DurationSeconds, *Center.ToCompactString());
 	}
 }
 

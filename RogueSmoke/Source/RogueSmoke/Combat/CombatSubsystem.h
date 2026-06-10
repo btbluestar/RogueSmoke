@@ -183,6 +183,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	void ApplyRadialDamageToPlayers(FVector Center, float Radius, float Damage, AActor* DamageInstigator);
 
+	// --- Cues (cosmetic, replicated) ---
+	/**
+	 * Show a ground danger ring at Center: a Radius outline whose fill reaches the edge exactly when
+	 * DurationSeconds elapse — the player's dodge timer (GDD §10 telegraphs). Server-only; the ring
+	 * actor replicates to clients and removes itself at impact. Purely cosmetic (no damage): pair it
+	 * with the damage call that lands when the duration ends (e.g. the Brood-mother's artillery).
+	 */
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	void ShowTelegraphZone(FVector Center, float Radius, float DurationSeconds);
+
 private:
 	bool IsServer() const;
 

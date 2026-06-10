@@ -42,6 +42,13 @@ public:
 	UFUNCTION(BlueprintPure, Category="Combat")
 	bool IsBeingPulled() const;
 
+	/**
+	 * Cosmetic health event, fired on EVERY machine (server from ApplyDamage, clients from
+	 * OnRep_Health): bDamaged = health visibly dropped, bDied = it reached zero this event.
+	 * Base spawns the death-burst disc; subclasses add hit flashes etc. No gameplay logic.
+	 */
+	virtual void NotifyHealthVisual(bool bDamaged, bool bDied);
+
 	// --- Object pooling (driven by USpawnDirector) ---
 	/** Re-activate from the pool: place, reset health + transient state, register, show. */
 	void Activate(const FVector& Location, const FRotator& Rotation);
@@ -53,6 +60,9 @@ protected:
 	/** Wipe per-life transient state (cluster mark, pull) so a recycled actor starts clean. Virtual so
 	 *  attacking-elite subclasses also clear their attack/telegraph state on pool reuse. */
 	virtual void ClearTransientState();
+
+	/** Death-burst tint (subclasses return their body color so deaths read per-archetype). */
+	virtual FLinearColor GetDeathBurstColor() const { return FLinearColor::White; }
 
 	bool bActive = true;
 	virtual void BeginPlay() override;

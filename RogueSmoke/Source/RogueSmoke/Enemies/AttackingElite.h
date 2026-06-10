@@ -17,6 +17,7 @@
 #include "AttackingElite.generated.h"
 
 class UStaticMeshComponent;
+class UMaterialInstanceDynamic;
 class APawn;
 
 UCLASS()
@@ -71,6 +72,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Enemy")
 	FLinearColor BodyColor = FLinearColor::White;
 
+	/** Body scale multiplier reached at the END of the wind-up (the Bloater's swell tell; 1 = none). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Enemy")
+	float TelegraphSwell = 1.f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Enemy")
 	bool bShowDebug = true;
 
@@ -91,6 +96,17 @@ public:
 	virtual void PerformAttack_Implementation();
 
 	/**
+	 * Server event at the START of a wind-up — the moment to lock targets and show attack-specific
+	 * telegraphs (e.g. the Brood-mother ringing its artillery zone via ShowTelegraphZone). Default: nothing.
+	 */
+	UFUNCTION(BlueprintNativeEvent, Category="Combat")
+	void OnTelegraphStarted();
+	virtual void OnTelegraphStarted_Implementation() {}
+
+	/** Cosmetic health hook (every machine): white hit-flash, then the base class death burst. */
+	virtual void NotifyHealthVisual(bool bDamaged, bool bDied) override;
+
+	/**
 	 * Begin a self-propelled dash (charge) along Direction (flattened) at Speed for Duration seconds. While
 	 * dashing the elite ignores normal approach/telegraph and slides smoothly; on first contact within
 	 * DashContactRange of the target it deals AttackDamage once. Archetypes trigger this from their attack
@@ -107,15 +123,46 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void ClearTransientState() override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual FLinearColor GetDeathBurstColor() const override { return BodyColor; }
 
 	/** Cheap visible body + hitscan target (Visibility-blocking), no skeletal mesh / AIController. */
 	UPROPERTY(VisibleAnywhere, Category="Enemy")
 	UStaticMeshComponent* Body;
 
+	// Telegraph ground rings (GDD §10 cue pass): a danger footprint plus a fill disc that reaches
+	// the edge exactly at impact. Driven cosmetically on every machine from replicated bTelegraphing.
+	UPROPERTY(VisibleAnywhere, Category="Enemy")
+	UStaticMeshComponent* TelegraphOutline;
+
+	UPROPERTY(VisibleAnywhere, Category="Enemy")
+	UStaticMeshComponent* TelegraphFill;
+
+	UPROPERTY()
+	UMaterialInstanceDynamic* BodyMID = nullptr;
+
+	UPROPERTY()
+	UMaterialInstanceDynamic* TelegraphFillMID = nullptr;
+
 	TWeakObjectPtr<APawn> Target;
 	float AttackCooldown = 0.f;
 	float TelegraphRemaining = 0.f;
+
+	/** Replicated so remote clients see the wind-up cues, not just the listen-server host. */
+	UPROPERTY(ReplicatedUsing=OnRep_Telegraphing)
 	bool bTelegraphing = false;
+
+	UFUNCTION()
+	void OnRep_Telegraphing();
+
+	/** Client-side wind-up progress (the server uses TelegraphRemaining; clients accumulate). */
+	float LocalTelegraphElapsed = 0.f;
+
+	/** World time before which the body flashes white (hit feedback). */
+	float FlashUntilSeconds = 0.f;
+
+	/** Per-frame, every machine: rings, body warning pulse, swell, hit flash. Stateless cosmetics. */
+	void UpdateCombatCosmetics(float DeltaSeconds);
 
 	// Dash (charge) state — see StartDash. Slides the actor over several frames instead of teleporting.
 	bool bDashing = false;

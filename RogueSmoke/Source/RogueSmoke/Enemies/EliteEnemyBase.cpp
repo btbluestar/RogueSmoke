@@ -3,6 +3,7 @@
 #include "Enemies/EliteEnemyBase.h"
 #include "Combat/HealthComponent.h"
 #include "Combat/CombatSubsystem.h"
+#include "VFX/TelegraphZoneFX.h"
 #include "Engine/World.h"
 
 AEliteEnemyBase::AEliteEnemyBase()
@@ -86,6 +87,17 @@ void AEliteEnemyBase::ApplyPull(const FVector& Target, float Strength, float Dur
 bool AEliteEnemyBase::IsBeingPulled() const
 {
 	return GetWorld() != nullptr && GetWorld()->GetTimeSeconds() < PullExpiresAtSeconds;
+}
+
+void AEliteEnemyBase::NotifyHealthVisual(bool bDamaged, bool bDied)
+{
+	// Death cue: a short expanding/fading disc at the feet, tinted per archetype — covers fodder,
+	// elites and the boss alike. Local-only (each machine fires its own from its health view), so
+	// it survives the pooled actor being hidden the same frame.
+	if (bDied)
+	{
+		ATelegraphZoneFX::SpawnLocalBurst(GetWorld(), GetActorLocation(), 150.f, GetDeathBurstColor());
+	}
 }
 
 void AEliteEnemyBase::ClearTransientState()

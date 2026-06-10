@@ -378,8 +378,9 @@ class ARaidPlayerController : APlayerController
             return;
         AHeroCharacter Hero = GetHero();
         FVector Center = Hero != nullptr ? Hero.GetActorLocation() : FVector();
+        int Live = Combat.CountEnemiesInSphere(Center, 1000000.0);
         float Dealt = Combat.ApplyRadialDamage(Center, 1000000.0, 999999.0, 1.0, Hero);
-        Print(f"[Debug] RaidKillElites — dealt {Dealt}", 3.0);
+        Print(f"[Debug] RaidKillElites — {Live} live, dealt {Dealt}", 3.0);
     }
 
     // --- Debug: weapon-upgrade seam smoke (WEAPON_UPGRADES_PLAN.md). Fires one synthetic upgraded
@@ -694,6 +695,31 @@ class ARaidPlayerController : APlayerController
         else
             Print(f"[Upgrade] {Upgrade.DisplayName}: NO ATTRIBUTE CHANGE (broken GE?)", 8.0);
         return Changed;
+    }
+
+    // --- Debug: ring a telegraph danger zone at the hero (the cue-pass ground ring, no damage).
+    // Eyeball the outline + fill timing in PIE; headlessly, grep the log for "[Telegraph] zone". ---
+    private int TelegraphSmokeRetries = 0;
+
+    UFUNCTION(Exec)
+    void TelegraphSmoke()
+    {
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
+        AHeroCharacter Hero = GetHero();
+        if (Combat == nullptr || Hero == nullptr)
+        {
+            // Boot-time friendliness: poll until the hero is embodied (works as -ExecCmds).
+            if (TelegraphSmokeRetries < 30)
+            {
+                TelegraphSmokeRetries++;
+                System::SetTimer(this, n"TelegraphSmoke", 1.0, false);
+                return;
+            }
+            Print("[Telegraph] host only, and needs a hero pawn", 5.0);
+            return;
+        }
+        Combat.ShowTelegraphZone(Hero.GetActorLocation(), 450.0, 2.0);
+        Print("[Telegraph] smoke zone requested (r=450, 2s)", 5.0);
     }
 
     // --- Replay: type `RaidRestart` in the ~ console to reload the current level (fresh run + seed) ----

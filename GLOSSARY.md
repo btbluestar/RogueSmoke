@@ -23,7 +23,10 @@
   abilities, read by payoff abilities for bonus effect. Time-limited.
 - **Density** — how tightly enemies are grouped; a *mechanic*, since it enables synergies.
 - **Telegraph** — a visible wind-up before an enemy attack lands; the player's counterplay window.
-  A hard readability requirement (GDD §10). Debug-drawn for now; Niagara/decal cues later.
+  A hard readability requirement (GDD §10). Shown as ground danger rings (an outline + a fill disc
+  that reaches the edge exactly at impact), a body warning pulse, and per-archetype swell
+  (`TelegraphSwell`); replicated to clients. Ground-target zones (boss artillery) ring via
+  `UCombatSubsystem::ShowTelegraphZone`. Niagara polish comes later; debug draw stays as dev overlay.
 
 ## Enemy roster (bio-horde, D-0017)
 

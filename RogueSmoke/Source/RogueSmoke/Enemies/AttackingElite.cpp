@@ -14,7 +14,18 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
+#include "Net/UnrealNetwork.h"
 #include "DrawDebugHelpers.h"
+
+namespace
+{
+	// Engine cylinder is radius 50: scale XY by R/50 for a world radius. Flattened to a thin disc.
+	constexpr float RingMeshRadius = 50.f;
+	constexpr float RingThickness = 0.02f;
+	// Danger-ring radius for single-target (AttackRadius == 0) attacks: "this enemy is striking".
+	constexpr float MeleeCueRadius = 140.f;
+	constexpr float HitFlashSeconds = 0.09f;
+}
 
 AAttackingElite::AAttackingElite()
 {
@@ -41,6 +52,33 @@ AAttackingElite::AAttackingElite()
 	Body->SetCollisionObjectType(ECC_WorldDynamic);
 	Body->SetCollisionResponseToAllChannels(ECR_Overlap);
 	Body->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+	// Telegraph ground rings: absolute scale (so per-archetype BodyScale doesn't squash the discs),
+	// no collision, hidden until a wind-up starts. Same mesh/material as TelegraphZoneFX.
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> RingMat(TEXT("/Game/VFX/M_TelegraphRing.M_TelegraphRing"));
+	const auto MakeRing = [&](const TCHAR* Name, float RelZ) -> UStaticMeshComponent*
+	{
+		UStaticMeshComponent* Ring = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+		Ring->SetupAttachment(Body);
+		Ring->SetUsingAbsoluteScale(true);
+		Ring->SetRelativeLocation(FVector(0.f, 0.f, RelZ));
+		Ring->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Ring->SetCastShadow(false);
+		Ring->SetVisibility(false);
+		Ring->SetMobility(EComponentMobility::Movable);
+		if (CylinderMesh.Succeeded())
+		{
+			Ring->SetStaticMesh(CylinderMesh.Object);
+		}
+		if (RingMat.Succeeded())
+		{
+			Ring->SetMaterial(0, RingMat.Object);
+		}
+		return Ring;
+	};
+	TelegraphOutline = MakeRing(TEXT("TelegraphOutline"), 1.f);
+	TelegraphFill = MakeRing(TEXT("TelegraphFill"), 2.f);
 }
 
 void AAttackingElite::ClearTransientState()
@@ -54,6 +92,26 @@ void AAttackingElite::ClearTransientState()
 	bDashing = false;
 	DashTimeRemaining = 0.f;
 	bDashHitApplied = false;
+
+	// Cosmetics back to baseline so a pooled recycle doesn't wake up mid-flash/swell.
+	LocalTelegraphElapsed = 0.f;
+	FlashUntilSeconds = 0.f;
+	if (Body != nullptr)
+	{
+		Body->SetRelativeScale3D(BodyScale);
+	}
+	if (BodyMID != nullptr)
+	{
+		BodyMID->SetVectorParameterValue(FName(TEXT("Color")), BodyColor);
+	}
+	if (TelegraphOutline != nullptr)
+	{
+		TelegraphOutline->SetVisibility(false);
+	}
+	if (TelegraphFill != nullptr)
+	{
+		TelegraphFill->SetVisibility(false);
+	}
 }
 
 void AAttackingElite::BeginPlay()
@@ -64,9 +122,23 @@ void AAttackingElite::BeginPlay()
 
 	// Per-archetype tint via a dynamic instance of BasicShapeMaterial (it exposes a "Color" param), so
 	// Carapace/Spitter/Bloater/Lunger/boss read differently at a glance even as placeholder cubes.
-	if (UMaterialInstanceDynamic* DynMat = Body->CreateDynamicMaterialInstance(0))
+	// Kept as a member: the cue pass repaints it per-frame (warning pulse / hit flash / baseline).
+	BodyMID = Body->CreateDynamicMaterialInstance(0);
+	if (BodyMID != nullptr)
 	{
-		DynMat->SetVectorParameterValue(FName(TEXT("Color")), BodyColor);
+		BodyMID->SetVectorParameterValue(FName(TEXT("Color")), BodyColor);
+	}
+
+	// Ring tints: shared warning orange outline; the fill MID also drives an opacity ramp.
+	if (UMaterialInstanceDynamic* OutlineMID = TelegraphOutline->CreateDynamicMaterialInstance(0))
+	{
+		OutlineMID->SetVectorParameterValue(FName(TEXT("Color")), FLinearColor(1.f, 0.35f, 0.05f));
+		OutlineMID->SetScalarParameterValue(FName(TEXT("Opacity")), 0.18f);
+	}
+	TelegraphFillMID = TelegraphFill->CreateDynamicMaterialInstance(0);
+	if (TelegraphFillMID != nullptr)
+	{
+		TelegraphFillMID->SetVectorParameterValue(FName(TEXT("Color")), FLinearColor(1.f, 0.08f, 0.03f));
 	}
 
 	if (MaxHealthOverride > 0.f && Health != nullptr)
@@ -83,6 +155,7 @@ void AAttackingElite::Tick(float DeltaSeconds)
 	{
 		DrawEnemyDebug();
 	}
+	UpdateCombatCosmetics(DeltaSeconds); // every machine — replicated bTelegraphing drives the cues
 	if (!HasAuthority() || GetWorld() == nullptr)
 	{
 		return;
@@ -137,12 +210,98 @@ void AAttackingElite::Tick(float DeltaSeconds)
 		{
 			bTelegraphing = true;
 			TelegraphRemaining = TelegraphSeconds;
+			OnTelegraphStarted(); // subclass hook: lock targets / ring attack-specific zones
 		}
 	}
 	else
 	{
 		ApproachTarget(DeltaSeconds);
 	}
+}
+
+void AAttackingElite::OnRep_Telegraphing()
+{
+	// Fresh wind-up on this client: restart the local progress clock the cosmetics animate from.
+	LocalTelegraphElapsed = 0.f;
+}
+
+void AAttackingElite::NotifyHealthVisual(bool bDamaged, bool bDied)
+{
+	Super::NotifyHealthVisual(bDamaged, bDied); // death burst
+	if (bDamaged && GetWorld() != nullptr)
+	{
+		FlashUntilSeconds = GetWorld()->GetTimeSeconds() + HitFlashSeconds;
+	}
+}
+
+void AAttackingElite::UpdateCombatCosmetics(float DeltaSeconds)
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr || Body == nullptr)
+	{
+		return;
+	}
+	const float Now = World->GetTimeSeconds();
+
+	// Wind-up progress 0->1: the server reads its countdown, clients accumulate from the OnRep.
+	float Progress = 0.f;
+	if (bTelegraphing && TelegraphSeconds > 0.f)
+	{
+		if (HasAuthority())
+		{
+			Progress = FMath::Clamp(1.f - TelegraphRemaining / TelegraphSeconds, 0.f, 1.f);
+		}
+		else
+		{
+			LocalTelegraphElapsed += DeltaSeconds;
+			Progress = FMath::Clamp(LocalTelegraphElapsed / TelegraphSeconds, 0.f, 1.f);
+		}
+	}
+
+	// Ground rings: danger footprint + a fill that touches the edge exactly at impact (the dodge
+	// timer). Single-target attacks get a small "striking" disc instead of an AoE footprint.
+	if (TelegraphOutline != nullptr && TelegraphFill != nullptr)
+	{
+		TelegraphOutline->SetVisibility(bTelegraphing);
+		TelegraphFill->SetVisibility(bTelegraphing);
+		if (bTelegraphing)
+		{
+			const float DangerRadius = AttackRadius > 0.f ? AttackRadius : MeleeCueRadius;
+			const float OuterScale = DangerRadius / RingMeshRadius;
+			TelegraphOutline->SetWorldScale3D(FVector(OuterScale, OuterScale, RingThickness));
+			TelegraphFill->SetWorldScale3D(FVector(OuterScale * Progress, OuterScale * Progress, RingThickness));
+			if (TelegraphFillMID != nullptr)
+			{
+				TelegraphFillMID->SetScalarParameterValue(FName(TEXT("Opacity")), 0.22f + 0.18f * Progress);
+			}
+		}
+	}
+
+	// Body color: hit flash beats the warning pulse beats the archetype baseline.
+	if (BodyMID != nullptr)
+	{
+		FLinearColor BodyTint = BodyColor;
+		if (Now < FlashUntilSeconds)
+		{
+			BodyTint = FLinearColor::White;
+		}
+		else if (bTelegraphing)
+		{
+			const float Pulse = 0.5f + 0.5f * FMath::Sin(Now * 14.f);
+			BodyTint = FMath::Lerp(BodyColor, FLinearColor(1.f, 0.85f, 0.1f), 0.35f + 0.45f * Pulse);
+		}
+		BodyMID->SetVectorParameterValue(FName(TEXT("Color")), BodyTint);
+	}
+
+	// Swell tell (the Bloater): grow toward TelegraphSwell across the wind-up, snap back after.
+	const float Swell = bTelegraphing ? FMath::Lerp(1.f, FMath::Max(TelegraphSwell, 1.f), Progress) : 1.f;
+	Body->SetRelativeScale3D(BodyScale * Swell);
+}
+
+void AAttackingElite::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AAttackingElite, bTelegraphing);
 }
 
 void AAttackingElite::StartDash(FVector Direction, float Speed, float Duration)

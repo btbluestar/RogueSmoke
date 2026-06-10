@@ -35,6 +35,25 @@ class ABroodMother : AAttackingElite
     // Cycles 0 -> 1 -> 2 across attacks so the boss reads as a rotation, not a spam.
     private int AttackPhase = 0;
 
+    // Artillery impact point, LOCKED when the wind-up starts (not the target's position at impact) —
+    // the dodge is real: the danger ring shows where the blast will land, and moving out clears it.
+    private FVector ArtilleryTarget;
+    private bool bArtilleryLocked = false;
+
+    UFUNCTION(BlueprintOverride)
+    void OnTelegraphStarted()
+    {
+        if (AttackPhase != 2)
+            return;
+        APawn Hero = GetCurrentTarget();
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
+        if (Hero == nullptr || Combat == nullptr)
+            return;
+        ArtilleryTarget = Hero.GetActorLocation();
+        bArtilleryLocked = true;
+        Combat.ShowTelegraphZone(ArtilleryTarget, ArtilleryRadius, TelegraphSeconds);
+    }
+
     UFUNCTION(BlueprintOverride)
     void PerformAttack()
     {
@@ -53,9 +72,15 @@ class ABroodMother : AAttackingElite
         }
         else if (AttackPhase == 2)
         {
-            // Artillery: blast the target's CURRENT spot, so moving during the wind-up avoids it.
-            if (Combat != nullptr && Hero != nullptr)
-                Combat.ApplyRadialDamageToPlayers(Hero.GetActorLocation(), ArtilleryRadius, ArtilleryDamage, this);
+            // Artillery: blast the spot LOCKED at wind-up start (the ringed zone). Standing in the
+            // ring when the fill reaches the edge = hit; stepping out during the wind-up = dodge.
+            if (Combat != nullptr)
+            {
+                FVector Impact = bArtilleryLocked ? ArtilleryTarget
+                    : (Hero != nullptr ? Hero.GetActorLocation() : GetActorLocation());
+                Combat.ApplyRadialDamageToPlayers(Impact, ArtilleryRadius, ArtilleryDamage, this);
+            }
+            bArtilleryLocked = false;
         }
         else
         {

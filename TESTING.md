@@ -69,7 +69,10 @@ up to 30s so they survive firing before the hero spawns):
 - `UpgradeSmoke` — applies every pool upgrade, asserts each GE moves an attribute
   (`[UpgradeSmoke] RESULT n/n`); `WeaponSmoke` — fires one synthetic pierce+chain+DoT shot
   and re-reads the victim 2s later.
-- `RaidDebugCam`, `RaidKillElites`, `RaidRestart`, `RaidWin` / `RaidLose`, `RaidResults`, `RaidPause`.
+- `TelegraphSmoke` — rings a telegraph danger zone at the hero (cue-pass visual, no damage);
+  headlessly, grep the log for `[Telegraph] zone`.
+- `RaidDebugCam`, `RaidKillElites` (prints live count + total dealt), `RaidRestart`,
+  `RaidWin` / `RaidLose`, `RaidResults`, `RaidPause`.
 
 **Harnesses** (in `Tools/`):
 - `SmokeTest.ps1` — boots every level above, asserts spawn breadcrumbs + no fatals (PASS/FAIL table).
