@@ -116,6 +116,7 @@ class AHeroCharacter : ARogueHeroBase
         {
             bWantsToFire = false;
             CharacterMovement.StopMovementImmediately();
+            Locomotion.ResetAirState();
         }
     }
 
@@ -228,7 +229,33 @@ class AHeroCharacter : ARogueHeroBase
     // Jump/double-jump is natively client-predicted by ACharacter (saved moves), so no Server_ mirror
     // is needed; JumpMaxCount (set by the locomotion component) gates the second jump.
     UFUNCTION(BlueprintCallable)
-    void DoJump() { if (!IsIncapacitated()) Jump(); }
+    void DoJump()
+    {
+        if (IsIncapacitated())
+            return;
+        // Slide-hop: jumping out of a slide keeps 100% of horizontal velocity (D-0015 rework).
+        if (Locomotion.IsSliding())
+            Locomotion.NotifySlideJump();
+        // Auto-stand like Apex/Deadlock: stock CanJump refuses while crouched, and UnCrouch
+        // is a no-op when already standing. Landing re-entry keys off the held crouch input.
+        UnCrouch();
+        Jump();
+    }
+
+    // Fires on the predicted client and the server; idempotent (sets the second jump's Z).
+    UFUNCTION(BlueprintOverride)
+    void OnJumped()
+    {
+        Locomotion.NotifyJumped(JumpCurrentCount);
+    }
+
+    // Fires on the server and the owning client. Slide re-entry + camera/anim get the fall speed.
+    UFUNCTION(BlueprintOverride)
+    void OnLanded(FHitResult Hit)
+    {
+        float FallSpeed = Math::Abs(CharacterMovement.Velocity.Z);
+        Locomotion.NotifyLanded(FallSpeed);
+    }
 
     UFUNCTION(BlueprintCallable)
     void DoStopJump() { StopJumping(); }
