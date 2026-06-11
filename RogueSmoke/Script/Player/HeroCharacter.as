@@ -212,6 +212,7 @@ class AHeroCharacter : ARogueHeroBase
 
     // Owner + server: the facing logic needs the held-fire intent on both machines.
     void SetFireHeldForFacing(bool bHeld) { bFireHeldForFacing = bHeld; }
+    bool IsFireHeldForFacing() const { return bFireHeldForFacing; }
 
     // Server: write the held-fire flag through the stop-edge detector — a held->released
     // transition rings the gun tail out on all machines (full-auto fatigue fix).

@@ -41,10 +41,12 @@ class URogueHeroAnimInstance : UAnimInstance
     bool bIsSprinting = false;
 
     // --- Aim (upper body) ---
-    UPROPERTY(BlueprintReadOnly, Category = "Aim")
+    // BlueprintReadWrite: the Lyra ABP's UpdateAimingData node WRITES AimPitch/AimYaw per-frame
+    // inside its own anim instance; v1 ABP only read them. Changing to ReadWrite is backward-compatible.
+    UPROPERTY(BlueprintReadWrite, Category = "Aim")
     float AimPitch = 0.0;
 
-    UPROPERTY(BlueprintReadOnly, Category = "Aim")
+    UPROPERTY(BlueprintReadWrite, Category = "Aim")
     float AimYaw = 0.0;
 
     UPROPERTY(BlueprintReadOnly, Category = "Aim")
@@ -53,6 +55,27 @@ class URogueHeroAnimInstance : UAnimInstance
     // --- Landing recovery (additive alpha, decays after touchdown scaled by fall speed) ---
     UPROPERTY(BlueprintReadOnly, Category = "Landing")
     float LandRecoveryAlpha = 0.0;
+
+    // --- Lyra ABP_Mannequin_Base surface (D-0022 migration). The copied graph property-binds
+    // these by name; GameplayTag_* replace Lyra's GameplayTagPropertyMap (we fill them from
+    // replicated state so simulated proxies work too). ---
+    UPROPERTY(BlueprintReadOnly, Category = "Lyra")
+    float GroundDistance = -1.0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Lyra")
+    bool GameplayTag_IsFiring = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Lyra")
+    bool GameplayTag_IsReloading = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Lyra")
+    bool GameplayTag_IsADS = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Lyra")
+    bool GameplayTag_IsDashing = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Lyra")
+    bool GameplayTag_IsMelee = false;
 
     // Authored root SPEED of the jog row: root displacement / clip length (955 cm over 1.533 s).
     // The walk row is 304 cm/s. Don't confuse displacement with speed — that bug shipped once.
@@ -104,6 +127,28 @@ class URogueHeroAnimInstance : UAnimInstance
         AimPitch = Math::Clamp(NormalizeAngle(AimRot.Pitch - ActorRot.Pitch), -90.0, 90.0);
         AimYaw = Math::Clamp(NormalizeAngle(AimRot.Yaw - ActorRot.Yaw), -90.0, 90.0);
         AimOffsetAlpha = Hero.IsIncapacitated() ? 0.0 : 1.0;
+
+        // Lyra surface: ground distance feeds distance-matched landing (trace only while airborne).
+        if (bIsFalling)
+        {
+            FVector TraceStart = Hero.GetActorLocation();
+            FVector TraceEnd = TraceStart - FVector(0.0, 0.0, 2000.0);
+            FHitResult GroundHit;
+            TArray<AActor> IgnoredActors;
+            IgnoredActors.Add(Hero);
+            if (System::LineTraceSingle(TraceStart, TraceEnd, ETraceTypeQuery::Visibility, false,
+                                        IgnoredActors, EDrawDebugTrace::None, GroundHit, true))
+                GroundDistance = GroundHit.Distance - Hero.CapsuleComponent.CapsuleHalfHeight;
+            else
+                GroundDistance = 2000.0;
+        }
+        else
+            GroundDistance = 0.0;
+
+        GameplayTag_IsFiring = Hero.IsFireHeldForFacing();
+        GameplayTag_IsADS = Hero.bFocusing;
+        GameplayTag_IsDashing = bIsSliding;
+        // IsReloading / IsMelee stay false until those states exist.
 
         // Self-contained landing detection (works on sim proxies, no event needed): falling last
         // frame + grounded now = landed; alpha scales with how hard we hit relative to the
