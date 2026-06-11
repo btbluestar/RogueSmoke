@@ -101,6 +101,16 @@ class AHeroCharacter : ARogueHeroBase
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Facing")
     float IdleAlignYawRate = 540.0;        // deg/s catch-up turn speed
 
+    // Lyra linked-layer (D-0022): the per-weapon anim overlay linked onto the base ABP at spawn.
+    // Swapping weapons later = LinkAnimClassLayers with a different layer class; data, not graph work.
+    UPROPERTY(EditDefaultsOnly, Category = "Animation")
+    TSubclassOf<UAnimInstance> WeaponAnimLayer;
+
+    // v1 actor-level idle free-look. OFF under the Lyra stack: RootYawOffset + authored
+    // turn-in-place owns feet-planted idle now. Flip back on only to A/B the v1 ABP.
+    UPROPERTY(EditDefaultsOnly, Category = "Animation")
+    bool bActorLevelFreeLook = false;
+
     // Owner+server mirror of held-fire intent: bWantsToFire is server-only, but facing must
     // agree on the predicting owner too or the body snaps on correction.
     private bool bFireHeldForFacing = false;
@@ -283,6 +293,10 @@ class AHeroCharacter : ARogueHeroBase
             EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, false);
         if (DefaultWeapon != nullptr && DefaultWeapon.WeaponMesh != nullptr)
             WeaponMesh.SetSkeletalMeshAsset(DefaultWeapon.WeaponMesh);
+
+        // Lyra linked-layer: overlay the held weapon's anim set onto the base locomotion graph.
+        if (WeaponAnimLayer.IsValid())
+            Mesh.LinkAnimClassLayers(WeaponAnimLayer);
     }
 
     // True bullet origin for third-person convergence: the weapon muzzle socket when the mesh + socket
@@ -489,6 +503,14 @@ class AHeroCharacter : ARogueHeroBase
     // both sides compute from the same inputs so corrections stay negligible.
     private void TickFacing(float DeltaSeconds)
     {
+        if (!bActorLevelFreeLook)
+        {
+            // Lyra stack owns idle facing; keep the classic hard camera-yaw lock.
+            if (!bUseControllerRotationYaw)
+                bUseControllerRotationYaw = true;
+            return;
+        }
+
         if (Controller == nullptr)
             return;
 
