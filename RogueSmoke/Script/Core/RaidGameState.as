@@ -53,7 +53,17 @@ class ARaidGameState : AGameStateBase
     float TeamXP = 0.0;
 
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Run")
-    float XPToNextLevel = 100.0;
+    float XPToNextLevel = 50.0;
+
+    // --- Loop v2 (D-0019): pick-flow state the card screen renders. Server-written. ---
+
+    // Display names of players who still owe a pick while the raid is pick-paused.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Run")
+    TArray<FString> AwaitingPickNames;
+
+    // Squad-shared reroll budget (any player may spend one on their own hand).
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Run")
+    int SquadRerollsRemaining = 1;
 
     // Lobby launch countdown: 0 until the host hits START RAID, then the world time the travel
     // fires at. Replicated so every lobby UI shows the same "Launching in N..." count.

@@ -407,27 +407,16 @@ class AHeroCharacter : ARogueHeroBase
         }
     }
 
-    // Apply a chosen upgrade server-side: the upgrade's GameplayEffect is applied to the player ASC,
-    // modifying attributes authoritatively. Called by UpgradeSelectWidget on the owning client. D-0010.
+    // Apply a chosen upgrade server-side. The GameMode validates the card against the player's
+    // offered hand (client intent never trusted), applies the GE, and resumes the raid when
+    // everyone has picked. D-0010 / D-0019.
     UFUNCTION(Server)
     void Server_ApplyUpgrade(URogueUpgradeDef Upgrade)
     {
-        if (Upgrade == nullptr || Upgrade.Effect.Get() == nullptr)
-            return;
-
-        UAngelscriptAbilitySystemComponent ASC = GetRogueAbilitySystem();
-        if (ASC != nullptr)
-            ASC.ApplyGameplayEffectToTarget(Upgrade.Effect, ASC, 1.0, FGameplayEffectContextHandle());
-
-        // Stat credit (results screen "Upgrades" row). Server-side: this is a Server RPC.
-        ARoguePlayerState PS = Cast<ARoguePlayerState>(PlayerState);
-        if (PS != nullptr)
-            PS.AddUpgradeTaken();
-
-        // Pick bookkeeping: the GameMode resumes the pick-paused raid once everyone has chosen.
         ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
-        if (GameMode != nullptr)
-            GameMode.NotifyUpgradePicked();
+        ARaidPlayerController PC = Cast<ARaidPlayerController>(GetController());
+        if (GameMode != nullptr && PC != nullptr)
+            GameMode.ApplyUpgradeFor(PC, Upgrade);
     }
 
     // Route a remote client's "call extraction" through a player-owned RPC (clients can't
