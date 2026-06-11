@@ -191,6 +191,13 @@ class ARaidGameMode : AGameModeBase
     UPROPERTY(EditDefaultsOnly, Category = "Upgrades|XP")
     float XPGrowthPerLevel = 35.0;
 
+    // --- v3 death-path evolutions (D-0020): Toxic Burst cloud + Iron Bulwark shield. ---
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrades|Evolutions")
+    float PoisonBurstRadius = 350.0;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrades|Evolutions")
+    float PoisonBurstDuration = 6.0;
+
     // Resume safety: if someone never picks (disconnect / AFK), unpause anyway after this long.
     UPROPERTY(EditDefaultsOnly, Category = "Upgrades")
     float OfferPauseTimeoutSeconds = 30.0;
@@ -291,6 +298,14 @@ class ARaidGameMode : AGameModeBase
         if (Def.MaxStacks > 0 && GetStackCount(ForPlayer, Def) >= Def.MaxStacks)
             return false;
 
+        // Hero-gated cards (taunt/barrage tracks) never appear in the wrong hero's hand.
+        if (Def.RequiredHeroClass.Get() != nullptr)
+        {
+            APawn HeroPawn = ForPlayer != nullptr ? ForPlayer.GetPawn() : nullptr;
+            if (HeroPawn == nullptr || !HeroPawn.IsA(Def.RequiredHeroClass.Get()))
+                return false;
+        }
+
         if (Def.bPrereqSelf)
         {
             if (Def.PrereqA != nullptr && GetStackCount(ForPlayer, Def.PrereqA) < Def.PrereqAStacks)
@@ -337,6 +352,27 @@ class ARaidGameMode : AGameModeBase
         ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
         if (GS == nullptr || GS.Phase != ERunPhase::InProgress)
             return;     // no XP once the run has resolved (or before it starts)
+
+        // v3 behavior evolutions read the corpse's pre-recycle state — OnEnemyKilled fires
+        // before Deactivate/ResetHealth (SpawnDirector::HandleEliteDeath), so DoT/Clustered
+        // flags are still live here.
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
+        if (Combat != nullptr)
+        {
+            float BurstDps = GetSquadAttribute(n"PoisonBurstDps");
+            if (BurstDps > 0.0 && Enemy.Health != nullptr
+                && Enemy.Health.HasActiveDot(ERogueDotType::Poison))
+            {
+                int Spread = Combat.ApplyDotInSphere(Enemy.GetActorLocation(), PoisonBurstRadius,
+                    ERogueDotType::Poison, BurstDps, PoisonBurstDuration, nullptr);
+                if (Spread > 0)
+                    Print(f"[Evo] toxic burst -> {Spread} enemies", 2.0);
+            }
+
+            float ShieldAmount = GetSquadAttribute(n"ClusterKillShieldAmount");
+            if (ShieldAmount > 0.0 && Enemy.IsClustered())
+                Combat.GrantShieldToSquad(ShieldAmount);
+        }
 
         if (Enemy.XPValue > 0.0)
             AddTeamXP(Enemy.XPValue);
@@ -595,6 +631,25 @@ class ARaidGameMode : AGameModeBase
                 return i;
         }
         return 0;
+    }
+
+    // Highest value across hero ASCs. Evolution GEs are bApplyToSquad, so any living hero
+    // carries the value; max() behaves sanely if a hero spawned after the pick. ~2 heroes,
+    // so the GetAllActorsOfClass per kill is cheap; cache if fodder rates ever make it hot.
+    private float GetSquadAttribute(FName AttrName) const
+    {
+        float Best = 0.0;
+        TArray<AHeroCharacter> Heroes;
+        GetAllActorsOfClass(Heroes);
+        for (AHeroCharacter Hero : Heroes)
+        {
+            if (Hero == nullptr)
+                continue;
+            UAngelscriptAbilitySystemComponent ASC = Hero.GetRogueAbilitySystem();
+            if (ASC != nullptr)
+                Best = Math::Max(Best, ASC.GetAttributeCurrentValue(URogueCombatSet, AttrName, 0.0));
+        }
+        return Best;
     }
 
     // Per-player roll: guaranteed milestone slots, then the weighted roll over eligible cards,

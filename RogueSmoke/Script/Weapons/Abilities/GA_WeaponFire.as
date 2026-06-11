@@ -69,6 +69,8 @@ class UGA_WeaponFire : UGA_RogueAbility
         Shot.ChainCount = int(GetCombatAttribute(n"ChainCount"));
         Shot.BurnChance = GetCombatAttribute(n"BurnChance");
         Shot.PoisonChance = GetCombatAttribute(n"PoisonChance");
+        Shot.ChainIgniteFraction = GetCombatAttribute(n"ChainIgniteFraction");
+        Shot.ClusterChainBonusArcs = int(GetCombatAttribute(n"ClusterChainBonusArcs"));
 
         TArray<FVector> Impacts;
         bool bHitEnemy = false;

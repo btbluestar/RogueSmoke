@@ -32,6 +32,11 @@ class URogueUpgradeDef : UPrimaryDataAsset
     UPROPERTY(EditDefaultsOnly, Category = "Upgrade")
     bool bSynergyUpgrade = false;
 
+    // Only offer to players piloting this hero class (null = any hero). Checked in
+    // ARaidGameMode::IsEligible; a dead/missing pawn counts as ineligible (safe default).
+    UPROPERTY(EditDefaultsOnly, Category = "Upgrade")
+    TSubclassOf<APawn> RequiredHeroClass;
+
     // The effect applied when the player picks this upgrade. Infinite-duration; modifies attributes.
     UPROPERTY(EditDefaultsOnly, Category = "Upgrade")
     TSubclassOf<UGameplayEffect> Effect;

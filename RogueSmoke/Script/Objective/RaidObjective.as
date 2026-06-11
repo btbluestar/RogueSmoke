@@ -82,7 +82,7 @@ class ARaidObjective : AActor
     float FodderEscalationPerWave = 0.5;
 
     UPROPERTY(EditAnywhere, Category = "Raid|Fodder Waves")
-    int FodderMaxPerWave = 20;
+    int FodderMaxPerWave = 32;
 
     // How far from the targeted player a wave's ring is centered.
     UPROPERTY(EditAnywhere, Category = "Raid|Fodder Waves")
@@ -91,6 +91,33 @@ class ARaidObjective : AActor
     // Soft cap: skip a wave while this many enemies (elites + fodder) are already alive.
     UPROPERTY(EditAnywhere, Category = "Raid|Fodder Waves")
     int MaxConcurrentEnemies = 60;
+
+    // --- v3 wave director (D-0020): pressure scales with team level + squad size. ---
+    UPROPERTY(EditAnywhere, Category = "Raid|Director")
+    float FodderPerTeamLevel = 0.8;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Director")
+    float WaveIntervalReductionPerLevel = 0.35;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Director")
+    float MinWaveInterval = 3.5;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Director")
+    int EliteInjectStartLevel = 4;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Director")
+    int EliteInjectFastLevel = 8;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Director")
+    float PlayerCountWaveScale = 0.5;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Director")
+    int MaxConcurrentPerExtraPlayer = 5;
+
+    // Injected wave elites rotate through this roster (defaulted in BeginPlay). They are
+    // pressure, NOT clear-gates: SetCountsAsObjectiveTarget(false) at spawn.
+    UPROPERTY(EditAnywhere, Category = "Raid|Director")
+    TArray<TSubclassOf<AEliteEnemyBase>> InjectRoster;
 
     UPROPERTY(EditAnywhere, Category = "Debug")
     bool bShowDebug = true;
@@ -128,6 +155,11 @@ class ARaidObjective : AActor
         }
         if (BossClass.Get() == nullptr)
             BossClass = ABroodMother;
+        if (InjectRoster.Num() == 0)
+        {
+            InjectRoster.Add(ASpitter);
+            InjectRoster.Add(ALunger);
+        }
     }
 
     UFUNCTION(BlueprintOverride)
@@ -157,28 +189,76 @@ class ARaidObjective : AActor
         }
     }
 
-    // Spawn a deterministic fodder wave every FodderWaveInterval, soft-capped by live enemy count.
+    // Spawn a director-planned fodder wave; the plan scales with team level, wave index, and
+    // squad size (RaidWaveDirector.as), soft-capped by live enemy count.
     private void TickFodderWaves(float DeltaSeconds)
     {
         if (!bSpawnFodderWaves || Elapsed < StartGraceSeconds)
             return;
 
+        int TeamLevel = GetTeamLevel();
+        int NumPlayers = GetNumPlayers();
+        FWavePlan Plan = RaidDirector::ComputeWavePlan(TeamLevel, WaveIndex, NumPlayers, MakeTunables());
+
         WaveTimer += DeltaSeconds;
-        if (WaveTimer < FodderWaveInterval)
+        if (WaveTimer < Plan.Interval)
             return;
         WaveTimer = 0.0;
 
+        int ConcurrentCap = MaxConcurrentEnemies + MaxConcurrentPerExtraPlayer * Math::Max(NumPlayers - 1, 0);
         UCombatSubsystem Combat = UCombatSubsystem::Get();
-        if (Combat != nullptr && Combat.CountEnemiesInSphere(GetActorLocation(), 1000000.0) >= MaxConcurrentEnemies)
+        if (Combat != nullptr && Combat.CountEnemiesInSphere(GetActorLocation(), 1000000.0) >= ConcurrentCap)
             return;     // already enough on the field
 
         USpawnDirector Director = USpawnDirector::Get();
         if (Director == nullptr)
             return;
 
-        int WaveCount = Math::Min(FodderPerWave + int(WaveIndex * FodderEscalationPerWave), FodderMaxPerWave);
-        Director.SpawnFodderWave(PickWaveCenter(WaveIndex), 300.0, WaveCount);
+        FVector Center = PickWaveCenter(WaveIndex);
+        Director.SpawnFodderWave(Center, 300.0, Plan.FodderCount);
+
+        if (Plan.EliteInjectIndex >= 0 && InjectRoster.Num() > 0)
+        {
+            TSubclassOf<AEliteEnemyBase> Cls = InjectRoster[Plan.EliteInjectIndex % InjectRoster.Num()];
+            if (Cls.Get() != nullptr)
+            {
+                AEliteEnemyBase Injected = Director.SpawnElite(Cls, Center + FVector(0.0, 0.0, 40.0), FRotator());
+                if (Injected != nullptr)
+                {
+                    Injected.SetCountsAsObjectiveTarget(false);   // pressure, not a clear-gate
+                    Print(f"[Director] wave {WaveIndex}: injected elite (L{TeamLevel})", 3.0);
+                }
+            }
+        }
         WaveIndex += 1;
+    }
+
+    private FDirectorTunables MakeTunables() const
+    {
+        FDirectorTunables T;
+        T.BaseInterval = FodderWaveInterval;
+        T.BasePerWave = FodderPerWave;
+        T.EscalationPerWave = FodderEscalationPerWave;
+        T.MaxPerWave = FodderMaxPerWave;
+        T.FodderPerTeamLevel = FodderPerTeamLevel;
+        T.IntervalReductionPerLevel = WaveIntervalReductionPerLevel;
+        T.MinInterval = MinWaveInterval;
+        T.EliteInjectStartLevel = EliteInjectStartLevel;
+        T.EliteInjectFastLevel = EliteInjectFastLevel;
+        T.PlayerCountWaveScale = PlayerCountWaveScale;
+        return T;
+    }
+
+    private int GetTeamLevel() const
+    {
+        ARaidGameState GameState = Cast<ARaidGameState>(Gameplay::GetGameState());
+        return GameState != nullptr ? GameState.TeamLevel : 1;
+    }
+
+    private int GetNumPlayers() const
+    {
+        ARaidGameState GameState = Cast<ARaidGameState>(Gameplay::GetGameState());
+        return GameState != nullptr ? Math::Max(GameState.PlayerArray.Num(), 1) : 1;
     }
 
     // Deterministic per-seed wave center: a player (cycled by wave index), offset by a seeded
@@ -229,7 +309,9 @@ class ARaidObjective : AActor
 
         if (BossClass.Get() != nullptr)
         {
-            Director.SpawnElite(BossClass, Center, FRotator());
+            AEliteEnemyBase Boss = Director.SpawnElite(BossClass, Center, FRotator());
+            if (Boss != nullptr)
+                Boss.SetCountsAsObjectiveTarget(true);
             bBoss = true;
         }
 
@@ -243,7 +325,9 @@ class ARaidObjective : AActor
                     continue;
                 float Angle = (2.0 * 3.14159265 * i) / InitialEliteCount;
                 FVector Offset = FVector(Math::Cos(Angle), Math::Sin(Angle), 0.0) * EliteSpawnRadius;
-                Director.SpawnElite(Cls, Center + Offset, FRotator());
+                AEliteEnemyBase Ring = Director.SpawnElite(Cls, Center + Offset, FRotator());
+                if (Ring != nullptr)
+                    Ring.SetCountsAsObjectiveTarget(true);
                 Spawned += 1;
             }
         }
