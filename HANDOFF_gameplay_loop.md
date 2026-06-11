@@ -1,5 +1,8 @@
 # Handoff — gameplay loop playable + debug (2026-06-10)
 
+> 📦 **Historical handoff** — the play-through TL;DR below is still the quickest "how do I play
+> it" guide, but the upgrade flow described predates the level/chest loop (D-0018–20).
+
 Made the raid run loop complete and built a playable level for it. **Everything is committed on
 `main` and compiles/builds clean** (`as-helper run_code_test` exit 0), and the level was **boot-verified
 headless** (`-game -nullrhi`): the run starts and the objective spawns the roster with no fatals.

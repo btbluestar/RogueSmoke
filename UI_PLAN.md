@@ -1,5 +1,9 @@
 # UI Suite Plan — main menu, hero select, upgrades, results (2026-06-10)
 
+> ✅ **Executed.** The suite shipped and was then refactored onto CommonUI layer stacks
+> (D-0016; results in `HANDOFF_ui_suite.md`). Historical plan — kept for the research and
+> rationale; don't implement from it.
+
 Plan for the full UI pass, per asset. Grounded in (a) genre research — Risk of Rain 2, Gunfire
 Reborn, Hades, Deep Rock Galactic, Helldivers 2 — and (b) a codebase audit of what already
 exists. Tasks #50–#54.

@@ -218,8 +218,9 @@ Format per entry: ID, date, status, the decision, the reasoning, and consequence
     `UCharacterMovementComponent` subclass with a `MOVE_Custom` slide mode + `FSavedMove` prediction
     (the "real" Apex/Deadlock approach) — isolated to C++, no AngelScript API change.
   - **Deferred:** wall-run/mantle; a dedicated slide animation pose (needs a cross-skeleton retarget
-    of a slide clip onto `SK_Mannequin` + a Slide state in `ABP_TP_Rifle` — see animation-pass notes);
-    a live `MoveSpeed` attribute-changed callback (base speed is currently seeded once on possession).
+    of a slide clip onto `SK_Mannequin` + a Slide state in `ABP_TP_Rifle` — see animation-pass notes).
+    ~~A live `MoveSpeed` attribute-changed callback~~ — since wired (`HeroCharacter.OnMoveSpeedChanged`),
+    so MoveSpeed GEs (Swift) take effect live.
 
 ### Animation pass (aim offset) — fix
 - **Aim offset now driven:** `ABP_TP_Rifle` computed `PitchN` (= sin of aim pitch, −1..1) every frame

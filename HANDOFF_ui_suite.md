@@ -1,5 +1,8 @@
 # Handoff — full UI suite (2026-06-10)
 
+> 📦 **Historical handoff** — accurate for its date; later work (the D-0018–20 upgrade screens,
+> input-config fixes) lives in `DECISIONS.md` and the `Script/UI/` file headers.
+
 > **Update (same day): CommonUI compliance refactor (commit `6c42a18`).** The suite now follows
 > canonical Common UI practice: `CommonGameViewportClient` is the viewport class (input routing
 > actually runs), `URogueUILayout` is a per-player root with **Game / GameMenu / Menu layer
