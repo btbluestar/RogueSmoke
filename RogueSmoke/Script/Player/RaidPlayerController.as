@@ -683,6 +683,17 @@ class ARaidPlayerController : APlayerController
         OutNames.Add(n"PoisonChance");        OutIsHealthSet.Add(false);
         OutNames.Add(n"MagazineBonus");       OutIsHealthSet.Add(false);
         OutNames.Add(n"ReloadSpeedBonus");    OutIsHealthSet.Add(false);
+        OutNames.Add(n"ChainIgniteFraction");      OutIsHealthSet.Add(false);
+        OutNames.Add(n"ClusterChainBonusArcs");    OutIsHealthSet.Add(false);
+        OutNames.Add(n"PoisonBurstDps");           OutIsHealthSet.Add(false);
+        OutNames.Add(n"ClusterKillShieldAmount");  OutIsHealthSet.Add(false);
+        OutNames.Add(n"TauntRadiusBonus");         OutIsHealthSet.Add(false);
+        OutNames.Add(n"TauntClusterDurationBonus");OutIsHealthSet.Add(false);
+        OutNames.Add(n"TauntDamage");              OutIsHealthSet.Add(false);
+        OutNames.Add(n"TauntVortex");              OutIsHealthSet.Add(false);
+        OutNames.Add(n"BarrageDamageBonus");       OutIsHealthSet.Add(false);
+        OutNames.Add(n"BarrageSalvoCount");        OutIsHealthSet.Add(false);
+        OutNames.Add(n"BarrageCarpet");            OutIsHealthSet.Add(false);
         // URogueHealthSet
         OutNames.Add(n"Health");              OutIsHealthSet.Add(true);
         OutNames.Add(n"MaxHealth");           OutIsHealthSet.Add(true);
@@ -854,7 +865,7 @@ class ARaidPlayerController : APlayerController
         }
 
         int Pass = 0;
-        int Total = 6;
+        int Total = 7;
 
         // 1) Baseline: a hand has OptionsPerOffer cards (utility padding guarantees it
         //    once the UtilityPool is assigned; before Task 5 content, accept >= 1).
@@ -1010,6 +1021,19 @@ class ARaidPlayerController : APlayerController
         // The watchdog now auto-picks and resumes (fast under headless paused-tick); grep
         // "[Upgrades] raid resumed" separately.
 
+        // 7) Hero gating — RequiredHeroClass must match the candidate player's pawn.
+        //    Host pawn is a hero, so an AHeroCharacter gate passes and a spectator gate fails.
+        URogueUpgradeDef GatedOk = Cast<URogueUpgradeDef>(NewObject(this, URogueUpgradeDef));
+        GatedOk.RequiredHeroClass = AHeroCharacter;
+        URogueUpgradeDef GatedWrong = Cast<URogueUpgradeDef>(NewObject(this, URogueUpgradeDef));
+        GatedWrong.RequiredHeroClass = ASpectatorPawn;
+        bool bCheck7 = GameMode.IsEligible(GatedOk, PlayerState)
+                    && !GameMode.IsEligible(GatedWrong, PlayerState);
+        if (bCheck7)
+            Pass++;
+        else
+            Print("[FlowSmoke] FAIL 7: hero gating (RequiredHeroClass)", 10.0);
+
         Print(f"[FlowSmoke] RESULT {Pass}/{Total}", 15.0);
     }
 
@@ -1032,6 +1056,345 @@ class ARaidPlayerController : APlayerController
             Print(f"[XPReport] L{Lv}->L{Lv + 1}: {Step} (cumulative {Cumulative})", 12.0);
         }
         Print(f"[XPReport] live: level {GS.TeamLevel}, {GS.TeamXP}/{GS.XPToNextLevel}", 12.0);
+    }
+
+    // --- Debug: behavior-evolution battery (D-0020). Spawns its own dummies through the
+    // SpawnDirector (so deaths reach the GameMode death path), drives the seam + abilities,
+    // and asserts each evolution behavior. `[EvoSmoke] RESULT n/7` is the SmokeTest assertion.
+    // Run WITHOUT UpgradeSmoke in the same session: UpgradeSmoke applies every pool GE, which
+    // would pre-set the evolution flags this battery toggles deliberately. Host-only; polls at
+    // boot like the other batteries.
+    private int EvoRetries = 0;
+    private int EvoPassed = 0;
+    private AEliteEnemyBase EvoVortexDummy;
+    private AEliteEnemyBase EvoSalvoDummy;
+    private float EvoSalvoStartHP = 0.0;
+    private AEliteEnemyBase EvoCarpetDummy;
+    private float EvoCarpetStartHP = 0.0;
+
+    UFUNCTION(Exec)
+    void EvoSmoke()
+    {
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        AHeroCharacter Hero = GetHero();
+        UAngelscriptAbilitySystemComponent ASC = Hero != nullptr ? Hero.GetRogueAbilitySystem() : nullptr;
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
+        USpawnDirector Director = USpawnDirector::Get();
+        if (GameMode == nullptr || ASC == nullptr || Combat == nullptr || Director == nullptr)
+        {
+            if (EvoRetries < 30)
+            {
+                EvoRetries++;
+                System::SetTimer(this, n"EvoSmoke", 1.0, false);
+                return;
+            }
+            Print("[EvoSmoke] gave up waiting for hero/gamemode", 8.0);
+            return;
+        }
+
+        FVector H = Hero.GetActorLocation();
+        FVector F = Hero.GetActorForwardVector();
+        F.Z = 0.0;
+        F = F.GetSafeNormal();
+        FVector R = FVector(-F.Y, F.X, 0.0);
+
+        // Check 1: Searing Arcs — chain arcs ignite their targets (per-shot params, no GE needed).
+        AEliteEnemyBase A1 = Director.SpawnElite(ATargetDummy, H + F * 400.0, FRotator());
+        AEliteEnemyBase B1 = Director.SpawnElite(ATargetDummy, H + F * 400.0 + R * 250.0, FRotator());
+        bool bCheck1 = false;
+        if (A1 != nullptr && B1 != nullptr && B1.Health != nullptr)
+        {
+            FWeaponShotParams Shot;
+            Shot.Damage = 10.0;
+            Shot.ChainCount = 5;        // generous: B1 must be among the nearest arcs even if
+            Shot.ChainRadius = 300.0;   // placed range targets share the lane
+            Shot.ChainIgniteFraction = 0.5;
+            FireAt(Combat, Hero, A1, Shot);
+            bCheck1 = B1.Health.HasActiveDot(ERogueDotType::Burn);
+        }
+        EvoCheck("searing arcs (ignite-on-arc)", bCheck1);
+
+        // Check 2: Overwhelm — bonus arcs on a Clustered victim with base ChainCount 0.
+        AEliteEnemyBase A2 = Director.SpawnElite(ATargetDummy, H - F * 500.0, FRotator());
+        AEliteEnemyBase B2 = Director.SpawnElite(ATargetDummy, H - F * 500.0 + R * 200.0, FRotator());
+        AEliteEnemyBase C2 = Director.SpawnElite(ATargetDummy, H - F * 500.0 - R * 200.0, FRotator());
+        bool bCheck2 = false;
+        if (A2 != nullptr && B2 != nullptr && C2 != nullptr)
+        {
+            Combat.MarkClustered(A2.GetActorLocation(), 50.0, 30.0);   // only the victim
+            FWeaponShotParams Shot;
+            Shot.Damage = 10.0;
+            Shot.ChainCount = 0;
+            Shot.ClusterChainBonusArcs = 2;
+            Shot.ChainRadius = 300.0;
+            FHitscanResult Res = FireAt(Combat, Hero, A2, Shot);
+            bCheck2 = Res.ExtraEnemiesHit >= 2;
+        }
+        EvoCheck("overwhelm (cluster bonus arcs)", bCheck2);
+
+        // Check 3: Toxic Burst — a poisoned victim's death dots its neighbors (GE + death path).
+        bool bCheck3 = false;
+        URogueUpgradeDef ToxicBurst = FindPoolDef(GameMode, "ToxicBurst");
+        AEliteEnemyBase A3 = Director.SpawnElite(ATargetDummy, H + R * 700.0, FRotator());
+        AEliteEnemyBase B3 = Director.SpawnElite(ATargetDummy, H + R * 700.0 + F * 150.0, FRotator());
+        if (ToxicBurst != nullptr && ToxicBurst.Effect.Get() != nullptr
+            && A3 != nullptr && B3 != nullptr && A3.Health != nullptr && B3.Health != nullptr)
+        {
+            ASC.ApplyGameplayEffectToTarget(ToxicBurst.Effect, ASC, 1.0, FGameplayEffectContextHandle());
+            A3.Health.ApplyDot(ERogueDotType::Poison, 1.0, 30.0, Hero);
+            A3.Health.ApplyDamage(999999.0, Hero);   // death fires HandleEnemyKilled inline
+            bCheck3 = B3.Health.HasActiveDot(ERogueDotType::Poison);
+        }
+        EvoCheck("toxic burst (poison death cloud)", bCheck3);
+
+        // Check 4: Iron Bulwark — a Clustered kill grants squad Shield (its GE also adds MaxShield).
+        bool bCheck4 = false;
+        URogueUpgradeDef Bulwark = FindPoolDef(GameMode, "IronBulwark");
+        AEliteEnemyBase A4 = Director.SpawnElite(ATargetDummy, H - R * 700.0, FRotator());
+        if (Bulwark != nullptr && Bulwark.Effect.Get() != nullptr && A4 != nullptr && A4.Health != nullptr)
+        {
+            ASC.ApplyGameplayEffectToTarget(Bulwark.Effect, ASC, 1.0, FGameplayEffectContextHandle());
+            float ShieldBefore = ASC.GetAttributeCurrentValue(URogueHealthSet, n"Shield", 0.0);
+            Combat.MarkClustered(A4.GetActorLocation(), 50.0, 30.0);
+            A4.Health.ApplyDamage(999999.0, Hero);
+            float ShieldAfter = ASC.GetAttributeCurrentValue(URogueHealthSet, n"Shield", 0.0);
+            bCheck4 = ShieldAfter > ShieldBefore + 0.5;
+        }
+        EvoCheck("iron bulwark (clustered-kill shield)", bCheck4);
+
+        // Checks 5-7 need real time (vortex pulses / salvo echo / carpet march) — phase chain.
+        System::SetTimer(this, n"EvoPhaseVortex", 0.5, false);
+    }
+
+    UFUNCTION()
+    private void EvoPhaseVortex()
+    {
+        AHeroCharacter Hero = GetHero();
+        UAngelscriptAbilitySystemComponent ASC = Hero != nullptr ? Hero.GetRogueAbilitySystem() : nullptr;
+        USpawnDirector Director = USpawnDirector::Get();
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        if (ASC == nullptr || Director == nullptr || GameMode == nullptr)
+        {
+            EvoFinishEarly("vortex phase lost the hero");
+            return;
+        }
+
+        FVector F = Hero.GetActorForwardVector();
+        EvoVortexDummy = Director.SpawnElite(ATargetDummy, Hero.GetActorLocation() + F * 600.0, FRotator());
+
+        URogueUpgradeDef Horizon = FindPoolDef(GameMode, "EventHorizon");
+        if (Horizon != nullptr && Horizon.Effect.Get() != nullptr)
+            ASC.ApplyGameplayEffectToTarget(Horizon.Effect, ASC, 1.0, FGameplayEffectContextHandle());
+
+        ASC.GiveAbility(UGA_Taunt, 1, -1, nullptr);
+        bool bActivated = ASC.TryActivateAbilityByClass(UGA_Taunt, false);
+        Print(f"[EvoSmoke] taunt activated={bActivated}", 6.0);
+
+        // Base Clustered expires 3.0s after activation; the vortex refreshes through 3.0s, so at
+        // +4.0s "still clustered" can only mean pulses fired.
+        System::SetTimer(this, n"EvoCheckVortex", 4.0, false);
+    }
+
+    UFUNCTION()
+    private void EvoCheckVortex()
+    {
+        bool bStill = EvoVortexDummy != nullptr && EvoVortexDummy.IsClustered();
+        EvoCheck("event horizon (vortex refresh)", bStill);
+        System::SetTimer(this, n"EvoPhaseSalvo", 0.5, false);
+    }
+
+    UFUNCTION()
+    private void EvoPhaseSalvo()
+    {
+        AHeroCharacter Hero = GetHero();
+        UAngelscriptAbilitySystemComponent ASC = Hero != nullptr ? Hero.GetRogueAbilitySystem() : nullptr;
+        USpawnDirector Director = USpawnDirector::Get();
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        if (ASC == nullptr || Director == nullptr || GameMode == nullptr)
+        {
+            EvoFinishEarly("salvo phase lost the hero");
+            return;
+        }
+
+        FVector F = Hero.GetActorForwardVector();
+        EvoSalvoDummy = Director.SpawnElite(ATargetDummy, Hero.GetActorLocation() + F * 300.0, FRotator());
+        EvoSalvoStartHP = (EvoSalvoDummy != nullptr && EvoSalvoDummy.Health != nullptr)
+            ? EvoSalvoDummy.Health.Health : 0.0;
+
+        URogueUpgradeDef Salvo = FindPoolDef(GameMode, "TwinSalvo");
+        if (Salvo != nullptr && Salvo.Effect.Get() != nullptr)
+            ASC.ApplyGameplayEffectToTarget(Salvo.Effect, ASC, 1.0, FGameplayEffectContextHandle());
+
+        ASC.GiveAbility(UGA_Barrage, 1, -1, nullptr);
+        bool bActivated = ASC.TryActivateAbilityByClass(UGA_Barrage, false);
+        Print(f"[EvoSmoke] barrage(salvo) activated={bActivated}", 6.0);
+
+        System::SetTimer(this, n"EvoCheckSalvo", 1.5, false);
+    }
+
+    UFUNCTION()
+    private void EvoCheckSalvo()
+    {
+        // Base strike alone = 40 (unclustered). Strike + 60% echo = 64. Assert past the single.
+        bool bEcho = false;
+        if (EvoSalvoDummy != nullptr && EvoSalvoDummy.Health != nullptr)
+            bEcho = (EvoSalvoStartHP - EvoSalvoDummy.Health.Health) >= 50.0;
+        EvoCheck("twin salvo (echo strike)", bEcho);
+
+        // Wait out the barrage cooldown before the carpet activation.
+        System::SetTimer(this, n"EvoPhaseCarpet", 12.0, false);
+    }
+
+    UFUNCTION()
+    private void EvoPhaseCarpet()
+    {
+        AHeroCharacter Hero = GetHero();
+        UAngelscriptAbilitySystemComponent ASC = Hero != nullptr ? Hero.GetRogueAbilitySystem() : nullptr;
+        USpawnDirector Director = USpawnDirector::Get();
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        if (ASC == nullptr || Director == nullptr || GameMode == nullptr)
+        {
+            EvoFinishEarly("carpet phase lost the hero");
+            return;
+        }
+
+        FVector F = Hero.GetActorForwardVector();
+        // 900uu out: beyond the 600 base radius, covered by carpet pad 2 (3 * 300uu).
+        EvoCarpetDummy = Director.SpawnElite(ATargetDummy, Hero.GetActorLocation() + F * 900.0, FRotator());
+        EvoCarpetStartHP = (EvoCarpetDummy != nullptr && EvoCarpetDummy.Health != nullptr)
+            ? EvoCarpetDummy.Health.Health : 0.0;
+
+        URogueUpgradeDef Carpet = FindPoolDef(GameMode, "CarpetBombing");
+        if (Carpet != nullptr && Carpet.Effect.Get() != nullptr)
+            ASC.ApplyGameplayEffectToTarget(Carpet.Effect, ASC, 1.0, FGameplayEffectContextHandle());
+
+        bool bActivated = ASC.TryActivateAbilityByClass(UGA_Barrage, false);
+        Print(f"[EvoSmoke] barrage(carpet) activated={bActivated}", 6.0);
+
+        System::SetTimer(this, n"EvoCheckCarpet", 3.0, false);
+    }
+
+    UFUNCTION()
+    private void EvoCheckCarpet()
+    {
+        bool bMarched = false;
+        if (EvoCarpetDummy != nullptr && EvoCarpetDummy.Health != nullptr)
+            bMarched = EvoCarpetDummy.Health.Health < EvoCarpetStartHP - 0.5;
+        EvoCheck("carpet bombing (marching strip)", bMarched);
+        Print(f"[EvoSmoke] RESULT {EvoPassed}/7", 20.0);
+    }
+
+    private void EvoFinishEarly(FString Why)
+    {
+        Print(f"[EvoSmoke] aborted: {Why}", 10.0);
+        Print(f"[EvoSmoke] RESULT {EvoPassed}/7", 20.0);
+    }
+
+    private FHitscanResult FireAt(UCombatSubsystem Combat, AHeroCharacter Hero,
+                                  AEliteEnemyBase Target, FWeaponShotParams Shot)
+    {
+        FVector From = Hero.GetMuzzleLocation();
+        FVector Dir = (Target.GetActorLocation() - From).GetSafeNormal();
+        return Combat.FireWeaponShot(From, From + Dir * 20000.0, Shot, Hero);
+    }
+
+    private URogueUpgradeDef FindPoolDef(ARaidGameMode GameMode, FString NamePart)
+    {
+        FString Filter = NamePart.ToLower();
+        for (URogueUpgradeDef Def : GameMode.UpgradePool)
+        {
+            if (Def == nullptr)
+                continue;
+            FString AssetName = FString(f"{Def.GetName()}").ToLower();
+            if (AssetName.Contains(Filter))
+                return Def;
+        }
+        Print(f"[EvoSmoke] pool card not found: {NamePart}", 8.0);
+        return nullptr;
+    }
+
+    private void EvoCheck(FString Name, bool bPass)
+    {
+        if (bPass)
+            EvoPassed++;
+        FString Tag = bPass ? "PASS" : "FAIL";
+        Print(f"[EvoSmoke] {Tag}: {Name}", 10.0);
+    }
+
+    // --- Debug: wave-director pure-function battery (D-0020). No spawning — asserts the plan
+    // math. `[DirectorSmoke] RESULT 6/6` is the SmokeTest assertion. Safe anywhere, any time.
+    UFUNCTION(Exec)
+    void DirectorReport()
+    {
+        FDirectorTunables T;   // struct defaults mirror ARaidObjective's class defaults
+        int Passed = 0;
+
+        // The curve for human eyeballs: levels 1..12, representative wave 6, solo vs duo.
+        for (int L = 1; L <= 12; L++)
+        {
+            FWavePlan P1 = RaidDirector::ComputeWavePlan(L, 6, 1, T);
+            FWavePlan P2 = RaidDirector::ComputeWavePlan(L, 6, 2, T);
+            Print(f"[Director] L{L}: solo={P1.FodderCount}@{P1.Interval}s duo={P2.FodderCount}@{P2.Interval}s inject={P1.EliteInjectIndex}", 12.0);
+        }
+
+        // 1: wave size never shrinks as level rises.
+        bool bMonotonic = true;
+        for (int L = 1; L < 12; L++)
+        {
+            if (RaidDirector::ComputeWavePlan(L + 1, 6, 1, T).FodderCount
+                < RaidDirector::ComputeWavePlan(L, 6, 1, T).FodderCount)
+                bMonotonic = false;
+        }
+        Passed += DirCheck("size monotonic in level", bMonotonic);
+
+        // 2: interval respects the floor and never grows with level.
+        bool bTempo = true;
+        for (int L = 1; L <= 20; L++)
+        {
+            FWavePlan P = RaidDirector::ComputeWavePlan(L, 6, 1, T);
+            if (P.Interval < T.MinInterval - 0.001)
+                bTempo = false;
+            if (L > 1 && P.Interval > RaidDirector::ComputeWavePlan(L - 1, 6, 1, T).Interval + 0.001)
+                bTempo = false;
+        }
+        Passed += DirCheck("tempo floor + monotonic", bTempo);
+
+        // 3: no injection below the start level.
+        bool bNoEarly = true;
+        for (int W = 0; W < 12; W++)
+        {
+            if (RaidDirector::ComputeWavePlan(T.EliteInjectStartLevel - 1, W, 1, T).EliteInjectIndex >= 0)
+                bNoEarly = false;
+        }
+        Passed += DirCheck("no injection before start level", bNoEarly);
+
+        // 4: cadence — every 3rd wave at the start level, every 2nd at the fast level.
+        bool bCadence = RaidDirector::ComputeWavePlan(T.EliteInjectStartLevel, 3, 1, T).EliteInjectIndex >= 0
+                     && RaidDirector::ComputeWavePlan(T.EliteInjectStartLevel, 4, 1, T).EliteInjectIndex < 0
+                     && RaidDirector::ComputeWavePlan(T.EliteInjectFastLevel, 4, 1, T).EliteInjectIndex >= 0
+                     && RaidDirector::ComputeWavePlan(T.EliteInjectFastLevel, 3, 1, T).EliteInjectIndex < 0;
+        Passed += DirCheck("injection cadence 3rd->2nd", bCadence);
+
+        // 5: clamp holds under absurd inputs.
+        bool bClamp = RaidDirector::ComputeWavePlan(99, 999, 4, T).FodderCount == T.MaxPerWave;
+        Passed += DirCheck("size clamp", bClamp);
+
+        // 6: pure determinism + a duo is never lighter than solo.
+        FWavePlan X = RaidDirector::ComputeWavePlan(7, 9, 2, T);
+        FWavePlan Y = RaidDirector::ComputeWavePlan(7, 9, 2, T);
+        bool bDet = X.FodderCount == Y.FodderCount && X.Interval == Y.Interval
+                 && X.EliteInjectIndex == Y.EliteInjectIndex
+                 && X.FodderCount >= RaidDirector::ComputeWavePlan(7, 9, 1, T).FodderCount;
+        Passed += DirCheck("determinism + player scaling", bDet);
+
+        Print(f"[DirectorSmoke] RESULT {Passed}/6", 12.0);
+    }
+
+    private int DirCheck(FString Name, bool bPass)
+    {
+        FString Tag = bPass ? "PASS" : "FAIL";
+        Print(f"[DirectorSmoke] {Tag}: {Name}", 10.0);
+        return bPass ? 1 : 0;
     }
 
     // --- Replay: type `RaidRestart` in the ~ console to reload the current level (fresh run + seed) ----
