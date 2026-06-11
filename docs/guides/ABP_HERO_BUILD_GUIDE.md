@@ -25,7 +25,7 @@
 | `GroundSpeed` | float | horizontal speed (cm/s) |
 | `Direction` | float | -180..180, velocity vs facing — blendspace X |
 | `StrafeSpeed` | float | `min(GroundSpeed, JogAuthoredSpeed)` — blendspace Y (authored units) |
-| `PlayRate` | float | anti-foot-slide playback scale, clamped 0.8–1.35 |
+| `PlayRate` | float | anti-foot-slide playback scale above the jog row, clamped 0.8–1.6 |
 | `bShouldMove` | bool | moving AND accelerating (prevents idle-pop while stopping) |
 | `bIsFalling` | bool | airborne |
 | `VerticalVelocity` | float | velocity Z (cm/s, + = rising) |
@@ -37,7 +37,7 @@
 | `AimOffsetAlpha` | float | 1 normally, 0 while incapacitated |
 | `LandRecoveryAlpha` | float | 1→0 after touchdown, scaled by fall speed |
 
-Tunables on the same class: `JogAuthoredSpeed` (default 450), `LandRecoverySeconds` (0.4).
+Tunables on the same class: `JogAuthoredSpeed` (623 — see §1.4), `LandRecoverySeconds` (0.4).
 
 **Assets used** (all verified to exist):
 
@@ -78,8 +78,8 @@ Tunables on the same class: `JogAuthoredSpeed` (default 450), `LandRecoverySecon
 - [ ] Expand **Axis Settings → Vertical Axis** and set:
   - **Name:** `Speed`
   - **Minimum Axis Value:** `0.0`
-  - **Maximum Axis Value:** `450.0`  (the authored jog speed — see the sidebar in §1.4 before trusting this)
-  - **Number of Grid Divisions:** `2`  (rows at 0 / 225 / 450)
+  - **Maximum Axis Value:** `623.0`  (the authored jog SPEED — see §1.4; displacement/length, not displacement)
+  - **Number of Grid Divisions:** `2`  (rows at 0 / 311.5 / 623; samples are typed exactly, snap off — §1.2)
   - **Snap to Grid:** ✅ checked
   - **Smoothing Time:** `0.12`
   - **Smoothing Type:** `Averaged`
@@ -93,9 +93,9 @@ Tunables on the same class: `JogAuthoredSpeed` (default 450), `LandRecoverySecon
       Browser if hidden). It lists every animation compatible with SK_Mannequin.
 - [x] Drag each animation from the Asset Browser onto the grid at the position in this table.
       With Snap to Grid on, drops snap to grid intersections. The **walk row is the middle grid
-      line (Speed 225)**, the **jog row is the top line (Speed 450)**:
+      line**, the **jog row is the top line** (typed Y: walk 304, jog 623 — §1.4):
 
-| Direction (X) | Walk sample (drop at Speed **225**) | Jog sample (drop at Speed **450**) |
+| Direction (X) | Walk sample (Y = **304**) | Jog sample (Y = **623**) |
 |---|---|---|
 | `0`    | `MF_Rifle_Walk_Fwd`       | `MF_Rifle_Jog_Fwd` |
 | `45`   | `MF_Rifle_Walk_Fwd_Right` | `MF_Rifle_Jog_Fwd_Right` |
@@ -115,28 +115,22 @@ Tunables on the same class: `JogAuthoredSpeed` (default 450), `LandRecoverySecon
       between directions. Walking the green preview dot along the ±180 edge must NOT pop.
 - [x] **Save**.
 
-### 1.4 SIDEBAR — measure the authored jog speed (do once)
+### 1.4 SIDEBAR — the authored speeds (RESOLVED — measured 2026-06-11)
 
-The `450` figure is the assumed root speed of the jog clips. If it's wrong, feet slide. Measure it:
+The MF_Rifle clips were measured from their root tracks (`extract_root_track_transform`):
+**walk = 304 cm/s** (467 cm / 1.533 s), **jog = 623 cm/s** (955 cm / 1.533 s). The blendspace
+rows sit at exactly these values (walk row Y=304, jog row Y=623, axis max 623) and
+`JogAuthoredSpeed = 623` in `HeroAnimInstance.as`.
 
-- [x] Open `MF_Rifle_Jog_Fwd` (the animation asset itself, double-click).
-- [x] Look in **Asset Details** for root-motion info. If the clip carries root motion, get the
-      distance the root bone travels: in the viewport's **Skeleton Tree**, select the `root` bone,
-      scrub the timeline to frame 0 and note the translation in the bone transform readout, scrub
-      to the last frame, note it again. `speed = (distance in cm) / Sequence Length` (Sequence
-      Length is shown in Asset Details).
-- [x] If the clip is in-place (no root translation — common for strafe sets), eyeball it instead:
-      you'll do the definitive check in Part 7 anyway (set `StrafeSpeed` in the preview and watch
-      for foot-sliding), so proceed with 450 for now.
-- [x] **If the measured speed differs from 450 by more than 10%:** update BOTH of these to the
-      measured value:
-  1. `BS_Rifle_Strafe` → Asset Details → Vertical Axis → **Maximum Axis Value**.
-  2. `JogAuthoredSpeed` in `RogueSmoke/Script/Player/HeroAnimInstance.as` (the `UPROPERTY` default
-     near the bottom; AngelScript hot-reloads on save — tell whoever runs the session so it gets
-     compile-verified and committed).
-- [x] Same idea for the walk row: if walk clips measure far from 225, uncheck **Snap to Grid** on
-      the Vertical Axis and type the measured speed into each walk sample's Y value in **Blend
-      Samples**. Close is good enough here — the jog row is the one that must be exact.
+⚠ **Speed = displacement ÷ clip length.** The first pass of this build read the root
+*displacement* (955 cm) and entered it as the *speed* — every run speed then landed in the
+walk-dominant part of the axis and forward locomotion read as a mushy power-walk. If these
+clips are ever swapped, re-measure as `distance / Sequence Length`, never the raw distance.
+
+Why authored-speed placement matters: with each sample at its true speed, the blendspace's own
+interpolation makes foot speed match ground speed *exactly* at every input below the jog row
+(crouch 300 ≈ walk row; focus 480 = mid-blend; run 600 ≈ jog row). `PlayRate` only engages
+above the jog row (sprint 960 → 960/623 ≈ 1.54× jog).
 
 ---
 
@@ -356,7 +350,7 @@ exact semantics; see the comment on `bIsCrouching` in `HeroAnimInstance.as`.)
 
 - [ ] Back out to the AnimGraph and **temporarily** wire `Locomotion` → **Output Pose** (you'll
       cut this in Part 5). Click **Compile** — must succeed with no errors. Move the preview:
-      open **Window → Anim Preview Editor**, set `bShouldMove` ✅ and `StrafeSpeed` `450` — the
+      open **Window → Anim Preview Editor**, set `bShouldMove` ✅ and `StrafeSpeed` `623` — the
       preview should jog forward in place.
 
 ### 4.9 Note: sprint
@@ -483,7 +477,7 @@ Part 5's Node 6:
 
 | Set this | Expect this in the viewport |
 |---|---|
-| `bShouldMove` ✅, `StrafeSpeed` 450, `Direction` 0, `PlayRate` 1.0 | forward jog |
+| `bShouldMove` ✅, `StrafeSpeed` 623, `Direction` 0, `PlayRate` 1.0 | forward jog |
 | `Direction` → 90 / 180 / -90 | right strafe / backpedal / left strafe, no pop crossing ±180 |
 | `StrafeSpeed` → 225 | walk |
 | `PlayRate` → 1.35 | same jog, faster playback (sprint compensation) |
@@ -508,7 +502,7 @@ Part 5's Node 6:
 | Symptom | Cause → fix |
 |---|---|
 | **T-pose** in PIE or preview | Reparent missed — Part 3: Class Settings → Parent Class must be `URogueHeroAnimInstance`; or the ABP isn't assigned as the mesh's Anim Class (Task 8 Step 3 does that). |
-| **Legs slide/skate at sprint speed** | `Play Rate` pin not exposed or not wired to `PlayRate` (Part 4.3, Cycle state). Also recheck §1.4 — authored jog speed may not be 450. |
+| **Legs slide/skate at sprint speed** | `Play Rate` pin not exposed or not wired to `PlayRate` (Part 4.3, Cycle state). Also recheck §1.4 — authored jog speed is 623 (displacement/length — §1.4). |
 | **Torso doesn't aim** / aims wrong | Layered-blend Branch Filter bone name typo (`spine_01`, exact) — or AO_Rifle poses aren't Mesh Space additive (Part 6) — or `AimOffsetAlpha` pin unwired. |
 | **Crouch pose flashes during slides** | T7/T8 missing the `(NOT bIsSliding)` term — see §4.6. |
 | **Pop when strafing through ±180** | Wrap Input unchecked on the Direction axis, or the duplicate `Bwd` sample at -180 missing (§1.2/§1.3). |

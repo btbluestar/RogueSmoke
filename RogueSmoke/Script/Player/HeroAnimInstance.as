@@ -54,9 +54,10 @@ class URogueHeroAnimInstance : UAnimInstance
     UPROPERTY(BlueprintReadOnly, Category = "Landing")
     float LandRecoveryAlpha = 0.0;
 
-    // Authored root speed of the jog row, measured from the source clips (jog 955, walk 466).
+    // Authored root SPEED of the jog row: root displacement / clip length (955 cm over 1.533 s).
+    // The walk row is 304 cm/s. Don't confuse displacement with speed — that bug shipped once.
     UPROPERTY(EditDefaultsOnly, Category = "Tuning")
-    float JogAuthoredSpeed = 955.0;
+    float JogAuthoredSpeed = 623.0;
 
     UPROPERTY(EditDefaultsOnly, Category = "Tuning")
     float LandRecoverySeconds = 0.4;
@@ -90,9 +91,12 @@ class URogueHeroAnimInstance : UAnimInstance
         FVector Local = ActorRot.UnrotateVector(Flat);
         Direction = (GroundSpeed > 3.0) ? Math::RadiansToDegrees(Math::Atan2(Local.Y, Local.X)) : 0.0;
 
+        // Below the jog row the blendspace's authored-speed sample placement already matches foot
+        // speed to ground speed exactly (304-walk..623-jog interpolation), so PlayRate stays 1.
+        // Above it (sprint 960) the jog clip rate-scales: 960/623 = 1.54.
         StrafeSpeed = Math::Min(GroundSpeed, JogAuthoredSpeed);
         PlayRate = (GroundSpeed > JogAuthoredSpeed)
-            ? Math::Clamp(GroundSpeed / JogAuthoredSpeed, 0.8, 1.35) : 1.0;
+            ? Math::Clamp(GroundSpeed / JogAuthoredSpeed, 0.8, 1.6) : 1.0;
 
         // Aim deltas from BaseAimRotation: replicated (compressed) to simulated proxies, unlike
         // ControlRotation — this is what makes remote players' torsos track their crosshair.
