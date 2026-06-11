@@ -76,7 +76,8 @@ faithful. AngelScript `Print()` lines land in the log as `LogBlueprintUserMessag
   `ATargetDummy` formations: SOLO for damage/DoT, LINE for pierce, CLUSTER for chain).
 - **Console execs** (type in `~` or pass via `-ExecCmds`; all retry-poll ~30 s so they survive
   firing before the hero spawns): `ListUpgrades`, `GrantUpgrade <partial>`, `GrantAllUpgrades`,
-  `UpgradeSmoke`, `WeaponSmoke`, `TelegraphSmoke`, `RaidGiveXP <n>`, `RaidKillOneElite`,
+  `UpgradeSmoke`, `UpgradeFlowSmoke` (D-0019 caps/milestones/duo-gates/reroll battery),
+  `RaidXPReport` (XP-curve table), `WeaponSmoke`, `TelegraphSmoke`, `RaidGiveXP <n>`, `RaidKillOneElite`,
   `RaidKillElites`, `RaidGoToChest`, `RaidDebugCam`, `RaidRestart`, `RaidWin`/`RaidLose`,
   `RaidResults`, `RaidPause`. Grep `[XP]`, `[Upgrades]`, `[Chest]`, `[Telegraph]`.
 
@@ -142,20 +143,26 @@ Treat every gameplay change as a networked change.
   Full telegraph language: ground danger rings, body pulse, per-archetype swell — replicated.
 - **Run loop** (D-0009/0010/0011): single-raid runs, escalating fodder waves, extraction defend
   timer, results screen, run timer.
-- **In-raid upgrade loop** (D-0018, newest): every kill feeds a **shared team XP pool**
-  (per-archetype `XPValue`); a level-up **pauses the raid for all players** for a 3-card pick with
-  level-weighted rarity (every 5th level boosts moderate, every 10th boosts rare); the
-  Brood-mother drops an **upgrade chest** — stand next to it for a squad **synergy-upgrade** pick
-  (only source of synergy cards). Resume on all-picked or 30 s watchdog.
+- **In-raid upgrade loop** (D-0018 + D-0019): every kill feeds a **shared team XP pool**
+  (per-archetype `XPValue`); a level-up **pauses the raid for all players** — each player gets
+  their **own independently-rolled 3-card hand** (seeded per offer + player), filtered by stack
+  caps (`MaxStacks`), self-prereqs (milestone modifier cards) and squad duo-prereqs (synergy
+  cards); short hands pad from a **UtilityPool** (squad heal / filler). Rarity uses
+  floors+caps by team level (r2 from 3, r3 from 6); XP curve front-loaded (base 50, growth 35).
+  One **squad reroll** per raid; the 30 s watchdog **auto-picks** card 0 for AFK players; picks
+  validate server-side against the offered hand. The Brood-mother drops an **upgrade chest** —
+  stand next to it for a squad **synergy-upgrade** pick (only source of synergy cards; offers
+  only squad-eligible cards). Pool: 24 cards incl. 5 synergy + 4 milestone + 2 utility.
 - **UI suite** (D-0016, CommonUI): main menu (`L_MainMenu`), hero-select lobby with ready/start,
   HUD (health, run clock, `LVL n x/y XP`), upgrade card screen, escape menu, results.
 - **Multiplayer:** LAN/direct-IP listen server (D-0012, NULL subsystem).
 
 **Known thin spots / open threads:**
-- Only **one synergy card exists** (Chain Detonation) — every chest offers just it.
+- Synergy cards are **stat-combo GEs** (duo-gated, squad-applied) — full Swarm-style behavior
+  evolutions (new weapon/ability mechanics) are future work (see D-0019 consequences).
 - Burn/poison DoTs have **no victim tint** (DoT state is server-only; needs a replicated flag).
-- XP curve, rarity weights, and per-archetype `XPValue`s are first-pass numbers awaiting a
-  balance pass; enemy art is placeholder shapes; no boss healthbar.
+- XP curve (50 + 35/level), rarity floors+caps, and per-archetype `XPValue`s are first-pass
+  numbers awaiting a real-play balance pass; enemy art is placeholder shapes; no boss healthbar.
 - Meta-progression scope, late-join policy, and max party size are still open decisions.
 
 ## 6. Where to look things up

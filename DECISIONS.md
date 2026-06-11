@@ -304,6 +304,28 @@ Format per entry: ID, date, status, the decision, the reasoning, and consequence
   are balance-pass material; HUD shows `LVL n — x/y XP`. Cross-links D-0013 (upgrades as GEs),
   D-0017 (roster XP values).
 
+### D-0019 — Upgrade loop v2: per-player hands, stacks/prereqs, squad eligibility
+
+- **Status:** Decided — spec `docs/superpowers/specs/2026-06-11-upgrade-loop-v2-design.md`
+  (research: LoL Swarm primary; VS / RoR2 / Brotato / Hades survey). Builds on D-0018.
+- **Decision:** (1) **Per-player hands** — each player's 3 cards roll from a fresh stream salted
+  by offer index AND PlayerArray index; picks validated against the offered hand server-side.
+  (2) **Stacks/caps/prereqs on `URogueUpgradeDef`** — `MaxStacks` (≤0 = unlimited), self-scope
+  prereqs gate **milestone** modifier cards (guaranteed hand slots once eligible), squad-scope
+  duo prereqs (A and B on two different players; relaxed to one player solo) gate **synergy**
+  cards. (3) **Pick-flow**: watchdog now AUTO-PICKS card 0 (offer honored, not lost); 1
+  squad-shared reroll per raid; short hands pad from a `UtilityPool` (squad heal / filler);
+  offers requested mid-pick queue (one deep). (4) **Rarity floors+caps** replace the %5/%10
+  spikes: r2 from team level 3 (cap 60), r3 from level 6 (cap 25), commons floored at 10.
+  XP curve front-loaded (base 50, growth 35; ~8–12 levels per raid).
+- **Mechanics:** all per-player state is server-only `FPlayerUpgradeRecord`s on the GameMode;
+  the UI gets stack counts in the offer RPC payload; `AwaitingPickNames`/`SquadRerollsRemaining`
+  replicate on `ARaidGameState`. `bApplyToSquad` applies a card's GE to every hero's ASC
+  (synergy/team cards). Verification: `UpgradeFlowSmoke` exec battery in SmokeTest.ps1.
+- **Consequences:** synergy pool now has 5 duo-gated cards; milestone pairs exist for the
+  pierce and chain tracks; full Swarm-style behavior evolutions (new weapon mechanics) remain
+  future work; balance numbers are first-pass.
+
 ---
 
 ## Still open

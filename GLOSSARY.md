@@ -75,6 +75,16 @@
   the whole squad — leveling is a team event, not per-player.
 - **Upgrade chest** — `AUpgradeChest`, dropped where the mini-boss fell; any living player standing
   next to it opens it for a squad-wide **synergy upgrade** pick (the only source of synergy cards).
+- **Stack** — one owned copy of an upgrade card; repeat picks deepen it ("Lv 2 → 3") up to the
+  card's `MaxStacks` cap (≤0 = unlimited, used by utility filler). (D-0019)
+- **Milestone upgrade** — a modifier card unlocked by stacking a track to its prerequisite count
+  (e.g. 3× Piercing Rounds); once eligible it's guaranteed a slot in that player's next hand.
+- **Eligibility** — whether a card may be offered: under its stack cap AND prerequisites met.
+  Synergy cards use squad-scope (duo) eligibility: prereq A and B held by two different players
+  (one player may hold both when playing solo).
+- **Utility card** — consolation filler (squad heal, small stat dribble) padding a hand that
+  eligibility filtering left short; a pick screen never shows a dead/short hand.
+- **Squad reroll** — one shared charge per raid; any player may spend it to re-roll their own hand.
 - **Meta-progression** — persistence *between* runs (scope still open).
 
 ## Technical / architecture
