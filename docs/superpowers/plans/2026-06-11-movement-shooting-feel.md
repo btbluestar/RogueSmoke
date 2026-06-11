@@ -1,6 +1,6 @@
 # Movement & Shooting Feel Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Deadlock-lean movement feel (heavy gravity, instant response, slide-hop momentum) and Destiny-grade shooting feedback (layered anim system, camera feel, damage numbers, VFX/audio), per the approved spec.
 
@@ -50,9 +50,9 @@ The one unproven architectural assumption. `UAnimInstance` is `Blueprintable` (v
 **Files:**
 - Create: `RogueSmoke/Script/Player/HeroAnimInstance.as`
 
-- [ ] **Step 1: Verify the override surface.** Run as-helper `describe_type` on `UAnimInstance` and confirm the `BlueprintUpdateAnimation` event exists and `TryGetPawnOwner` is callable. Also `describe_type ACharacter` and note the AS override names for the landed/jumped events (expect `OnLanded(FHitResult)` / `OnJumped()` — K2_ prefixes are stripped by the fork). Record actual names for Tasks 2/5.
+- [x] **Step 1: Verify the override surface.** Run as-helper `describe_type` on `UAnimInstance` and confirm the `BlueprintUpdateAnimation` event exists and `TryGetPawnOwner` is callable. Also `describe_type ACharacter` and note the AS override names for the landed/jumped events (expect `OnLanded(FHitResult)` / `OnJumped()` — K2_ prefixes are stripped by the fork). Record actual names for Tasks 2/5.
 
-- [ ] **Step 2: Write the minimal anim instance**
+- [x] **Step 2: Write the minimal anim instance**
 
 ```angelscript
 // HeroAnimInstance.as
@@ -80,9 +80,9 @@ class URogueHeroAnimInstance : UAnimInstance
 ```
 (If `TryGetPawnOwner` or the override name differ per Step 1, use what `describe_type` reported.)
 
-- [ ] **Step 3: Compile-verify.** Run as-helper `run_code_test`. Expected: exit 0, no script errors. If the subclass is rejected by the fork: STOP, report — the fallback (spec §2.5.4) is a thin C++ `URogueHeroAnimInstance`; do not improvise it without the user.
+- [x] **Step 3: Compile-verify.** Run as-helper `run_code_test`. Expected: exit 0, no script errors. If the subclass is rejected by the fork: STOP, report — the fallback (spec §2.5.4) is a thin C++ `URogueHeroAnimInstance`; do not improvise it without the user.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 ```
 git add RogueSmoke/Script/Player/HeroAnimInstance.as
 git commit -m "feat(anim): spike AS UAnimInstance subclass for the hero anim graph"
@@ -98,7 +98,7 @@ Numbers and rules from Research A. Everything becomes a tunable `UPROPERTY` so M
 - Rewrite: `RogueSmoke/Script/Player/LocomotionComponent.as`
 - Modify: `RogueSmoke/Script/Player/HeroCharacter.as` (jump/landed hooks; lines ~227–276 area)
 
-- [ ] **Step 1: Rewrite `LocomotionComponent.as`**
+- [x] **Step 1: Rewrite `LocomotionComponent.as`**
 
 Replace the whole file with (preserving the existing public API used by HeroCharacter: `Initialize`, `SetBaseSpeed`, `SetSprint`, `SetFocus`, `RequestCrouchOrSlide`, `ReleaseCrouch`, `TickLocomotion`, `IsSprinting`, `IsSliding`):
 
@@ -454,7 +454,7 @@ class URogueLocomotionComponent : UActorComponent
 }
 ```
 
-- [ ] **Step 2: Hook jump/landed events in `HeroCharacter.as`.** Replace `DoJump` and add the two event overrides (names per Task 1 Step 1 findings; expected as below):
+- [x] **Step 2: Hook jump/landed events in `HeroCharacter.as`.** Replace `DoJump` and add the two event overrides (names per Task 1 Step 1 findings; expected as below):
 
 ```angelscript
     UFUNCTION(BlueprintCallable)
@@ -485,11 +485,11 @@ class URogueLocomotionComponent : UActorComponent
 ```
 Note: stock `ACharacter` velocity at `OnLanded` time may already be ground-projected; if `FallSpeed` reads ~0 in testing, capture `Velocity.Z` each tick into a 2-frame history in the locomotion component instead — flag it in the task report rather than silently shipping a zero.
 
-- [ ] **Step 3: Compile-verify.** as-helper `run_code_test`. Expected: exit 0. If `OnJumped`/`OnLanded`/`JumpCurrentCount`/`JumpMaxHoldTime` names fail to resolve, fix against `describe_type ACharacter` output (do NOT guess variants blindly).
+- [x] **Step 3: Compile-verify.** as-helper `run_code_test`. Expected: exit 0. If `OnJumped`/`OnLanded`/`JumpCurrentCount`/`JumpMaxHoldTime` names fail to resolve, fix against `describe_type ACharacter` output (do NOT guess variants blindly).
 
-- [ ] **Step 4: Headless boot sanity.** `Tools\BootLevel.ps1 -Map /Game/Levels/DebuggingLevels/DL_Combat -Grep "error|Error"` — expect a clean boot, no script errors in log.
+- [x] **Step 4: Headless boot sanity.** `Tools\BootLevel.ps1 -Map /Game/Levels/DebuggingLevels/DL_Combat -Grep "error|Error"` — expect a clean boot, no script errors in log.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```
 git add RogueSmoke/Script/Player/LocomotionComponent.as RogueSmoke/Script/Player/HeroCharacter.as
 git commit -m "feat(movement): Deadlock-lean physics + Apex slide-hop rules (research Report A)"
@@ -502,7 +502,7 @@ git commit -m "feat(movement): Deadlock-lean physics + Apex slide-hop rules (res
 **Files:**
 - Modify: `RogueSmoke/Script/Player/RaidPlayerController.as` (append to the debug exec section)
 
-- [ ] **Step 1: Add the execs.** Append inside `ARaidPlayerController` (follow the existing exec style around `RaidDebugCam`):
+- [x] **Step 1: Add the execs.** Append inside `ARaidPlayerController` (follow the existing exec style around `RaidDebugCam`):
 
 ```angelscript
     // --- Debug: live movement-feel tuning (the convergence tool for the feel pass). -------------
@@ -638,14 +638,14 @@ git commit -m "feat(movement): Deadlock-lean physics + Apex slide-hop rules (res
     }
 ```
 
-- [ ] **Step 2: Compile-verify.** as-helper `run_code_test`. Expected: exit 0. (If reading `L.MaxAcceleration` etc. fails because the fields read as not-blueprint-accessible, change the `UPROPERTY()` specifiers in Task 2's file to `UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, ...)` — AS-to-AS access normally needs nothing, this is only a contingency.)
+- [x] **Step 2: Compile-verify.** as-helper `run_code_test`. Expected: exit 0. (If reading `L.MaxAcceleration` etc. fails because the fields read as not-blueprint-accessible, change the `UPROPERTY()` specifiers in Task 2's file to `UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, ...)` — AS-to-AS access normally needs nothing, this is only a contingency.)
 
-- [ ] **Step 3: Headless run.** `Tools\BootLevel.ps1 -Map /Game/Levels/DebuggingLevels/DL_Combat -Exec "MoveSmoke" -Grep "MoveSmoke"`.
+- [x] **Step 3: Headless run.** `Tools\BootLevel.ps1 -Map /Game/Levels/DebuggingLevels/DL_Combat -Exec "MoveSmoke" -Grep "MoveSmoke"`.
 Expected: `[MoveSmoke] RESULT 3/3`.
 
-- [ ] **Step 4: Add MoveSmoke to the smoke gate.** Edit `Tools\SmokeTest.ps1`: add `MoveSmoke` to the DL_Combat (RaidArena) case's exec list and assert `\[MoveSmoke\] RESULT 3/3` the same way existing cases assert their RESULT lines (mirror the UpgradeSmoke pattern exactly).
+- [x] **Step 4: Add MoveSmoke to the smoke gate.** Edit `Tools\SmokeTest.ps1`: add `MoveSmoke` to the DL_Combat (RaidArena) case's exec list and assert `\[MoveSmoke\] RESULT 3/3` the same way existing cases assert their RESULT lines (mirror the UpgradeSmoke pattern exactly).
 
-- [ ] **Step 5: Full gate + commit**
+- [x] **Step 5: Full gate + commit**
 Run `Tools\SmokeTest.ps1` — all cases PASS (exit 0). Then:
 ```
 git add RogueSmoke/Script/Player/RaidPlayerController.as Tools/SmokeTest.ps1
@@ -660,7 +660,7 @@ git commit -m "feat(movement): MoveTune live-tuning console + MoveSmoke slide-ru
 - Create: `RogueSmoke/Script/Player/CameraFeelComponent.as`
 - Modify: `RogueSmoke/Script/Player/HeroCharacter.as` (remove focus-camera code, hook the component)
 
-- [ ] **Step 1: Write the component** (numbers from Research B; all owning-client cosmetic):
+- [x] **Step 1: Write the component** (numbers from Research B; all owning-client cosmetic):
 
 ```angelscript
 // CameraFeelComponent.as
@@ -799,7 +799,7 @@ class URogueCameraFeelComponent : UActorComponent
 }
 ```
 
-- [ ] **Step 2: Rewire `HeroCharacter.as`:**
+- [x] **Step 2: Rewire `HeroCharacter.as`:**
   1. Add `default CameraBoom.bEnableCameraLag = false;` (replacing the `= true` line).
   2. Add the component: `UPROPERTY(DefaultComponent) URogueCameraFeelComponent CameraFeel;`
   3. Delete `FocusAlpha`, `BaseCameraFOV`, `BaseArmLength`, `FocusBlendSpeed` and the whole `UpdateFocusCamera` function; in `Tick`, replace the `UpdateFocusCamera(DeltaSeconds)` call with `CameraFeel.TickCameraFeel(DeltaSeconds)`.
@@ -818,9 +818,9 @@ class URogueCameraFeelComponent : UActorComponent
     }
 ```
 
-- [ ] **Step 3: Compile-verify.** as-helper `run_code_test` → exit 0.
+- [x] **Step 3: Compile-verify.** as-helper `run_code_test` → exit 0.
 
-- [ ] **Step 4: Append camera knobs to MoveTune.** In `RaidPlayerController.as` `MoveTune`, before the `if (!bSet)` line, add a camera block (get `URogueCameraFeelComponent C = Hero.CameraFeel;` at the top next to `L`):
+- [x] **Step 4: Append camera knobs to MoveTune.** In `RaidPlayerController.as` `MoveTune`, before the `if (!bSet)` line, add a camera block (get `URogueCameraFeelComponent C = Hero.CameraFeel;` at the top next to `L`):
 ```angelscript
         else if (P == "sprintfovbonus")        C.SprintFOVBonus = Value;
         else if (P == "slidefovbonus")         C.SlideFOVBonus = Value;
@@ -836,13 +836,13 @@ class URogueCameraFeelComponent : UActorComponent
 ```
 And add matching lines to the dump block. Re-run `run_code_test` → exit 0.
 
-- [ ] **Step 5: Gate + commit.** `Tools\SmokeTest.ps1` → all PASS.
+- [x] **Step 5: Gate + commit.** `Tools\SmokeTest.ps1` → all PASS.
 ```
 git add RogueSmoke/Script/Player/CameraFeelComponent.as RogueSmoke/Script/Player/HeroCharacter.as RogueSmoke/Script/Player/RaidPlayerController.as
 git commit -m "feat(camera): camera-feel component - lag off, landing dip, FOV kicks, cosmetic fire kick"
 ```
 
-- [ ] **Step 6: USER CHECKPOINT — Feel session #1 (movement + camera).** User plays DL_Combat in PIE, drives `MoveTune` (gravity, accel, slide numbers, kick/dip magnitudes), runs `MoveTune dump`, pastes the chosen block back. Update the defaults in `LocomotionComponent.as`/`CameraFeelComponent.as` to the dumped values, `run_code_test`, commit as `tune(movement): bake feel session #1 numbers`.
+- [x] **Step 6: USER CHECKPOINT — Feel session #1 (movement + camera).** User plays DL_Combat in PIE, drives `MoveTune` (gravity, accel, slide numbers, kick/dip magnitudes), runs `MoveTune dump`, pastes the chosen block back. Update the defaults in `LocomotionComponent.as`/`CameraFeelComponent.as` to the dumped values, `run_code_test`, commit as `tune(movement): bake feel session #1 numbers`.
 
 ---
 
@@ -851,7 +851,7 @@ git commit -m "feat(camera): camera-feel component - lag off, landing dip, FOV k
 **Files:**
 - Rewrite: `RogueSmoke/Script/Player/HeroAnimInstance.as`
 
-- [ ] **Step 1: Full implementation** (variable set per Research C.3; landing detection is self-contained so simulated proxies animate correctly):
+- [x] **Step 1: Full implementation** (variable set per Research C.3; landing detection is self-contained so simulated proxies animate correctly):
 
 ```angelscript
 // HeroAnimInstance.as
@@ -975,9 +975,9 @@ class URogueHeroAnimInstance : UAnimInstance
 }
 ```
 
-- [ ] **Step 2: Compile-verify.** as-helper `run_code_test` → exit 0. (`GetCurrentAcceleration`, `GetBaseAimRotation`, `IsCrouching` — if any binding is missing, find the AS name with as-helper `find_binding` before substituting.)
+- [x] **Step 2: Compile-verify.** as-helper `run_code_test` → exit 0. (`GetCurrentAcceleration`, `GetBaseAimRotation`, `IsCrouching` — if any binding is missing, find the AS name with as-helper `find_binding` before substituting.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```
 git add RogueSmoke/Script/Player/HeroAnimInstance.as
 git commit -m "feat(anim): full hero anim instance - strafe/aim/slide/landing graph inputs"
@@ -993,11 +993,11 @@ Migrate the needed UEFN-skeleton clips into the project, bake them onto our Mann
 - Staging (temporary): `RogueSmoke/Content/Characters/UEFN_Mannequin/**` (copied from `F:\UnrealSamples\GameAnimationSample\Content\Characters\UEFN_Mannequin\`)
 - Output (committed): `RogueSmoke/Content/Characters/Mannequins/Anims/GASP/*.uasset`
 
-- [ ] **Step 1: Confirm preconditions.** `editor_sessions_list` — no interactive editor running (commandlet saves need exclusive access). Verify `Slide_KneesOut_Loop.uasset` exists in our Anims (prior bake proof) and locate the rig/retargeter assets used last time: search our Content + the GASP project for `IK_*`/`RTG_*` assets (GASP's `Content\Characters\UE5_Mannequins\` + `Rigs\` folders normally carry `RTG_UEFN_to_UE5`-style retargeters — record exact names).
+- [x] **Step 1: Confirm preconditions.** `editor_sessions_list` — no interactive editor running (commandlet saves need exclusive access). Verify `Slide_KneesOut_Loop.uasset` exists in our Anims (prior bake proof) and locate the rig/retargeter assets used last time: search our Content + the GASP project for `IK_*`/`RTG_*` assets (GASP's `Content\Characters\UE5_Mannequins\` + `Rigs\` folders normally carry `RTG_UEFN_to_UE5`-style retargeters — record exact names).
 
-- [ ] **Step 2: Stage the source clips.** File-copy from GASP, PRESERVING relative Content paths (soft references resolve by path): `Characters\UEFN_Mannequin\Meshes\`, `Characters\UEFN_Mannequin\Rigs\`, and from `Characters\UEFN_Mannequin\Animations\`: the `Slide\`, `Jump\`, `Sprint\` folders. (Whole-folder copies are fine; staging is deleted after the bake.)
+- [x] **Step 2: Stage the source clips.** File-copy from GASP, PRESERVING relative Content paths (soft references resolve by path): `Characters\UEFN_Mannequin\Meshes\`, `Characters\UEFN_Mannequin\Rigs\`, and from `Characters\UEFN_Mannequin\Animations\`: the `Slide\`, `Jump\`, `Sprint\` folders. (Whole-folder copies are fine; staging is deleted after the bake.)
 
-- [ ] **Step 3: Bake.** Headless commandlet python (pattern from the enemy retarget work; `unreal.log` + `-abslog` for output): `IKRetargetBatchOperation.duplicate_and_retarget` with source = the staged UEFN sequences, target = our `SKM_Manny_Simple`/`SK_Mannequin`, output path `/Game/Characters/Mannequins/Anims/GASP/`, name prefix none + explicit renames to project convention. Bake list (minimum):
+- [x] **Step 3: Bake.** Headless commandlet python (pattern from the enemy retarget work; `unreal.log` + `-abslog` for output): `IKRetargetBatchOperation.duplicate_and_retarget` with source = the staged UEFN sequences, target = our `SKM_Manny_Simple`/`SK_Mannequin`, output path `/Game/Characters/Mannequins/Anims/GASP/`, name prefix none + explicit renames to project convention. Bake list (minimum):
   - `M_Neutral_Slide_FootOut_Into_Lfoot` → `Slide_Enter`
   - `M_Neutral_Slide_FootOut_Loop` → `Slide_Loop` (alongside the existing KneesOut loop — pick the better-looking one in Task 8)
   - `M_Neutral_Slide_FootOut_Out_Moving_Run` → `Slide_Exit_Run`
@@ -1008,9 +1008,9 @@ Migrate the needed UEFN-skeleton clips into the project, bake them onto our Mann
   - `M_Neutral_Sprint_Loop_F` → `Sprint_Loop`
   - `M_Neutral_Sprint_Stop_F_Lfoot` → `Sprint_Stop`
 
-- [ ] **Step 4: Verify + clean.** Commandlet python: load each baked asset, assert its Skeleton == our `SK_Mannequin`. Delete the staged `Content/Characters/UEFN_Mannequin/` folder. Boot sanity: `Tools\BootLevel.ps1 -Map /Game/Levels/DebuggingLevels/DL_Combat -Grep "error"` → clean.
+- [x] **Step 4: Verify + clean.** Commandlet python: load each baked asset, assert its Skeleton == our `SK_Mannequin`. Delete the staged `Content/Characters/UEFN_Mannequin/` folder. Boot sanity: `Tools\BootLevel.ps1 -Map /Game/Levels/DebuggingLevels/DL_Combat -Grep "error"` → clean.
 
-- [ ] **Step 5: Commit** (baked assets only; staging must be gone)
+- [x] **Step 5: Commit** (baked assets only; staging must be gone)
 ```
 git add RogueSmoke/Content/Characters/Mannequins/Anims/GASP
 git commit -m "content(anim): bake GASP slide/land/sprint clips onto Manny (retarget pipeline)"
@@ -1024,9 +1024,9 @@ git commit -m "content(anim): bake GASP slide/land/sprint clips onto Manny (reta
 - Create (editor): `/Game/Characters/Mannequins/Anims/Rifle/MTG_Rifle_Fire`, `MTG_Rifle_Reload`
 - Create (doc): `docs/guides/ABP_HERO_BUILD_GUIDE.md`
 
-- [ ] **Step 1: Create montages.** With the editor session up (`editor_session_start` `-skipcompile`), use the `anim_create_montage` MCP tool (or `python_exec` fallback: `unreal.AnimMontageFactory` + set the slot) to create `MTG_Rifle_Fire` from `MM_Rifle_Fire` and `MTG_Rifle_Reload` from `MM_Rifle_Reload`, **slot `DefaultGroup.UpperBody`** (the slot is registered on the skeleton in the GUI build — if slot assignment fails before Task 8, leave montages on DefaultSlot and re-slot them in Task 8's GUI pass; note it in the task report). Save both.
+- [x] **Step 1: Create montages.** With the editor session up (`editor_session_start` `-skipcompile`), use the `anim_create_montage` MCP tool (or `python_exec` fallback: `unreal.AnimMontageFactory` + set the slot) to create `MTG_Rifle_Fire` from `MM_Rifle_Fire` and `MTG_Rifle_Reload` from `MM_Rifle_Reload`, **slot `DefaultGroup.UpperBody`** (the slot is registered on the skeleton in the GUI build — if slot assignment fails before Task 8, leave montages on DefaultSlot and re-slot them in Task 8's GUI pass; note it in the task report). Save both.
 
-- [ ] **Step 2: Author the build guide.** Write `docs/guides/ABP_HERO_BUILD_GUIDE.md` by EXPANDING Research C.3 into a click-by-click checklist a non-animator can follow. Required content (all of it, no summarizing):
+- [x] **Step 2: Author the build guide.** Write `docs/guides/ABP_HERO_BUILD_GUIDE.md` by EXPANDING Research C.3 into a click-by-click checklist a non-animator can follow. Required content (all of it, no summarizing):
   1. Create `BS_Rifle_Strafe` (BlendSpace, skeleton `SK_Mannequin`): axis setup (Direction -180..180 grid 8 **Wrap Input ON**, Speed 0..450), the 9-sample placement table (Bwd at BOTH ±180) using the `MF_Rifle_Jog_*` + `MF_Rifle_Walk_*` sets, smoothing 0.1–0.15 Averaged.
   2. Anim Slot Manager: add `UpperBody` slot.
   3. Create `ABP_Hero` (Animation Blueprint, skeleton `SK_Mannequin`) → Class Settings → reparent to `URogueHeroAnimInstance`. Every graph variable comes from the parent class — bind pins via property access (no BP-side computation).
@@ -1035,7 +1035,7 @@ git commit -m "content(anim): bake GASP slide/land/sprint clips onto Manny (reta
   6. Verify `AO_Rifle`'s additive settings (Mesh Space) and how to fix if not.
   7. A final checklist: compile ABP, assign preview mesh `SKM_Manny_Simple`, scrub each variable in the anim preview.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```
 git add docs/guides/ABP_HERO_BUILD_GUIDE.md
 git commit -m "docs(anim): click-by-click ABP_Hero + strafe blendspace build guide"
@@ -1046,15 +1046,15 @@ git commit -m "docs(anim): click-by-click ABP_Hero + strafe blendspace build gui
 
 ### Task 8: USER builds the ABP; hook it to the heroes  *(USER + main session)*
 
-- [ ] **Step 1: USER follows `docs/guides/ABP_HERO_BUILD_GUIDE.md`** in the editor GUI (session can stay up; answer questions as they come). Output assets: `/Game/Characters/Mannequins/Anims/BS_Rifle_Strafe`, `/Game/Characters/Mannequins/Anims/ABP_Hero`.
+- [x] **Step 1: USER follows `docs/guides/ABP_HERO_BUILD_GUIDE.md`** in the editor GUI (session can stay up; answer questions as they come). Output assets: `/Game/Characters/Mannequins/Anims/BS_Rifle_Strafe`, `/Game/Characters/Mannequins/Anims/ABP_Hero`.
 
-- [ ] **Step 2: Measure authored jog speed.** In the editor, open `MF_Rifle_Jog_Fwd`, read root motion distance/duration (or eyeball via preview speed). If it differs from 450 by >10%, update `JogAuthoredSpeed` in `HeroAnimInstance.as` and the BS speed-axis max to match; `run_code_test`.
+- [x] **Step 2: Measure authored jog speed.** In the editor, open `MF_Rifle_Jog_Fwd`, read root motion distance/duration (or eyeball via preview speed). If it differs from 450 by >10%, update `JogAuthoredSpeed` in `HeroAnimInstance.as` and the BS speed-axis max to match; `run_code_test`.
 
-- [ ] **Step 3: Assign to heroes.** MCP `python_exec`: for `BP_Vanguard` + `BP_Bombardier`, set the mesh component's `anim_class` to `ABP_Hero_C`, then **`compile_blueprint` + save** (memory: `mcp-bp-cdo-needs-compile` — skipping the compile means PIE wipes it). Verify with `blueprint_outline` that the parent/mesh settings stuck.
+- [x] **Step 3: Assign to heroes.** MCP `python_exec`: for `BP_Vanguard` + `BP_Bombardier`, set the mesh component's `anim_class` to `ABP_Hero_C`, then **`compile_blueprint` + save** (memory: `mcp-bp-cdo-needs-compile` — skipping the compile means PIE wipes it). Verify with `blueprint_outline` that the parent/mesh settings stuck.
 
-- [ ] **Step 4: PIE verification (2-player listen server).** Checks, in order: no T-pose; legs strafe in 8 directions while the torso stays on the crosshair; aim pitch tracks on BOTH the local player and the remote proxy (view from the second client); slide plays the slide pose; jump→fall→land sequence with visible land recovery; no foot-sliding at walk and sprint (if sliding at sprint: confirm PlayRate pin is wired).
+- [x] **Step 4: PIE verification (2-player listen server).** Checks, in order: no T-pose; legs strafe in 8 directions while the torso stays on the crosshair; aim pitch tracks on BOTH the local player and the remote proxy (view from the second client); slide plays the slide pose; jump→fall→land sequence with visible land recovery; no foot-sliding at walk and sprint (if sliding at sprint: confirm PlayRate pin is wired).
 
-- [ ] **Step 5: SmokeTest + commit** (`Tools\SmokeTest.ps1` first):
+- [x] **Step 5: SmokeTest + commit** (`Tools\SmokeTest.ps1` first):
 ```
 git add RogueSmoke/Content/Characters/Mannequins/Anims RogueSmoke/Content/Blueprints/BP_Vanguard.uasset RogueSmoke/Content/Blueprints/BP_Bombardier.uasset
 git commit -m "content(anim): layered ABP_Hero + strafe blendspace wired to heroes (linked-body fix)"
@@ -1067,7 +1067,7 @@ git commit -m "content(anim): layered ABP_Hero + strafe blendspace wired to hero
 **Files:**
 - Modify: `RogueSmoke/Script/Player/HeroCharacter.as`
 
-- [ ] **Step 1: Add montage fields + reload edge detection + multicast.** In `AHeroCharacter`:
+- [x] **Step 1: Add montage fields + reload edge detection + multicast.** In `AHeroCharacter`:
 
 ```angelscript
     // Upper-body feedback montages (assigned on the hero BPs; UpperBody slot in ABP_Hero).
@@ -1112,13 +1112,13 @@ New multicast + a montage helper (placed near `Multicast_FireFX`):
 And in `Multicast_FireFX`, first line of the body: `PlayUpperBodyMontage(FireMontage);`
 (If `Montage_Play` isn't the AS binding name, resolve with as-helper `find_binding UAnimInstance::Montage_Play` — do not guess.)
 
-- [ ] **Step 2: Compile-verify.** `run_code_test` → exit 0.
+- [x] **Step 2: Compile-verify.** `run_code_test` → exit 0.
 
-- [ ] **Step 3: Assign montages on hero BPs.** MCP `python_exec`: set `FireMontage`/`ReloadMontage` class defaults on `BP_Vanguard`/`BP_Bombardier` to `MTG_Rifle_Fire`/`MTG_Rifle_Reload` + `compile_blueprint` + save.
+- [x] **Step 3: Assign montages on hero BPs.** MCP `python_exec`: set `FireMontage`/`ReloadMontage` class defaults on `BP_Vanguard`/`BP_Bombardier` to `MTG_Rifle_Fire`/`MTG_Rifle_Reload` + `compile_blueprint` + save.
 
-- [ ] **Step 4: PIE check.** Fire: upper body plays the shot anim while strafing legs continue; reload (R / empty mag): reload montage on both players' views. SmokeTest → PASS.
+- [x] **Step 4: PIE check.** Fire: upper body plays the shot anim while strafing legs continue; reload (R / empty mag): reload montage on both players' views. SmokeTest → PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```
 git add RogueSmoke/Script/Player/HeroCharacter.as RogueSmoke/Content/Blueprints/BP_Vanguard.uasset RogueSmoke/Content/Blueprints/BP_Bombardier.uasset
 git commit -m "feat(anim): fire/reload upper-body montages wired through cosmetic multicasts"
@@ -1133,7 +1133,7 @@ git commit -m "feat(anim): fire/reload upper-body montages wired through cosmeti
 - Modify: `RogueSmoke/Script/Player/HeroCharacter.as`
 - Modify: `RogueSmoke/Script/UI/RogueHUDWidget.as`
 
-- [ ] **Step 1: Server → owning-client hit events.** In `GA_WeaponFire.FireOneCartridge`, extend the pellet loop to collect damage hits, and send them after `Weapon.NotifyFired()`:
+- [x] **Step 1: Server → owning-client hit events.** In `GA_WeaponFire.FireOneCartridge`, extend the pellet loop to collect damage hits, and send them after `Weapon.NotifyFired()`:
 
 ```angelscript
         TArray<FVector> Impacts;
@@ -1163,7 +1163,7 @@ git commit -m "feat(anim): fire/reload upper-body montages wired through cosmeti
             Hero.Client_DamageNumbers(DamageLocs, DamageAmounts);
 ```
 
-- [ ] **Step 2: Hero-side event buffer.** In `AHeroCharacter` (script struct + RPC + accessor):
+- [x] **Step 2: Hero-side event buffer.** In `AHeroCharacter` (script struct + RPC + accessor):
 
 ```angelscript
     // One floating damage number waiting for the HUD to spawn it (owning client only).
@@ -1192,7 +1192,7 @@ git commit -m "feat(anim): fire/reload upper-body montages wired through cosmeti
     }
 ```
 
-- [ ] **Step 3: HUD pooled numbers.** In `RogueHUDWidget.as`, add a pooled damage-number layer (mirror the edge-indicator pool's style; Research B parameters):
+- [x] **Step 3: HUD pooled numbers.** In `RogueHUDWidget.as`, add a pooled damage-number layer (mirror the edge-indicator pool's style; Research B parameters):
 
 ```angelscript
     // --- Floating damage numbers (Research B: pooled, world-anchored, priority-evicted). ---
@@ -1270,9 +1270,9 @@ Build the pool in the existing widget-construction path (same `ConstructWidget`/
 ```
 Wire `RefreshDamageNumbers()` into the same per-frame refresh list as `RefreshHitMarker()`, and initialize the four arrays (pool widgets + `DamageNumberBorn[i] = -1.0`) where the other widgets are built.
 
-- [ ] **Step 4: Compile + verify.** `run_code_test` → exit 0. PIE on `DL_Upgrades` (target dummies): shoot the SOLO dummy — numbers rise and fade at the impact point; hold full-auto on the CLUSTER formation — readable, no hitches, pool caps at 32. Numbers appear ONLY on the shooting player's screen (verify from client 2).
+- [x] **Step 4: Compile + verify.** `run_code_test` → exit 0. PIE on `DL_Upgrades` (target dummies): shoot the SOLO dummy — numbers rise and fade at the impact point; hold full-auto on the CLUSTER formation — readable, no hitches, pool caps at 32. Numbers appear ONLY on the shooting player's screen (verify from client 2).
 
-- [ ] **Step 5: SmokeTest + commit**
+- [x] **Step 5: SmokeTest + commit**
 ```
 git add RogueSmoke/Script/Weapons/Abilities/GA_WeaponFire.as RogueSmoke/Script/Player/HeroCharacter.as RogueSmoke/Script/UI/RogueHUDWidget.as
 git commit -m "feat(ui): pooled floating damage numbers (owning-client, priority eviction)"
@@ -1289,7 +1289,7 @@ All asset slots are OPTIONAL: null slot = current debug-draw/silent behavior, so
 - Modify: `RogueSmoke/Script/Player/HeroCharacter.as` (`Multicast_FireFX`)
 - Modify: `RogueSmoke/Script/Weapons/Abilities/GA_WeaponFire.as` (payload)
 
-- [ ] **Step 1: Add the slots to `URogueWeaponDefinition`:**
+- [x] **Step 1: Add the slots to `URogueWeaponDefinition`:**
 
 ```angelscript
     // --- Feel: VFX (all optional; null = debug-line fallback) ---
@@ -1322,7 +1322,7 @@ All asset slots are OPTIONAL: null slot = current debug-draw/silent behavior, so
     USoundBase KillConfirmSound;       // owning client, killing blow (Task 12)
 ```
 
-- [ ] **Step 2: Extend the FireFX payload with per-impact surface info.** Change the multicast signature (caller updated in step 3):
+- [x] **Step 2: Extend the FireFX payload with per-impact surface info.** Change the multicast signature (caller updated in step 3):
 
 ```angelscript
     // Cosmetic, fire-and-forget: per-shot FX on all machines + recoil/hit feedback on the owner.
@@ -1385,17 +1385,17 @@ Also: in `Multicast_ReloadFX` (Task 9), add the reload sound after the montage:
 ```
 Binding caution: verify `Niagara::SpawnSystemAtLocation` / `SpawnSystemAttached` / `Gameplay::SpawnSoundAtLocation` / `SpawnSound2D` AS names with as-helper `find_binding` (UNiagaraFunctionLibrary / UGameplayStatics — WorldContext params are dropped by the fork). `UNiagaraSystem`/`UNiagaraComponent` types must resolve; if the Niagara plugin isn't script-exposed, report — don't hack around it.
 
-- [ ] **Step 3: Update the caller.** In `GA_WeaponFire.FireOneCartridge`, build `TArray<bool> ImpactIsEnemy;` in the pellet loop (`ImpactIsEnemy.Add(Result.bHitEnemy);`) and call `Hero.Multicast_FireFX(MuzzleLoc, Impacts, ImpactIsEnemy, bHitEnemy);`.
+- [x] **Step 3: Update the caller.** In `GA_WeaponFire.FireOneCartridge`, build `TArray<bool> ImpactIsEnemy;` in the pellet loop (`ImpactIsEnemy.Add(Result.bHitEnemy);`) and call `Hero.Multicast_FireFX(MuzzleLoc, Impacts, ImpactIsEnemy, bHitEnemy);`.
 
-- [ ] **Step 4: Compile + gate.** `run_code_test` → exit 0; `Tools\SmokeTest.ps1` → PASS (WeaponSmoke exercises the fire path). PIE: firing still draws debug lines (null slots), no errors.
+- [x] **Step 4: Compile + gate.** `run_code_test` → exit 0; `Tools\SmokeTest.ps1` → PASS (WeaponSmoke exercises the fire path). PIE: firing still draws debug lines (null slots), no errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```
 git add RogueSmoke/Script/Weapons/WeaponDefinition.as RogueSmoke/Script/Player/HeroCharacter.as RogueSmoke/Script/Weapons/Abilities/GA_WeaponFire.as
 git commit -m "feat(weapons): optional VFX/audio slots + surface-aware FireFX payload"
 ```
 
-- [ ] **Step 6: USER ASSET DROP (parallel, non-blocking).** Hand the user the acquisition list; wiring already works, so this is assignment-only when assets arrive (a later session or Task 13):
+- [x] **Step 6: USER ASSET DROP (parallel, non-blocking).** Hand the user the acquisition list; wiring already works, so this is assignment-only when assets arrive (a later session or Task 13):
   - **Lyra content** via Epic Games Launcher ("Lyra Starter Game", any 5.x slot) → migrate `NS_WeaponFire`-family Niagara + `sfx_Weapons_*` cues into `/Game/Effects/Weapons/` + `/Game/Audio/Weapons/`.
   - Failing that: free packs — Sonniss GDC bundles (sonniss.com/gameaudiogdc), freesound.org CC0 gunshots; any rifle shot + tail + click works for v1.
   - Assign on `DA_Weapon_*` assets (the `Feel|VFX` / `Feel|Audio` categories).
@@ -1408,9 +1408,9 @@ git commit -m "feat(weapons): optional VFX/audio slots + surface-aware FireFX pa
 - Modify: `RogueSmoke/Script/Player/HeroCharacter.as`
 - Modify: server death path (exact file determined in Step 1 — likely `Source/RogueSmoke` C++ or `Script/Core/RaidGameMode.as`)
 
-- [ ] **Step 1: Find the killing-blow attribution.** Investigate with ue-cpp (`grab_function USpawnDirector::OnEnemyKilled` / `UHealthComponent` death broadcast) and Grep `Script/Core/RaidGameMode.as` for the kill-XP path: find where a kill knows its instigator. Expected: `UHealthComponent::ApplyDamage(Damage, Instigator)` records the instigator and the death event carries it. Write down the actual seam in the task report.
+- [x] **Step 1: Find the killing-blow attribution.** Investigate with ue-cpp (`grab_function USpawnDirector::OnEnemyKilled` / `UHealthComponent` death broadcast) and Grep `Script/Core/RaidGameMode.as` for the kill-XP path: find where a kill knows its instigator. Expected: `UHealthComponent::ApplyDamage(Damage, Instigator)` records the instigator and the death event carries it. Write down the actual seam in the task report.
 
-- [ ] **Step 2: Route the confirm.** At the server-side kill site (where XP is awarded), if the instigator is an `AHeroCharacter`, call a new RPC on it:
+- [x] **Step 2: Route the confirm.** At the server-side kill site (where XP is awarded), if the instigator is an `AHeroCharacter`, call a new RPC on it:
 
 ```angelscript
     // Cosmetic kill confirmation to the killing player only (Research B: third distinct sound,
@@ -1429,7 +1429,7 @@ git commit -m "feat(weapons): optional VFX/audio slots + surface-aware FireFX pa
 ```
 (If the death path is C++-only with no instigator exposed, the minimal change is exposing the instigator on the existing kill broadcast — prefer the smallest C++ touch, then `ue-cpp build` with `bounce_editor=true` if an editor is up.)
 
-- [ ] **Step 3: Fire-stop tail.** In `Server_SetWantsToFire`, detect the stop edge and multicast:
+- [x] **Step 3: Fire-stop tail.** In `Server_SetWantsToFire`, detect the stop edge and multicast:
 ```angelscript
         bool bWas = bWantsToFire;
         bWantsToFire = bWants;
@@ -1450,9 +1450,9 @@ git commit -m "feat(weapons): optional VFX/audio slots + surface-aware FireFX pa
 ```
 (`GetMuzzleFallbackLocation()` = the existing `GetMuzzleLocation()` is server-only safe; on clients use `WeaponMesh.GetSocketLocation(...)` when the mesh exists else actor location — add a small client-safe variant.)
 
-- [ ] **Step 4: HUD kill marker variant.** In `RogueHUDWidget`, extend `RefreshHitMarker`: if `Hero.LastKillConfirmTime` is within 0.25 s, render the marker scaled 2.0 (kill pop) instead of 1.4.
+- [x] **Step 4: HUD kill marker variant.** In `RogueHUDWidget`, extend `RefreshHitMarker`: if `Hero.LastKillConfirmTime` is within 0.25 s, render the marker scaled 2.0 (kill pop) instead of 1.4.
 
-- [ ] **Step 5: Compile + gate + commit.** `run_code_test` → exit 0; `Tools\SmokeTest.ps1` → PASS; PIE: killing a dummy pops the marker (sound slots may still be null).
+- [x] **Step 5: Compile + gate + commit.** `run_code_test` → exit 0; `Tools\SmokeTest.ps1` → PASS; PIE: killing a dummy pops the marker (sound slots may still be null).
 ```
 git add RogueSmoke/Script RogueSmoke/Source
 git commit -m "feat(feel): kill confirm to the killer + fire-stop tail hook"
@@ -1462,7 +1462,7 @@ git commit -m "feat(feel): kill confirm to the killer + fire-stop tail hook"
 
 ### Task 13: Final verification, feel sessions, defaults bake, docs
 
-- [ ] **Step 1: Full regression.** `Tools\SmokeTest.ps1` → ALL PASS (now including MoveSmoke).
+- [x] **Step 1: Full regression.** `Tools\SmokeTest.ps1` → ALL PASS (now including MoveSmoke).
 
 - [ ] **Step 2: 2-player listen-server PIE checklist** (user hosts, session observes via MCP where useful):
   - Movement: slide-hop chain (sprint→slide→jump→land→slide) carries speed on host AND remote client; double jump caps at 2; no rubber-banding on the remote during slides.
@@ -1472,7 +1472,7 @@ git commit -m "feat(feel): kill confirm to the killer + fire-stop tail hook"
 
 - [ ] **Step 3: USER feel session #2 (full stack).** DL_Combat + DL_Upgrades with everything on; MoveTune any remaining knobs; `MoveTune dump` → bake final defaults into the two components; `run_code_test`; commit `tune(feel): bake feel session #2 numbers`.
 
-- [ ] **Step 4: Docs.**
+- [x] **Step 4: Docs.**
   - `DECISIONS.md`: add **D-0021 — Movement/shooting feel pass**: chosen numbers + slide-hop rule set + the cosmetic/authoritative recoil split + layered-ABP architecture (AS anim instance + GUI graph) + MoveTune; supersedes the D-0015 slide tunables list.
   - `GLOSSARY.md`: add **Slide-hop** (jumping out of a slide preserving momentum; boost-arming threshold), **MoveTune**, **Anim instance** (URogueHeroAnimInstance role), update **Slide** entry numbers.
   - `startup.md` §5: movement/shooting feel state + new exec names (`MoveTune`, `MoveSmoke`); note ABP_Hero replaces the template ABP_TP_Rifle.

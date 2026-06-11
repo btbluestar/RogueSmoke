@@ -39,14 +39,28 @@
 - **Lunger** — gap-closer: telegraph then lunge + melee (dodge it with the slide).
 - **Brood-mother** — mini-boss / raid anchor: cycles ranged spit, summoned Crawler waves, and artillery AoE.
 
-## Movement (Apex/Deadlock-style, D-0015)
+## Movement (Apex/Deadlock-style, D-0015 + D-0021)
 
-- **Sprint** — hold-to-run; raises move speed in any direction (omnidirectional).
-- **Slide** — a momentum burst entered by crouching while sprinting; carries on low friction, decays,
-  speeds up downhill. The MVP's skill-expression traversal move.
-- **Double-jump** — a second mid-air jump (`MaxJumpCount = 2`); a future meta-progression unlock.
+- **Sprint** — hold-to-run; raises move speed in any direction (omnidirectional). Base 600 ×1.6 = 960.
+- **Slide** — the fastest ground state: crouch while sprinting boosts to 1.3× sprint (cap 1.5×),
+  carries on low friction, sustains downhill, ends when speed bleeds below 0.9× base. The MVP's
+  skill-expression traversal move. (D-0021 numbers supersede the D-0015 list.)
+- **Slide-hop** — jumping out of a slide: auto-stands, keeps the slide's speed through the air
+  (`FallingLateralFriction 0`), and re-enters the slide on landing if crouch is held. The
+  **boost-arming threshold** (boost only applies below 1.1× sprint speed) means chains *carry*
+  speed but can't *build* it — Apex's anti-bhop rule.
+- **Double-jump** — a second mid-air jump (`MaxJumpCount = 2`, second impulse slightly weaker);
+  a future meta-progression unlock.
 - **Locomotion component** — `URogueLocomotionComponent`, the AngelScript component on the hero that
   owns the sprint/crouch/slide/jump state machine and its tunables (the seam upgrades modify).
+- **MoveTune** — host-only console exec: `MoveTune` dumps all ~39 movement/camera-feel knobs,
+  `MoveTune <Param> <Value>` sets one live in PIE, `MoveTune dump` prints the block to bake into
+  component defaults. Partner exec **MoveSmoke** asserts the slide rules (boost/cap/anti-bhop)
+  and gates SmokeTest.
+- **Anim instance** — `URogueHeroAnimInstance` (AngelScript): computes every variable the
+  `ABP_Hero` graph reads (speed/direction/play-rate, aim deltas from `BaseAimRotation`,
+  slide/sprint/land state). Script computes, the graph only blends — lower body follows
+  locomotion, upper body aims at the crosshair (D-0021).
 
 ## Synergy system (signature feature)
 

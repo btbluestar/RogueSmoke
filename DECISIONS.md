@@ -360,6 +360,56 @@ Format per entry: ID, date, status, the decision, the reasoning, and consequence
   have a build identity track; raid pressure follows the team power curve. Balance numbers are
   first-pass; Niagara cues for arcs/bursts/vortex remain on the cue-pass backlog.
 
+### D-0021 — Movement & shooting feel pass (Deadlock-lean physics, slide-hop, layered ABP, feedback stack)
+
+- **Status:** Decided — spec `docs/superpowers/specs/2026-06-11-movement-shooting-feel-design.md`,
+  plan `docs/superpowers/plans/2026-06-11-movement-shooting-feel.md`. Numbers are live-tunable
+  (MoveTune) and may shift in feel sessions; this entry records the architecture + shipped defaults.
+- **Decision:**
+  1. **Movement physics (Deadlock-lean, stock CMC):** `GravityScale 1.8` (Deadlock ~2.07, Apex
+     ~1.46), `JumpZVelocity 750` / second jump 700 (fixed impulse, `JumpMaxHoldTime 0`),
+     `MaxAcceleration 6144` (full speed in ~0.15 s), `BrakingDecelerationWalking 3072`,
+     `GroundFriction 10` / `BrakingFriction 6`, `AirControl 0.9`, `FallingLateralFriction 0`
+     (air keeps slide-hop momentum). Base 600, sprint ×1.6 = 960. This kills the "floaty" feel:
+     snappier arcs, instant starts/stops.
+  2. **Slide-hop ruleset (Apex/Deadlock):** slide is the fastest ground state — entry needs
+     sprint at ≥ 0.85× sprint speed; boost to **1.3× sprint (1248)**, hard cap **1.5× (1440)**;
+     **anti-bhop arming**: the boost only applies below 1.1× sprint speed (plus a 1.8 s
+     cooldown), so chained slide-hops *carry* speed but can't *build* it. Jumping from a slide
+     auto-stands (stock `CanJump` refuses while crouched) and keeps momentum; landing with
+     crouch held re-enters the slide. Slide friction 0.6 / braking 256; downhill sustain kept
+     from D-0015. **Supersedes the D-0015 slide tunables list** (boost-to-900 et al.).
+  3. **Recoil split (Destiny model):** authoritative aim displacement stays on the controller
+     (weapon `RecoilPitchPerShot`), while `UCameraFeelComponent` adds a **cosmetic, spring-
+     recovered camera kick** (0.4° pitch, ±0.15° yaw, 2.5° stacked clamp, ~0.1 s recovery) as
+     position-displacement impulses (frame-rate independent), plus landing dip (0.02 cm per
+     cm/s of fall speed, max 22) and sprint/slide FOV bonuses (+5/+8). Camera lag is OFF.
+  4. **Layered ABP architecture:** AngelScript `URogueHeroAnimInstance` computes every graph
+     variable (speed/direction/play-rate, aim deltas from `BaseAimRotation` so sim proxies
+     track, slide/sprint/land state); the user-built **`ABP_Hero`** graph only blends:
+     `BS_Rifle_Strafe` (18 samples, walk 466 / jog 955 — measured authored speeds), layered
+     blend per bone at `spine_01` (mesh-space rotation), `AO_Rifle` aim offset, `UpperBody`
+     montage slot for fire/reload. **Replaces the template `ABP_TP_Rifle`** on both heroes —
+     this decouples lower-body locomotion from upper-body aim (the original complaint).
+     `AO_Rifle` axes rescaled −1..1 → **−90..90 degrees** (samples at ±90), so `AimPitch`
+     wires directly; the D-0015-era `PitchN` sin-wiring note is obsolete with `ABP_TP_Rifle`.
+  5. **Live tuning + regression:** `MoveTune [param] [value]` exec (39 locomotion/camera knobs,
+     host-only, `MoveTune dump` to bake) and `MoveSmoke` (3-check slide-rule battery: boost,
+     cap, anti-bhop) — MoveSmoke runs headlessly in `SmokeTest.ps1` (RaidArena case).
+- **Why:** traversal and gunfeel are the moment-to-moment game (GDD); the floatiness diagnosis
+  was gravity 1.0 + slow accel + template ABP + camera lag, all four addressed here.
+- **Networking:** unchanged authority model — locomotion stays input-event-driven on owner +
+  server (D-0015 pattern); all FX/feedback RPCs are cosmetic `Unreliable` multicasts/client
+  RPCs; damage numbers and kill confirms go **only to the owning shooter** (`Client_` RPCs).
+- **Verification:** SmokeTest 9/9 incl. MoveSmoke 3/3; PIE battery (run/strafe/jump/land/
+  sprint/slide anim vars, AimPitch tracking, UpperBody montages) on `ABP_Hero`.
+- **Consequences / deferred:** jump air time dropped ~40% vs the old gravity-1.0 arc — enemy
+  telegraph windows (Lunger lunge, Bloater blast) need a dodge-feel check; **flag for a balance
+  pass, do not retune enemies in this workstream**. Niagara/audio asset slots on
+  `URogueWeaponDefinition` (muzzle/tracer/impacts, fire/tail/reload/hit-tick/kill-confirm) are
+  null-safe and empty until a Lyra-content/free-pack asset drop. Turn-in-place, hitstop, crit
+  styling, footstep foley remain deferred.
+
 ---
 
 ## Still open

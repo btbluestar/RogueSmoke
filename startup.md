@@ -149,7 +149,18 @@ Treat every gameplay change as a networked change.
   signature **taunt → Clustered → barrage** synergy.
 - **Third-person shooting** (D-0014): camera→muzzle convergence, focus-aim, hitscan through the
   seam; weapon-upgrade track (pierce / chain / fire rate / burn / poison DoTs).
-- **Movement** (D-0015): sprint / slide / jump via `URogueLocomotionComponent`.
+- **Movement & feel** (D-0015 + D-0021): sprint / slide / **slide-hop** / double-jump via
+  `URogueLocomotionComponent` — Deadlock-lean physics (gravity 1.8, instant accel, slide =
+  fastest ground state with Apex anti-bhop arming). `UCameraFeelComponent` (lag off, landing
+  dip, sprint/slide FOV, cosmetic spring-recovered fire kick). **Layered ABP**: AngelScript
+  `URogueHeroAnimInstance` computes, user-built `ABP_Hero` blends (strafe blendspace +
+  spine_01 upper-body layer + `AO_Rifle` aim offset + `UpperBody` montage slot) — replaced
+  the template `ABP_TP_Rifle` on both heroes. Live tuning: **`MoveTune`** exec (39 knobs,
+  `MoveTune dump` to bake); **`MoveSmoke`** (slide-rule battery) gates SmokeTest.
+- **Shooting feedback** (D-0021): fire/reload montages, pooled HUD damage numbers
+  (shooter-only), kill confirm + hitmarker kill-pop, fire-stop tail hook; weapon
+  `Feel|VFX` / `Feel|Audio` slots (muzzle/tracer/impacts, fire/tail/reload/hit-tick/
+  kill-confirm) are **null-safe and unassigned** pending the asset drop.
 - **Enemy roster** (D-0017, bio-horde): Crawler fodder + Carapace / Spitter / Bloater / Lunger
   elites (`AAttackingElite` base, per-archetype AS attack overrides) + **Brood-mother** mini-boss.
   Full telegraph language: ground danger rings, body pulse, per-archetype swell — replicated.
@@ -176,6 +187,8 @@ Treat every gameplay change as a networked change.
 **Known thin spots / open threads:**
 - Behavior evolutions exist (D-0020) but have **no bespoke VFX** — arcs/bursts/vortex/carpet
   ride debug-draw + telegraph rings until the Niagara cue pass.
+- **Jump air time dropped ~40%** with gravity 1.8 (D-0021) — enemy telegraph windows (Lunger,
+  Bloater) need a dodge-feel check; flagged for a balance pass, not retuned in the feel work.
 - Burn/poison DoTs have **no victim tint** (DoT state is server-only; needs a replicated flag).
 - XP curve (50 + 35/level), rarity floors+caps, and per-archetype `XPValue`s are first-pass
   numbers awaiting a real-play balance pass; enemy art is placeholder shapes; no boss healthbar.
@@ -190,7 +203,7 @@ Treat every gameplay change as a networked change.
 | Authoritative technical reference (read before touching combat/abilities/Mass) | `Rogue_Smoke_MVP_Architecture.md` |
 | System overview + authority model | `ARCHITECTURE.md` |
 | AngelScript conventions + replication patterns | `CODING_STANDARDS.md` |
-| Has this been decided already? (D-0001 … D-0020) | `DECISIONS.md` — **check before re-litigating** |
+| Has this been decided already? (D-0001 … D-0021) | `DECISIONS.md` — **check before re-litigating** |
 | What does this term mean exactly? | `GLOSSARY.md` — one name per concept; use these exact terms |
 | Engine build / project bring-up | `SETUP.md` |
 | Determinism + multiplayer + headless testing detail | `TESTING.md` |
