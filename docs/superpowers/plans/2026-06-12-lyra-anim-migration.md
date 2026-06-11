@@ -179,7 +179,14 @@ Also run `blueprint_outline` on the asset: record the full **variable list** (ex
 
 - [ ] **Step 4: Binding survival probe:** pick one tag var (e.g. `GameplayTag_IsFiring`): `blueprint_remove_variable`, recompile → note the error the binding produces; this tells us whether deleted-var bindings re-resolve to a same-named parent UPROPERTY after Task 4 (Lyra property access binds by name path). Re-add nothing — Task 4 supplies the parent properties.
 
-- [ ] **Step 5: Write spike verdict** into the plan file (this doc, under this task): redirect OK? var list? broken bindings list? slots? **Commit nothing.**
+- [x] **Step 5: Write spike verdict** into the plan file (this doc, under this task): redirect OK? var list? broken bindings list? slots? **Commit nothing.**
+
+> **SPIKE VERDICT (2026-06-12): Approach A GO.**
+> - Redirect works: `ABP_Mannequin_Base.parent_class == RogueHeroAnimInstance`; `class_is_child_of` confirms; AS class registered at `/Script/Angelscript.RogueHeroAnimInstance`.
+> - Tag vars: exactly 5 — `GameplayTag_{IsADS,IsFiring,IsReloading,IsDashing,IsMelee}` (plan's expected set).
+> - Parent surface needed: `GroundDistance` only. `GetMovementComponent()` returns STOCK `CharacterMovementComponent` — zero LyraCMC references in the 5.7 graph.
+> - Compile errors, all mapped: (a) `AimPitch`/`AimYaw` BP-vars collide with our parent props AND the graph writes them via `UpdateAimingData` → Task 4 must delete those two BP vars and flip our properties to `BlueprintReadWrite` (graph's per-frame write wins inside the Lyra instance; v1 ABP instance unaffected — separate anim instance object). (b) `GroundDistance` missing → add to parent.
+> - Task 2 bonus findings: closure complete at 58 extra files; 14 nosrc refs are pre-existing v1 gaps (GASP foley etc.), not Lyra needs; deleted 4 LyraGame-class assets + 1 editor-only AnimModifier (`FootstepEffectTagModifier` — Phase 4 may recopy after redirects); 5 tracked pistol texture/MI files were path-identical and overwritten by Lyra's newer versions (kept).
 
 ### Task 4: Extend `URogueHeroAnimInstance` with the Lyra surface
 
