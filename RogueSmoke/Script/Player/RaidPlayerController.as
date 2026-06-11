@@ -521,6 +521,52 @@ class ARaidPlayerController : APlayerController
     // `MoveTune <Param> <Value>`  — set one knob live (host PIE; names per the dump output).
     // Host-only: on a listen server host = authority + local, so one apply covers prediction
     // and simulation. A remote client typing it would desync its prediction — refused.
+    // --- Movement debug overlay (local screen only, default ON): anim Direction/speed plus the
+    // movement keys currently held. Toggle with the `MoveDebug` console command. ---
+    private bool bMoveDebugOverlay = true;
+
+    UFUNCTION(Exec)
+    void MoveDebug()
+    {
+        bMoveDebugOverlay = !bMoveDebugOverlay;
+        Print(bMoveDebugOverlay ? "[MoveDebug] overlay ON" : "[MoveDebug] overlay OFF", 3.0);
+    }
+
+    UFUNCTION(BlueprintOverride)
+    void Tick(float DeltaSeconds)
+    {
+        if (!bMoveDebugOverlay || !IsLocalController())
+            return;
+        AHeroCharacter Hero = GetHero();
+        if (Hero == nullptr || Hero.Mesh == nullptr)
+            return;
+
+        URogueHeroAnimInstance Anim = Cast<URogueHeroAnimInstance>(Hero.Mesh.GetAnimInstance());
+        FString Line1 = "[MoveDebug] no URogueHeroAnimInstance on the mesh";
+        if (Anim != nullptr)
+        {
+            Line1 = f"[MoveDebug] Direction {int(Anim.Direction)} deg | Speed {int(Anim.GroundSpeed)}"
+                  + f" | StrafeY {int(Anim.StrafeSpeed)} | Rate x{Anim.PlayRate}";
+        }
+
+        FString Keys = "";
+        if (IsInputKeyDown(FKey(n"W")))                Keys += "W ";
+        if (IsInputKeyDown(FKey(n"A")))                Keys += "A ";
+        if (IsInputKeyDown(FKey(n"S")))                Keys += "S ";
+        if (IsInputKeyDown(FKey(n"D")))                Keys += "D ";
+        if (IsInputKeyDown(FKey(n"SpaceBar")))         Keys += "Space ";
+        if (IsInputKeyDown(FKey(n"LeftShift")))        Keys += "Shift ";
+        if (IsInputKeyDown(FKey(n"LeftControl")))      Keys += "Ctrl ";
+        if (IsInputKeyDown(FKey(n"LeftMouseButton")))  Keys += "LMB ";
+        if (IsInputKeyDown(FKey(n"RightMouseButton"))) Keys += "RMB ";
+        if (Keys.IsEmpty())
+            Keys = "(none)";
+
+        // Duration 0 = this frame only; ticking every frame keeps two steady lines on screen.
+        PrintToScreen(Line1, 0.0);
+        PrintToScreen(f"[MoveDebug] Keys: {Keys}", 0.0);
+    }
+
     UFUNCTION(Exec)
     void MoveTune(FString Param = "", float Value = 0.0)
     {
