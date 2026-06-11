@@ -63,6 +63,10 @@ class AHeroCharacter : ARogueHeroBase
     // Server-only: is the fire input currently held (drives full-auto refire in Tick).
     private bool bWantsToFire = false;
 
+    // Server-only: did a shot actually fire during this trigger hold? Gates the release tail so an
+    // empty-mag press+release can't ring a tail without a bang.
+    private bool bFiredSinceHeld = false;
+
     // Upper-body feedback montages (assigned on the hero BPs; UpperBody slot in ABP_Hero).
     UPROPERTY(EditDefaultsOnly, Category = "Animation")
     UAnimMontage FireMontage;
@@ -90,6 +94,40 @@ class AHeroCharacter : ARogueHeroBase
     // World time of the last confirmed enemy hit on the owning client; the HUD flashes a hitmarker.
     UPROPERTY(BlueprintReadOnly, Category = "Weapon")
     float LastHitConfirmTime = -100.0;
+
+    // World time of the last confirmed killing blow by this hero (owning client); HUD pops the marker.
+    UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+    float LastKillConfirmTime = -100.0;
+
+    // Server-only: this player's replicated kill stat as of the last credit check (kill-confirm seam).
+    private int LastKillStatSeen = 0;
+
+    // Server: the GameMode calls this on every hero when a pooled enemy dies. The C++ death
+    // delegates (FOnDeath / SpawnDirector.OnEnemyKilled) drop the instigator, but
+    // UHealthComponent::ApplyDamage credited the killer's PlayerState.Kills BEFORE broadcasting
+    // OnDeath — so "my kill stat just rose" IS the kill attribution, with no C++ change.
+    void NotifyKillCreditCheck()
+    {
+        if (!HasAuthority())
+            return;
+        ARoguePlayerState PS = Cast<ARoguePlayerState>(PlayerState);
+        if (PS == nullptr)
+            return;
+        if (PS.Kills > LastKillStatSeen)
+            Client_KillConfirm();
+        LastKillStatSeen = PS.Kills;
+    }
+
+    // Cosmetic kill confirmation to the killing player only (research B: third distinct confirm
+    // layer, the loudest of the three).
+    UFUNCTION(Client, Unreliable)
+    void Client_KillConfirm()
+    {
+        LastKillConfirmTime = Gameplay::GetTimeSeconds();
+        URogueWeaponDefinition Def = GetCosmeticWeaponDef();
+        if (Def != nullptr && Def.KillConfirmSound != nullptr)
+            Gameplay::SpawnSound2D(Def.KillConfirmSound);
+    }
 
     // Floating damage numbers waiting for the HUD to spawn them (owning client only).
     private TArray<FVector> PendingDamageLocs;
@@ -149,10 +187,24 @@ class AHeroCharacter : ARogueHeroBase
     {
         if (IsIncapacitated())
         {
-            bWantsToFire = false;
+            // Route through the stop-edge detector so a held trigger cut by going down still
+            // rings the tail out (server only; on clients the flag is always false — no edge).
+            SetHeldFire(false);
             CharacterMovement.StopMovementImmediately();
             Locomotion.ResetAirState();
         }
+    }
+
+    // Server: write the held-fire flag through the stop-edge detector — a held->released
+    // transition rings the gun tail out on all machines (full-auto fatigue fix).
+    private void SetHeldFire(bool bWants)
+    {
+        bool bWas = bWantsToFire;
+        bWantsToFire = bWants;
+        if (bWas && !bWants && HasAuthority() && bFiredSinceHeld)
+            Multicast_FireStopped();
+        if (!bWants)
+            bFiredSinceHeld = false;
     }
 
     // Called by ARogueHeroBase once the ASC is initialized for this pawn (server + clients).
@@ -179,6 +231,13 @@ class AHeroCharacter : ARogueHeroBase
             // component; mirror the attributes into it and keep them live (same pattern as MoveSpeed
             // below, but server-only since that's where weapon timing runs).
             PushWeaponBonuses();
+
+            // Kill-confirm cache: start from the PS's current count so a pre-existing stat
+            // (pawn swap, travel) can't fire a stale confirm on the first death.
+            ARoguePlayerState RPS = Cast<ARoguePlayerState>(PlayerState);
+            if (RPS != nullptr)
+                LastKillStatSeen = RPS.Kills;
+
             ASC.RegisterAttributeChangedCallback(URogueCombatSet, n"FireRateBonus", this, n"OnWeaponBonusChanged");
             ASC.RegisterAttributeChangedCallback(URogueCombatSet, n"ReloadSpeedBonus", this, n"OnWeaponBonusChanged");
             ASC.RegisterAttributeChangedCallback(URogueCombatSet, n"MagazineBonus", this, n"OnWeaponBonusChanged");
@@ -433,13 +492,11 @@ class AHeroCharacter : ARogueHeroBase
     UFUNCTION(Server)
     void Server_SetWantsToFire(bool bWants)
     {
-        if (IsIncapacitated())
-        {
-            bWantsToFire = false;
-            return;
-        }
-        bWantsToFire = bWants;
-        if (bWants)
+        // Incapacitated heroes can't hold the trigger; forcing the flag through the same edge
+        // detector means a press-while-down is a no-op and a held->incap stop releases the tail.
+        bool bWant = bWants && !IsIncapacitated();
+        SetHeldFire(bWant);
+        if (bWant)
             ActivateGrantedAbility(FireInputTag);
     }
 
@@ -459,6 +516,11 @@ class AHeroCharacter : ARogueHeroBase
     UFUNCTION(NetMulticast, Unreliable)
     void Multicast_FireFX(FVector MuzzleLocation, TArray<FVector> Impacts, TArray<bool> ImpactIsEnemy, bool bHitEnemy)
     {
+        // A real shot happened this hold — arms the release tail (server-side flag; the multicast
+        // body also runs on the listen server).
+        if (HasAuthority())
+            bFiredSinceHeld = true;
+
         PlayUpperBodyMontage(FireMontage);
 
         URogueWeaponDefinition Def = GetCosmeticWeaponDef();
@@ -515,6 +577,29 @@ class AHeroCharacter : ARogueHeroBase
                     Gameplay::SpawnSound2D(Def.HitTickSound);
             }
         }
+    }
+
+    // Cosmetic: the gun tail rings out once when the trigger releases (full-auto fatigue fix).
+    UFUNCTION(NetMulticast, Unreliable)
+    void Multicast_FireStopped()
+    {
+        URogueWeaponDefinition Def = GetCosmeticWeaponDef();
+        if (Def != nullptr && Def.FireTailSound != nullptr)
+            Gameplay::SpawnSoundAtLocation(Def.FireTailSound, GetCosmeticMuzzleLocation());
+    }
+
+    // Muzzle position safe on ANY machine: socket via the cosmetic def when the mesh exists,
+    // else the actor location (close enough for a tail sound). GetMuzzleLocation stays the
+    // server-path origin (it reads the server-only Weapon.Definition).
+    FVector GetCosmeticMuzzleLocation() const
+    {
+        URogueWeaponDefinition Def = GetCosmeticWeaponDef();
+        if (Def != nullptr && WeaponMesh != nullptr && WeaponMesh.GetSkeletalMeshAsset() != nullptr
+            && WeaponMesh.DoesSocketExist(Def.MuzzleSocket))
+        {
+            return WeaponMesh.GetSocketLocation(Def.MuzzleSocket);
+        }
+        return GetActorLocation();
     }
 
     // Cosmetic, fire-and-forget: reload montage + reload sound on all machines.

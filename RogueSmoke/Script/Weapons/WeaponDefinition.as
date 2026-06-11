@@ -103,7 +103,7 @@ class URogueWeaponDefinition : UPrimaryDataAsset
     USoundBase FireSound;              // short per-shot (transient+body); 4-6 round-robins inside the cue
 
     UPROPERTY(EditDefaultsOnly, Category = "Feel|Audio")
-    USoundBase FireTailSound;          // played once on trigger release (the tail sells power); Task 12 wires the call site
+    USoundBase FireTailSound;          // played once on trigger release (the tail sells power); Multicast_FireStopped
 
     UPROPERTY(EditDefaultsOnly, Category = "Feel|Audio")
     USoundBase ReloadSound;
@@ -112,5 +112,5 @@ class URogueWeaponDefinition : UPrimaryDataAsset
     USoundBase HitTickSound;           // owning client, confirmed hit
 
     UPROPERTY(EditDefaultsOnly, Category = "Feel|Audio")
-    USoundBase KillConfirmSound;       // owning client, killing blow (Task 12 wires it)
+    USoundBase KillConfirmSound;       // owning client, killing blow (Client_KillConfirm)
 }

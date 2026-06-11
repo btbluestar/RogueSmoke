@@ -44,6 +44,9 @@ class URogueHUDWidget : UUserWidget
     const float ToastSeconds = 4.0;
 
     const float HitMarkerDuration = 0.12;   // seconds the hitmarker stays lit after a confirmed hit
+    const float KillPopDuration = 0.25;     // seconds the kill pop stays up (the loudest confirm layer)
+    const float HitMarkerScale = 1.4;       // marker scale for a plain hit
+    const float KillPopScale = 2.0;         // marker scale for a killing blow
 
     private AHeroCharacter Hero;
     private bool bBuilt = false;
@@ -100,7 +103,7 @@ class URogueHUDWidget : UUserWidget
         HitMarker = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
         HitMarker.SetText(FText::FromString("X"));
         HitMarker.SetColorAndOpacity(FSlateColor(Danger));
-        HitMarker.SetRenderScale(FVector2D(1.4, 1.4));
+        HitMarker.SetRenderScale(FVector2D(HitMarkerScale, HitMarkerScale));
         HitMarker.SetVisibility(ESlateVisibility::Collapsed);
         AddChild(HitMarker, FAnchors(0.5, 0.5), FVector2D(0.5, 0.5), FVector2D(0.0, 0.0), FVector2D(), true);
 
@@ -374,14 +377,23 @@ class URogueHUDWidget : UUserWidget
     }
 
     // Flash the hitmarker for HitMarkerDuration after the hero records a confirmed hit (set locally on the
-    // owning client in Multicast_FireFX).
+    // owning client in Multicast_FireFX). A killing blow (Client_KillConfirm) pops it bigger, for longer.
     private void RefreshHitMarker()
     {
         if (HitMarker == nullptr || Hero == nullptr)
             return;
 
-        bool bShow = Hero.LastHitConfirmTime > 0.0
-            && (Gameplay::GetTimeSeconds() - Hero.LastHitConfirmTime) < HitMarkerDuration;
+        float Now = Gameplay::GetTimeSeconds();
+        bool bKill = Hero.LastKillConfirmTime > 0.0
+            && (Now - Hero.LastKillConfirmTime) < KillPopDuration;
+        bool bShow = bKill || (Hero.LastHitConfirmTime > 0.0
+            && (Now - Hero.LastHitConfirmTime) < HitMarkerDuration);
+
+        // Kill pop: 2.0 while a kill is fresh, back to the plain-hit 1.4 otherwise (cheap to set
+        // every tick — same idiom as RefreshCrosshair).
+        float Scale = bKill ? KillPopScale : HitMarkerScale;
+        HitMarker.SetRenderScale(FVector2D(Scale, Scale));
+
         ESlateVisibility Want = bShow ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
         if (HitMarker.GetVisibility() != Want)
             HitMarker.SetVisibility(Want);

@@ -353,6 +353,19 @@ class ARaidGameMode : AGameModeBase
         if (GS == nullptr || GS.Phase != ERunPhase::InProgress)
             return;     // no XP once the run has resolved (or before it starts)
 
+        // Kill confirm (cosmetic, Task 12): the C++ death path drops the instigator, but
+        // UHealthComponent::ApplyDamage credited the killer's PlayerState.Kills before OnDeath
+        // fired — each hero diffs its own replicated stat to see whether this death was its
+        // kill, then pings its owning client.
+        for (int i = 0; i < GS.PlayerArray.Num(); i++)
+        {
+            APlayerState KillerPS = GS.PlayerArray[i];
+            AHeroCharacter KillerHero = KillerPS != nullptr
+                ? Cast<AHeroCharacter>(KillerPS.GetPawn()) : nullptr;
+            if (KillerHero != nullptr)
+                KillerHero.NotifyKillCreditCheck();
+        }
+
         // v3 behavior evolutions read the corpse's pre-recycle state — OnEnemyKilled fires
         // before Deactivate/ResetHealth (SpawnDirector::HandleEliteDeath), so DoT/Clustered
         // flags are still live here.
