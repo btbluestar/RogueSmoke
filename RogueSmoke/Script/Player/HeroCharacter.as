@@ -63,6 +63,17 @@ class AHeroCharacter : ARogueHeroBase
     // Server-only: is the fire input currently held (drives full-auto refire in Tick).
     private bool bWantsToFire = false;
 
+    // Upper-body feedback montages (assigned on the hero BPs; UpperBody slot in ABP_Hero).
+    UPROPERTY(EditDefaultsOnly, Category = "Animation")
+    UAnimMontage FireMontage;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Animation")
+    UAnimMontage ReloadMontage;
+
+    // Server-only edge detector: WeaponComponent starts reloads internally (auto-reload on empty),
+    // so the hero polls the transition in Tick rather than hooking every call site.
+    private bool bWasReloading = false;
+
     // Visible weapon mesh, attached to the right hand. Its muzzle socket (WeaponDefinition.MuzzleSocket)
     // is the true bullet origin for third-person convergence (D-0014). Mesh asset comes from the
     // equipped definition; assigned on all machines so clients see the gun too.
@@ -353,6 +364,12 @@ class AHeroCharacter : ARogueHeroBase
             {
                 Weapon.TickWeapon(DeltaSeconds);
 
+                // Reload started this frame (manual or auto): cosmetic montage everywhere.
+                bool bReloadingNow = Weapon.IsReloading();
+                if (bReloadingNow && !bWasReloading)
+                    Multicast_ReloadFX();
+                bWasReloading = bReloadingNow;
+
                 // Full-auto: keep re-activating the fire ability while held; CanFire() gates the rate.
                 if (bWantsToFire && Weapon.Definition != nullptr && Weapon.Definition.bFullAuto)
                     ActivateGrantedAbility(FireInputTag);
@@ -415,6 +432,8 @@ class AHeroCharacter : ARogueHeroBase
     UFUNCTION(NetMulticast, Unreliable)
     void Multicast_FireFX(FVector MuzzleLocation, TArray<FVector> Impacts, bool bHitEnemy)
     {
+        PlayUpperBodyMontage(FireMontage);
+
         for (FVector Impact : Impacts)
             System::DrawDebugLine(MuzzleLocation, Impact, FLinearColor(1.0, 1.0, 0.0), 0.05, 2.0);
 
@@ -429,6 +448,22 @@ class AHeroCharacter : ARogueHeroBase
             if (bHitEnemy)
                 LastHitConfirmTime = Gameplay::GetTimeSeconds();
         }
+    }
+
+    // Cosmetic, fire-and-forget: reload montage on the upper body on all machines.
+    UFUNCTION(NetMulticast, Unreliable)
+    void Multicast_ReloadFX()
+    {
+        PlayUpperBodyMontage(ReloadMontage);
+    }
+
+    private void PlayUpperBodyMontage(UAnimMontage Montage)
+    {
+        if (Montage == nullptr || Mesh == nullptr)
+            return;
+        UAnimInstance AnimInst = Mesh.GetAnimInstance();
+        if (AnimInst != nullptr)
+            AnimInst.Montage_Play(Montage);
     }
 
     // Apply a chosen upgrade server-side. The GameMode validates the card against the player's
