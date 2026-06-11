@@ -510,6 +510,166 @@ class ARaidPlayerController : APlayerController
         Print(f"[WeaponSmoke] dot check: health {SmokeStartHealth} -> {HealthNow} burnActive={bBurn} poisonActive={bPoison}", 8.0);
     }
 
+    // --- Debug: live movement-feel tuning (the convergence tool for the feel pass). -------------
+    // `MoveTune`                  — dump every knob as a paste-ready defaults block.
+    // `MoveTune <Param> <Value>`  — set one knob live (host PIE; names per the dump output).
+    // Host-only: on a listen server host = authority + local, so one apply covers prediction
+    // and simulation. A remote client typing it would desync its prediction — refused.
+    UFUNCTION(Exec)
+    void MoveTune(FString Param = "", float Value = 0.0)
+    {
+        AHeroCharacter Hero = GetHero();
+        if (Hero == nullptr || Hero.Locomotion == nullptr)
+        {
+            Print("[MoveTune] needs a hero pawn", 5.0);
+            return;
+        }
+        if (!HasAuthority())
+        {
+            Print("[MoveTune] host only — tuning on a remote client would desync its prediction", 8.0);
+            return;
+        }
+        URogueLocomotionComponent L = Hero.Locomotion;
+
+        FString Key = Param.ToLower();
+        if (Key.IsEmpty() || Key == "dump")
+        {
+            Print("[MoveTune] current values (paste-ready LocomotionComponent defaults):", 20.0);
+            Print(f"[MoveTune] MaxAcceleration = {L.MaxAcceleration}; BrakingDecelerationWalking = {L.BrakingDecelerationWalking}; GroundFriction = {L.GroundFriction};", 20.0);
+            Print(f"[MoveTune] BrakingFriction = {L.BrakingFriction}; BrakingFrictionFactor = {L.BrakingFrictionFactor}; GravityScale = {L.GravityScale};", 20.0);
+            Print(f"[MoveTune] JumpZVelocity = {L.JumpZVelocity}; DoubleJumpZVelocity = {L.DoubleJumpZVelocity}; JumpMaxHoldTime = {L.JumpMaxHoldTime};", 20.0);
+            Print(f"[MoveTune] AirControl = {L.AirControl}; FallingLateralFriction = {L.FallingLateralFriction}; MaxJumpCount = {L.MaxJumpCount};", 20.0);
+            Print(f"[MoveTune] SprintSpeedMultiplier = {L.SprintSpeedMultiplier}; CrouchSpeed = {L.CrouchSpeed}; FocusMoveMultiplier = {L.FocusMoveMultiplier};", 20.0);
+            Print(f"[MoveTune] SlideBoostMultiplier = {L.SlideBoostMultiplier}; SlideSpeedCapMultiplier = {L.SlideSpeedCapMultiplier}; SlideBoostArmMultiplier = {L.SlideBoostArmMultiplier};", 20.0);
+            Print(f"[MoveTune] SlideEntryMinFraction = {L.SlideEntryMinFraction}; SlideExitSpeedFraction = {L.SlideExitSpeedFraction}; SlideGroundFriction = {L.SlideGroundFriction};", 20.0);
+            Print(f"[MoveTune] SlideBraking = {L.SlideBraking}; SlideDownhillAccel = {L.SlideDownhillAccel}; SlideMaxDuration = {L.SlideMaxDuration};", 20.0);
+            Print(f"[MoveTune] SlideBoostCooldown = {L.SlideBoostCooldown}; SlideSustainMinSlope = {L.SlideSustainMinSlope}; bRequireSprintToSlide = {L.bRequireSprintToSlide};", 20.0);
+            return;
+        }
+
+        if (Key == "maxacceleration")                   L.MaxAcceleration = Value;
+        else if (Key == "brakingdecelerationwalking")   L.BrakingDecelerationWalking = Value;
+        else if (Key == "groundfriction")               L.GroundFriction = Value;
+        else if (Key == "brakingfriction")              L.BrakingFriction = Value;
+        else if (Key == "brakingfrictionfactor")        L.BrakingFrictionFactor = Value;
+        else if (Key == "gravityscale")                 L.GravityScale = Value;
+        else if (Key == "jumpzvelocity")                L.JumpZVelocity = Value;
+        else if (Key == "doublejumpzvelocity")          L.DoubleJumpZVelocity = Value;
+        else if (Key == "jumpmaxholdtime")              L.JumpMaxHoldTime = Value;
+        else if (Key == "aircontrol")                   L.AirControl = Value;
+        else if (Key == "fallinglateralfriction")       L.FallingLateralFriction = Value;
+        else if (Key == "maxjumpcount")                 L.MaxJumpCount = int(Value);
+        else if (Key == "sprintspeedmultiplier")        L.SprintSpeedMultiplier = Value;
+        else if (Key == "crouchspeed")                  L.CrouchSpeed = Value;
+        else if (Key == "focusmovemultiplier")          L.FocusMoveMultiplier = Value;
+        else if (Key == "slideboostmultiplier")         L.SlideBoostMultiplier = Value;
+        else if (Key == "slidespeedcapmultiplier")      L.SlideSpeedCapMultiplier = Value;
+        else if (Key == "slideboostarmmultiplier")      L.SlideBoostArmMultiplier = Value;
+        else if (Key == "slideentryminfraction")        L.SlideEntryMinFraction = Value;
+        else if (Key == "slideexitspeedfraction")       L.SlideExitSpeedFraction = Value;
+        else if (Key == "slidegroundfriction")          L.SlideGroundFriction = Value;
+        else if (Key == "slidebraking")                 L.SlideBraking = Value;
+        else if (Key == "slidedownhillaccel")           L.SlideDownhillAccel = Value;
+        else if (Key == "slidemaxduration")             L.SlideMaxDuration = Value;
+        else if (Key == "slideboostcooldown")           L.SlideBoostCooldown = Value;
+        else if (Key == "slidesustainminslope")         L.SlideSustainMinSlope = Value;
+        else if (Key == "brequiresprinttoslide")        L.bRequireSprintToSlide = Value != 0.0;
+        else
+        {
+            Print(f"[MoveTune] unknown param '{Param}' — run bare MoveTune to list every name", 8.0);
+            return;
+        }
+
+        L.ApplyMovementConfig();
+        if (L.IsSliding())
+            Print(f"[MoveTune] {Param} = {Value} (applied; ground-friction class values land when the slide ends)", 6.0);
+        else
+            Print(f"[MoveTune] {Param} = {Value} (applied)", 6.0);
+    }
+
+    // --- Debug: slide-rule battery (feel pass). Asserts StartSlide's three Apex-rule invariants:
+    // boost below the arming threshold, hard cap regardless, no boost above the threshold.
+    // All three read the velocity SYNCHRONOUSLY after CrouchPressed — no tick runs between the
+    // press and the read, so the speed we read is exactly StartSlide's transform of the velocity
+    // we set. `[MoveSmoke] RESULT 3/3` is the SmokeTest.ps1 assertion (RaidArena case).
+    // Polls at boot like the other batteries so it works as -ExecCmds.
+    private int MoveSmokeRetries = 0;
+
+    UFUNCTION(Exec)
+    void MoveSmoke()
+    {
+        AHeroCharacter Hero = GetHero();
+        URogueLocomotionComponent L = Hero != nullptr ? Hero.Locomotion : nullptr;
+        UCharacterMovementComponent Move = Hero != nullptr ? Hero.CharacterMovement : nullptr;
+        if (L == nullptr || Move == nullptr || !Move.IsMovingOnGround())
+        {
+            // Boot-time friendliness: -ExecCmds fires before the hero embodies (and the spawn
+            // drop settles) — poll until it stands on ground; slide entry requires grounded.
+            if (MoveSmokeRetries < 30)
+            {
+                MoveSmokeRetries++;
+                System::SetTimer(this, n"MoveSmoke", 1.0, false);
+                return;
+            }
+            Print("[MoveSmoke] gave up waiting for a grounded hero pawn", 8.0);
+            return;
+        }
+
+        int Pass = 0;
+        FVector Fwd = Hero.GetActorForwardVector();
+        Fwd.Z = 0.0;
+        Fwd = Fwd.GetSafeNormal();
+
+        // 1) Boost: enter at exactly sprint speed (below the arming threshold, cooldown cold)
+        //    -> boosted past sprint, to ~sprint * SlideBoostMultiplier.
+        Hero.SetSprint(true);
+        Move.Velocity = Fwd * L.SprintSpeed();
+        Hero.CrouchPressed();
+        float Speed1 = FlatSpeed(Move);
+        bool bCheck1 = L.IsSliding() && Speed1 > L.SprintSpeed()
+                    && Speed1 >= L.SprintSpeed() * L.SlideBoostMultiplier * 0.95;
+        if (bCheck1)
+            Pass++;
+        else
+            Print(f"[MoveSmoke] FAIL 1: boost (sliding={L.IsSliding()} speed={Speed1} sprint={L.SprintSpeed()} target={L.SprintSpeed() * L.SlideBoostMultiplier})", 15.0);
+        Hero.CrouchReleased();
+
+        // 2) Cap: enter at twice the cap -> clamped to SlideCap. The cap clamps every entry,
+        //    boost cooldown (still hot from check 1) or not.
+        Move.Velocity = Fwd * (L.SlideCap() * 2.0);
+        Hero.CrouchPressed();
+        float Speed2 = FlatSpeed(Move);
+        bool bCheck2 = Speed2 <= L.SlideCap() * 1.01;
+        if (bCheck2)
+            Pass++;
+        else
+            Print(f"[MoveSmoke] FAIL 2: cap (speed={Speed2} cap={L.SlideCap()})", 15.0);
+        Hero.CrouchReleased();
+
+        // 3) No boost above the arming threshold: entry just over sprint * SlideBoostArmMultiplier
+        //    must keep its speed, not gain. (Check 1's boost cooldown is also still hot —
+        //    intentional belt-and-suspenders: either rule alone must refuse the boost.)
+        float Entry3 = L.SprintSpeed() * (L.SlideBoostArmMultiplier + 0.05);
+        Move.Velocity = Fwd * Entry3;
+        Hero.CrouchPressed();
+        float Speed3 = FlatSpeed(Move);
+        bool bCheck3 = Speed3 <= Entry3 * 1.01;
+        if (bCheck3)
+            Pass++;
+        else
+            Print(f"[MoveSmoke] FAIL 3: armed-over-threshold boost leaked (speed={Speed3} entry={Entry3})", 15.0);
+        Hero.CrouchReleased();
+        Hero.SetSprint(false);
+
+        Print(f"[MoveSmoke] RESULT {Pass}/3", 15.0);
+    }
+
+    private float FlatSpeed(UCharacterMovementComponent Move) const
+    {
+        FVector Vel = Move.Velocity;
+        return FVector(Vel.X, Vel.Y, 0.0).Size();
+    }
+
     // --- Debug: apply EVERY upgrade in the GameMode pool to the host hero, then print the weapon
     // attribute values — proves the GE assets actually move the URogueCombatSet attributes. ---
     private int GrantRetries = 0;
