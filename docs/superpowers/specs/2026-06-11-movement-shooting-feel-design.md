@@ -153,7 +153,7 @@ Kills the linked-body problem: legs answer to velocity, torso answers to the cro
 | Risk / open item | Mitigation |
 |---|---|
 | AS `UAnimInstance` subclass unproven in this fork | Spike task #1; C++ fallback documented (§2.5.4) |
-| GASP/Lyra install paths not yet known | User provides paths before migration tasks |
+| GASP/Lyra install paths | Provided: GASP = `F:\UnrealSamples\GameAnimationSample`, Lyra = `F:\UEAS\Samples\Games\Lyra` (both verified present) |
 | GASP may lack a slide anim | Fallback chain in §2.3 |
 | ABP GUI build is manual | Node-by-node instructions + MCP verification after each stage |
 | Damage-number perf under horde + chain | Pooling + merge policy from day one |
