@@ -57,6 +57,17 @@ class URogueHUDWidget : UUserWidget
     const float EdgeArrowScale = 1.8;  // arrows are tiny at the default font size, so scale them up
     const float EdgeLabelInset = 30.0; // how far inward (toward centre) the distance label sits from the arrow
 
+    // Floating damage numbers: a pool of rising texts reused per damaging pellet (white, fades as it
+    // rises). Slots are parallel arrays; Born < 0 marks a free slot, and a full pool evicts the oldest.
+    private TArray<UTextBlock> DamageNumberPool;
+    private TArray<FVector> DamageNumberAnchors;   // world point (impact + XY jitter) the number rises from
+    private TArray<float> DamageNumberBorn;        // world time the slot went live; -1 = free
+    private TArray<float> DamageNumberValues;      // damage shown (slot state; text is set on spawn)
+    const int MaxDamageNumbers = 32;
+    const float DamageNumberLife = 0.7;     // seconds from spawn to gone
+    const float DamageNumberRiseCm = 90.0;  // world-space rise over the lifetime
+    const float DamageNumberJitter = 18.0;  // XY scatter so multi-pellet hits don't stack into one glyph
+
     // Palette (mirrors the mockup tokens): teal accent, red danger, light-blue shield.
     const FLinearColor Accent = FLinearColor(0.27, 0.84, 0.77);
     const FLinearColor Danger = FLinearColor(0.90, 0.28, 0.30);
@@ -163,6 +174,23 @@ class URogueHUDWidget : UUserWidget
             AddChild(LabelText, FAnchors(0.0, 0.0), FVector2D(0.5, 0.5), FVector2D(), FVector2D(), true);
             EdgeLabels.Add(LabelText);
         }
+
+        // Damage-number pool: top-left anchored like the edge markers (absolute layout-space positioning),
+        // centred on their slot, collapsed until a hit claims one. Default text color is already white;
+        // slightly smaller than the HUD texts so they read as feedback, not UI.
+        for (int i = 0; i < MaxDamageNumbers; ++i)
+        {
+            UTextBlock Number = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
+            if (Number == nullptr)
+                continue;
+            Number.SetRenderScale(FVector2D(0.9, 0.9));
+            Number.SetVisibility(ESlateVisibility::Collapsed);
+            AddChild(Number, FAnchors(0.0, 0.0), FVector2D(0.5, 0.5), FVector2D(), FVector2D(), true);
+            DamageNumberPool.Add(Number);
+            DamageNumberAnchors.Add(FVector());
+            DamageNumberBorn.Add(-1.0);
+            DamageNumberValues.Add(0.0);
+        }
     }
 
     // Add a widget to the root canvas with anchor-relative placement. When bAutoSize, the widget sizes
@@ -193,6 +221,7 @@ class URogueHUDWidget : UUserWidget
         RefreshEdgeIndicators();
         RefreshCrosshair();
         RefreshHitMarker();
+        RefreshDamageNumbers();
         RefreshResultBanner();
         RefreshTimer();
         RefreshTeamXP();
@@ -356,6 +385,117 @@ class URogueHUDWidget : UUserWidget
         ESlateVisibility Want = bShow ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
         if (HitMarker.GetVisibility() != Want)
             HitMarker.SetVisibility(Want);
+    }
+
+    // Floating damage numbers: drain the hits the hero buffered from Client_DamageNumbers into pool
+    // slots, then animate every live slot (rise in world space, fade, free on expiry). Local + cosmetic.
+    private void RefreshDamageNumbers()
+    {
+        if (DamageNumberPool.Num() == 0)
+            return;
+
+        // Spawn: one number per damaging pellet buffered since last frame.
+        if (Hero != nullptr)
+        {
+            TArray<FVector> Locs;
+            TArray<float> Amounts;
+            Hero.TakePendingDamageNumbers(Locs, Amounts);
+            int Count = Math::Min(Locs.Num(), Amounts.Num());
+            for (int i = 0; i < Count; ++i)
+                SpawnDamageNumber(Locs[i], Amounts[i]);
+        }
+
+        APlayerController PC = GetOwningPlayer();
+        // If the PC is momentarily null (e.g. during level travel), leave live slots intact so
+        // they resume animating next frame rather than being silently discarded.
+        if (PC == nullptr)
+            return;
+
+        float Now = Gameplay::GetTimeSeconds();
+        for (int i = 0; i < DamageNumberPool.Num(); ++i)
+        {
+            if (DamageNumberBorn[i] < 0.0)
+                continue;
+            UTextBlock Number = DamageNumberPool[i];
+            if (Number == nullptr)
+                continue;
+
+            float Age = Now - DamageNumberBorn[i];
+            if (Age >= DamageNumberLife)
+            {
+                DamageNumberBorn[i] = -1.0;   // expired: free the slot
+                Number.SetVisibility(ESlateVisibility::Collapsed);
+                continue;
+            }
+
+            // Rise in world space so the number tracks the spot it was dealt at, then project
+            // DPI-corrected like the edge markers. Off-screen (behind the camera): hide this frame.
+            float T = Age / DamageNumberLife;
+            FVector WorldPos = DamageNumberAnchors[i] + FVector(0.0, 0.0, DamageNumberRiseCm * T);
+            FVector2D ScreenPos;
+            if (!WidgetLayout::ProjectWorldLocationToWidgetPosition(PC, WorldPos, ScreenPos, false))
+            {
+                if (Number.GetVisibility() != ESlateVisibility::Collapsed)
+                    Number.SetVisibility(ESlateVisibility::Collapsed);
+                continue;
+            }
+
+            Number.SetRenderOpacity(1.0 - T * T);   // ease-out fade: solid early, gone at end of life
+            if (Number.GetVisibility() != ESlateVisibility::HitTestInvisible)
+                Number.SetVisibility(ESlateVisibility::HitTestInvisible);
+            UCanvasPanelSlot Slot = WidgetLayout::SlotAsCanvasSlot(Number);
+            if (Slot != nullptr)
+                Slot.SetPosition(ScreenPos);
+        }
+    }
+
+    // Claim a pool slot for one damaging pellet: first free slot, else evict the oldest live number
+    // (newest feedback wins). XY jitter keeps a shotgun blast from stacking into a single glyph.
+    private void SpawnDamageNumber(FVector WorldLoc, float Amount)
+    {
+        int SlotIdx = -1;
+        int OldestIdx = -1;       // -1 until we see the first live slot
+        float OldestBorn = 0.0;
+        for (int i = 0; i < DamageNumberPool.Num(); ++i)
+        {
+            if (DamageNumberBorn[i] < 0.0)
+            {
+                SlotIdx = i;
+                break;
+            }
+            if (OldestIdx < 0 || DamageNumberBorn[i] < OldestBorn)
+            {
+                OldestIdx = i;
+                OldestBorn = DamageNumberBorn[i];
+            }
+        }
+        if (SlotIdx < 0)
+            SlotIdx = OldestIdx;   // pool is full; OldestIdx is guaranteed >= 0 here
+
+        DamageNumberAnchors[SlotIdx] = WorldLoc + FVector(
+            Math::RandRange(-DamageNumberJitter, DamageNumberJitter),
+            Math::RandRange(-DamageNumberJitter, DamageNumberJitter), 0.0);
+        DamageNumberBorn[SlotIdx] = Gameplay::GetTimeSeconds();
+        DamageNumberValues[SlotIdx] = Amount;
+
+        UTextBlock Number = DamageNumberPool[SlotIdx];
+        if (Number != nullptr)
+            Number.SetText(FText::FromString(FormatDamageValue(Amount)));
+        // Position/visibility/opacity are applied by the animate pass in the same Tick.
+    }
+
+    // Rounded int normally; 10000+ as "12.5k". Round to int first so the >= 10000 threshold
+    // applies to the rounded value (e.g. 9999.6 rounds to 10000 and correctly shows "10.0k").
+    // AS f-strings have no precision specifiers (no :.1f), so compose whole + tenths from integers.
+    private FString FormatDamageValue(float Amount)
+    {
+        int Rounded = Math::RoundToInt(Amount);
+        if (Rounded >= 10000)
+        {
+            int Tenths = (Rounded + 50) / 100;   // round to nearest tenth of a thousand
+            return f"{Tenths / 10}.{Tenths % 10}k";
+        }
+        return f"{Rounded}";
     }
 
     private void RefreshHero()

@@ -91,6 +91,31 @@ class AHeroCharacter : ARogueHeroBase
     UPROPERTY(BlueprintReadOnly, Category = "Weapon")
     float LastHitConfirmTime = -100.0;
 
+    // Floating damage numbers waiting for the HUD to spawn them (owning client only).
+    private TArray<FVector> PendingDamageLocs;
+    private TArray<float> PendingDamageAmounts;
+
+    // Cosmetic, per-hit damage feedback to the shooter only. Unreliable: a lost number is noise.
+    UFUNCTION(Client, Unreliable)
+    void Client_DamageNumbers(TArray<FVector> Locations, TArray<float> Amounts)
+    {
+        int Count = Math::Min(Locations.Num(), Amounts.Num());
+        for (int i = 0; i < Count; i++)
+        {
+            PendingDamageLocs.Add(Locations[i]);
+            PendingDamageAmounts.Add(Amounts[i]);
+        }
+    }
+
+    // The HUD drains the buffer once per frame.
+    void TakePendingDamageNumbers(TArray<FVector>& OutLocs, TArray<float>& OutAmounts)
+    {
+        OutLocs = PendingDamageLocs;
+        OutAmounts = PendingDamageAmounts;
+        PendingDamageLocs.Empty();
+        PendingDamageAmounts.Empty();
+    }
+
     // --- Down/revive (MVP lose condition, D-0010). Logic lives in URogueDownComponent; the
     // replicated life-state lives here on the pawn so teammates see/skip downed allies. ---
     UPROPERTY(DefaultComponent)

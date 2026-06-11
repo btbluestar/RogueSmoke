@@ -73,6 +73,8 @@ class UGA_WeaponFire : UGA_RogueAbility
         Shot.ClusterChainBonusArcs = int(GetCombatAttribute(n"ClusterChainBonusArcs"));
 
         TArray<FVector> Impacts;
+        TArray<FVector> DamageLocs;
+        TArray<float> DamageAmounts;
         bool bHitEnemy = false;
         for (int i = 0; i < Def.BulletsPerCartridge; i++)
         {
@@ -81,10 +83,20 @@ class UGA_WeaponFire : UGA_RogueAbility
             FHitscanResult Result = Combat.FireWeaponShot(MuzzleLoc, End, Shot, Avatar);
             Impacts.Add(Result.ImpactPoint);
             if (Result.bHitEnemy)
+            {
                 bHitEnemy = true;
+                if (Result.DamageDealt > 0.0)
+                {
+                    DamageLocs.Add(Result.ImpactPoint);
+                    DamageAmounts.Add(Result.DamageDealt);
+                }
+            }
         }
 
         Weapon.NotifyFired();
         Hero.Multicast_FireFX(MuzzleLoc, Impacts, bHitEnemy);
+        // Per-pellet damage numbers to the shooter only (owning client renders them via the HUD).
+        if (DamageLocs.Num() > 0)
+            Hero.Client_DamageNumbers(DamageLocs, DamageAmounts);
     }
 }
