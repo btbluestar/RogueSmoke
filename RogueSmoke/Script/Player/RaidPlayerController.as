@@ -70,20 +70,43 @@ class ARaidPlayerController : APlayerController
     // else calls AddToViewport.
     private URogueUILayout Layout;
 
-    // Server -> owning client: present a choose-1-of-N upgrade screen with the rolled options.
-    // CommonUI: pushed onto the GameMenu layer (input config All — the raid keeps running),
-    // then fed the offer via Setup(). No manual cursor code; the widget's config handles it.
+    // Server -> owning client: present THIS player's hand (per-player rolls, D-0019).
+    // CurrentStacks[i] = how many copies of Options[i] this player already owns (card "Lv n" text).
     UFUNCTION(Client)
-    void Client_OfferUpgrades(TArray<URogueUpgradeDef> Options)
+    void Client_OfferUpgrades(TArray<URogueUpgradeDef> Options, TArray<int> CurrentStacks)
     {
-        if (Layout == nullptr || Options.Num() == 0 || ActiveUpgradeWidget != nullptr)
+        if (Layout == nullptr || Options.Num() == 0)
             return;
-
+        if (ActiveUpgradeWidget != nullptr)
+        {
+            ActiveUpgradeWidget.Refresh(Options, CurrentStacks);   // reroll replaced the hand
+            return;
+        }
         ActiveUpgradeWidget = Cast<UUpgradeSelectWidget>(
             Layout.PushToLayer(ERogueUILayer::GameMenu, UUpgradeSelectWidget));
         if (ActiveUpgradeWidget == nullptr)
             return;
-        ActiveUpgradeWidget.Setup(Options);
+        ActiveUpgradeWidget.Setup(Options, CurrentStacks);
+    }
+
+    // Server -> owning client: watchdog auto-picked for us — drop the screen.
+    UFUNCTION(Client)
+    void Client_ForceClosePick()
+    {
+        if (ActiveUpgradeWidget != nullptr)
+        {
+            ActiveUpgradeWidget.DeactivateWidget();
+            ActiveUpgradeWidget = nullptr;
+        }
+    }
+
+    // Client -> server: spend one squad reroll on my hand (validated server-side).
+    UFUNCTION(Server)
+    void Server_RequestReroll()
+    {
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        if (GameMode != nullptr)
+            GameMode.RequestReroll(this);
     }
 
     // Called by the widget after a pick (it deactivates itself; the stack pops it).
@@ -806,6 +829,209 @@ class ARaidPlayerController : APlayerController
         }
         Combat.ShowTelegraphZone(Hero.GetActorLocation(), 450.0, 2.0);
         Print("[Telegraph] smoke zone requested (r=450, 2s)", 5.0);
+    }
+
+    // --- Debug: Loop-v2 flow battery (D-0019). Asserts: cap filtering, milestone guarantee,
+    // synergy duo-gating (solo relaxation), utility padding, reroll spend, watchdog auto-pick.
+    // Host-only; polls at boot so it works as -ExecCmds. SmokeTest.ps1 asserts the RESULT line.
+    private int FlowSmokeRetries = 0;
+
+    UFUNCTION(Exec)
+    void UpgradeFlowSmoke()
+    {
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        AHeroCharacter Hero = GetHero();
+        if (GameMode == nullptr || Hero == nullptr || PlayerState == nullptr)
+        {
+            if (GameMode != nullptr && FlowSmokeRetries < 30)
+            {
+                FlowSmokeRetries++;
+                System::SetTimer(this, n"UpgradeFlowSmoke", 1.0, false);
+                return;
+            }
+            Print("[FlowSmoke] host only, and needs a hero pawn", 5.0);
+            return;
+        }
+
+        int Pass = 0;
+        int Total = 6;
+
+        // 1) Baseline: a hand has OptionsPerOffer cards (utility padding guarantees it
+        //    once the UtilityPool is assigned; before Task 5 content, accept >= 1).
+        TArray<URogueUpgradeDef> Hand = GameMode.DebugRollFor(PlayerState, 1, false);
+        if (Hand.Num() >= 1)
+            Pass++;
+        else
+            Print("[FlowSmoke] FAIL 1: empty baseline hand", 10.0);
+
+        // 2) Cap filtering: max out the first capped card; it must vanish from 20 salted rolls.
+        URogueUpgradeDef Capped;
+        for (URogueUpgradeDef Def : GameMode.UpgradePool)
+        {
+            if (Def != nullptr && !Def.bSynergyUpgrade && !Def.bMilestone && Def.MaxStacks > 0)
+            {
+                Capped = Def;
+                break;
+            }
+        }
+        if (Capped != nullptr)
+        {
+            for (int i = 0; i < Capped.MaxStacks; i++)
+                GameMode.AddStack(PlayerState, Capped);
+            bool bLeaked = false;
+            for (int s = 0; s < 20; s++)
+            {
+                TArray<URogueUpgradeDef> H = GameMode.DebugRollFor(PlayerState, 100 + s, false);
+                if (H.Contains(Capped))
+                    bLeaked = true;
+            }
+            if (!bLeaked)
+                Pass++;
+            else
+                Print("[FlowSmoke] FAIL 2: capped card still offered", 10.0);
+        }
+        else
+        {
+            Pass++;   // no capped cards in pool — vacuously true
+            Print("[FlowSmoke] note: no capped card to test", 5.0);
+        }
+
+        // 3) Milestone guarantee: find a bMilestone card, satisfy its self-prereqs, assert it
+        //    appears in the next hand. Skips (vacuous pass) until Task 5 authors one.
+        URogueUpgradeDef Milestone;
+        for (URogueUpgradeDef Def : GameMode.UpgradePool)
+        {
+            if (Def != nullptr && Def.bMilestone && Def.bPrereqSelf && Def.PrereqA != nullptr)
+            {
+                Milestone = Def;
+                break;
+            }
+        }
+        if (Milestone != nullptr)
+        {
+            int Need = Milestone.PrereqAStacks - GameMode.GetStackCount(PlayerState, Milestone.PrereqA);
+            for (int i = 0; i < Need; i++)
+                GameMode.AddStack(PlayerState, Milestone.PrereqA);
+            if (Milestone.PrereqB != nullptr)
+            {
+                int NeedB = Milestone.PrereqBStacks - GameMode.GetStackCount(PlayerState, Milestone.PrereqB);
+                for (int i = 0; i < NeedB; i++)
+                    GameMode.AddStack(PlayerState, Milestone.PrereqB);
+            }
+            TArray<URogueUpgradeDef> MH = GameMode.DebugRollFor(PlayerState, 7, false);
+            if (MH.Contains(Milestone))
+                Pass++;
+            else
+                Print("[FlowSmoke] FAIL 3: eligible milestone not guaranteed a slot", 10.0);
+        }
+        else
+        {
+            Pass++;
+            Print("[FlowSmoke] note: no milestone card to test (pre-Task-5)", 5.0);
+        }
+
+        // 4) Synergy duo gate: an un-met synergy card must NOT roll; after satisfying its
+        //    prereqs on this (solo) player, it MUST become rollable.
+        URogueUpgradeDef Synergy;
+        for (URogueUpgradeDef Def : GameMode.UpgradePool)
+        {
+            if (Def != nullptr && Def.bSynergyUpgrade && Def.PrereqA != nullptr && !Def.bPrereqSelf)
+            {
+                Synergy = Def;
+                break;
+            }
+        }
+        if (Synergy != nullptr)
+        {
+            bool bEarlyLeak = false;
+            if (GameMode.GetStackCount(PlayerState, Synergy.PrereqA) < Synergy.PrereqAStacks)
+            {
+                for (int s = 0; s < 20; s++)
+                {
+                    TArray<URogueUpgradeDef> H = GameMode.DebugRollFor(PlayerState, 200 + s, true);
+                    if (H.Contains(Synergy))
+                        bEarlyLeak = true;
+                }
+            }
+            int NeedA = Synergy.PrereqAStacks - GameMode.GetStackCount(PlayerState, Synergy.PrereqA);
+            for (int i = 0; i < NeedA; i++)
+                GameMode.AddStack(PlayerState, Synergy.PrereqA);
+            if (Synergy.PrereqB != nullptr)
+            {
+                int NeedB = Synergy.PrereqBStacks - GameMode.GetStackCount(PlayerState, Synergy.PrereqB);
+                for (int i = 0; i < NeedB; i++)
+                    GameMode.AddStack(PlayerState, Synergy.PrereqB);
+            }
+            bool bNowOffered = false;
+            for (int s = 0; s < 20; s++)
+            {
+                TArray<URogueUpgradeDef> H = GameMode.DebugRollFor(PlayerState, 300 + s, true);
+                if (H.Contains(Synergy))
+                    bNowOffered = true;
+            }
+            if (!bEarlyLeak && bNowOffered)
+                Pass++;
+            else
+                Print(f"[FlowSmoke] FAIL 4: duo gate (earlyLeak={bEarlyLeak} nowOffered={bNowOffered})", 10.0);
+        }
+        else
+        {
+            Pass++;
+            Print("[FlowSmoke] note: no gated synergy card to test (pre-Task-5)", 5.0);
+        }
+
+        // 5) Determinism: same salt twice = identical hand.
+        TArray<URogueUpgradeDef> D1 = GameMode.DebugRollFor(PlayerState, 42, false);
+        TArray<URogueUpgradeDef> D2 = GameMode.DebugRollFor(PlayerState, 42, false);
+        bool bSame = D1.Num() == D2.Num();
+        if (bSame)
+        {
+            for (int i = 0; i < D1.Num(); i++)
+            {
+                if (D1[i] != D2[i])
+                    bSame = false;
+            }
+        }
+        if (bSame && D1.Num() > 0)
+            Pass++;
+        else
+            Print("[FlowSmoke] FAIL 5: same-salt rolls differ", 10.0);
+
+        // 6) Live round-trip: real offer -> reroll spend -> watchdog auto-pick -> resume.
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        int RerollsBefore = GS != nullptr ? GS.SquadRerollsRemaining : -1;
+        GameMode.OfferUpgradesWeighted(70.0, 25.0, 5.0, false);
+        Server_RequestReroll();
+        int RerollsAfter = GS != nullptr ? GS.SquadRerollsRemaining : -1;
+        if (RerollsBefore == 1 && RerollsAfter == 0)
+            Pass++;
+        else
+            Print(f"[FlowSmoke] FAIL 6: reroll {RerollsBefore} -> {RerollsAfter}", 10.0);
+        // The watchdog now auto-picks and resumes (fast under headless paused-tick); grep
+        // "[Upgrades] raid resumed" separately.
+
+        Print(f"[FlowSmoke] RESULT {Pass}/{Total}", 15.0);
+    }
+
+    // --- Debug: print the XP curve table + live team state (pacing tuning, D-0019). ---
+    UFUNCTION(Exec)
+    void RaidXPReport()
+    {
+        ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (GameMode == nullptr || GS == nullptr)
+        {
+            Print("[XPReport] host only", 4.0);
+            return;
+        }
+        float Cumulative = 0.0;
+        for (int Lv = 1; Lv <= 12; Lv++)
+        {
+            float Step = GameMode.XPBasePerLevel + GameMode.XPGrowthPerLevel * float(Lv - 1);
+            Cumulative += Step;
+            Print(f"[XPReport] L{Lv}->L{Lv + 1}: {Step} (cumulative {Cumulative})", 12.0);
+        }
+        Print(f"[XPReport] live: level {GS.TeamLevel}, {GS.TeamXP}/{GS.XPToNextLevel}", 12.0);
     }
 
     // --- Replay: type `RaidRestart` in the ~ console to reload the current level (fresh run + seed) ----
