@@ -91,6 +91,20 @@ class AHeroCharacter : ARogueHeroBase
     UPROPERTY(Replicated)
     bool bFocusing = false;
 
+    // --- Idle free-look (anim feel): at true idle the camera orbits without twisting the body
+    // (no more feet shuffling on the spot). The camera-yaw hard lock resumes — with a quick
+    // catch-up turn the strafe blendspace masks — whenever the body must face the camera again:
+    // move input, airborne, firing, focusing, sliding, or the camera swinging past the deadband. ---
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Facing")
+    float IdleFreeLookYawLimit = 100.0;    // deg the camera may swing before dragging the body
+
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Facing")
+    float IdleAlignYawRate = 540.0;        // deg/s catch-up turn speed
+
+    // Owner+server mirror of held-fire intent: bWantsToFire is server-only, but facing must
+    // agree on the predicting owner too or the body snaps on correction.
+    private bool bFireHeldForFacing = false;
+
     // World time of the last confirmed enemy hit on the owning client; the HUD flashes a hitmarker.
     UPROPERTY(BlueprintReadOnly, Category = "Weapon")
     float LastHitConfirmTime = -100.0;
@@ -190,10 +204,14 @@ class AHeroCharacter : ARogueHeroBase
             // Route through the stop-edge detector so a held trigger cut by going down still
             // rings the tail out (server only; on clients the flag is always false — no edge).
             SetHeldFire(false);
+            SetFireHeldForFacing(false);
             CharacterMovement.StopMovementImmediately();
             Locomotion.ResetAirState();
         }
     }
+
+    // Owner + server: the facing logic needs the held-fire intent on both machines.
+    void SetFireHeldForFacing(bool bHeld) { bFireHeldForFacing = bHeld; }
 
     // Server: write the held-fire flag through the stop-edge detector — a held->released
     // transition rings the gun tail out on all machines (full-auto fatigue fix).
@@ -433,7 +451,10 @@ class AHeroCharacter : ARogueHeroBase
     {
         // Slide physics run wherever movement is simulated (predicted client + authority).
         if (IsLocallyControlled() || HasAuthority())
+        {
             Locomotion.TickLocomotion(DeltaSeconds);
+            TickFacing(DeltaSeconds);
+        }
 
         // Owning client: camera feel (focus zoom + FOV kicks + fire kick + landing dip; cosmetic, local only).
         if (IsLocallyControlled())
@@ -459,6 +480,70 @@ class AHeroCharacter : ARogueHeroBase
                     ActivateGrantedAbility(FireInputTag);
             }
         }
+    }
+
+    // Idle free-look: drop the camera-yaw hard lock while truly idle so the camera orbits a
+    // planted body; restore it (via a smooth catch-up turn) the moment the body must face the
+    // camera. Runs on the predicting owner and the server (sim proxies replicate rotation);
+    // both sides compute from the same inputs so corrections stay negligible.
+    private void TickFacing(float DeltaSeconds)
+    {
+        if (Controller == nullptr)
+            return;
+
+        if (IsIncapacitated())
+        {
+            // Downed bodies never rotate with the camera.
+            bUseControllerRotationYaw = false;
+            return;
+        }
+
+        bool bNeedsCamera = bFireHeldForFacing || bFocusing
+            || CharacterMovement.IsFalling()
+            || Locomotion.IsSliding()
+            || CharacterMovement.GetCurrentAcceleration().SizeSquared() > 1.0;
+
+        float CtrlYaw = GetControlRotation().Yaw;
+        float ActorYaw = GetActorRotation().Yaw;
+        float Delta = NormalizeYaw(CtrlYaw - ActorYaw);
+
+        if (bNeedsCamera)
+        {
+            if (bUseControllerRotationYaw)
+                return;
+            // Catch up to the camera, then hand back to the hard lock.
+            float Step = IdleAlignYawRate * DeltaSeconds;
+            if (Math::Abs(Delta) <= Step)
+            {
+                bUseControllerRotationYaw = true;
+            }
+            else
+            {
+                FRotator R = GetActorRotation();
+                R.Yaw += (Delta > 0.0) ? Step : -Step;
+                SetActorRotation(R);
+            }
+            return;
+        }
+
+        // True idle: free-look. If the camera swings past the deadband, drag the body just
+        // enough to ride the limit (reads as a natural repositioning step).
+        bUseControllerRotationYaw = false;
+        if (Math::Abs(Delta) > IdleFreeLookYawLimit)
+        {
+            float Step = Math::Min(IdleAlignYawRate * DeltaSeconds, Math::Abs(Delta) - IdleFreeLookYawLimit);
+            FRotator R = GetActorRotation();
+            R.Yaw += (Delta > 0.0) ? Step : -Step;
+            SetActorRotation(R);
+        }
+    }
+
+    private float NormalizeYaw(float Angle) const
+    {
+        float A = Angle;
+        while (A > 180.0)  A -= 360.0;
+        while (A < -180.0) A += 360.0;
+        return A;
     }
 
     // Resolve an input tag to the granted ability spec and activate it (server-authoritative).
@@ -496,6 +581,7 @@ class AHeroCharacter : ARogueHeroBase
         // detector means a press-while-down is a no-op and a held->incap stop releases the tail.
         bool bWant = bWants && !IsIncapacitated();
         SetHeldFire(bWant);
+        SetFireHeldForFacing(bWant);
         if (bWant)
             ActivateGrantedAbility(FireInputTag);
     }

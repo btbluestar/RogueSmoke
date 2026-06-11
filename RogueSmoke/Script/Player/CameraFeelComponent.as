@@ -35,6 +35,13 @@ class URogueCameraFeelComponent : UActorComponent
     UPROPERTY(EditDefaultsOnly, Category = "Camera|Kick")
     float KickSpringDamping = 30.0;
 
+    // --- Slide camera roll (Apex-style): tilt into the slide's lateral direction ---
+    UPROPERTY(EditDefaultsOnly, Category = "Camera|Slide")
+    float SlideRollMax = 4.0;              // deg at full lateral speed
+
+    UPROPERTY(EditDefaultsOnly, Category = "Camera|Slide")
+    float SlideRollBlendSpeed = 7.0;       // interp in/out
+
     // --- Landing dip ---
     UPROPERTY(EditDefaultsOnly, Category = "Camera|Landing")
     float LandDipPerFallSpeed = 0.02;      // cm of dip per cm/s of fall speed
@@ -63,6 +70,7 @@ class URogueCameraFeelComponent : UActorComponent
     private float KickYawVel = 0.0;
     private float DipZ = 0.0;
     private float DipZVel = 0.0;
+    private float SlideRoll = 0.0;
     private FVector CameraBaseRelLocation;
 
     void Initialize(AHeroCharacter InHero, USpringArmComponent InBoom, UCameraComponent InCamera)
@@ -128,9 +136,20 @@ class URogueCameraFeelComponent : UActorComponent
             WantSpeedBonus = SprintFOVBonus;
         SpeedFOVBonus = Math::FInterpTo(SpeedFOVBonus, WantSpeedBonus, DeltaSeconds, FOVBlendSpeed);
 
+        // Slide roll: tilt toward the slide's lateral velocity (0 when sliding straight ahead).
+        float WantRoll = 0.0;
+        if (Hero.Locomotion.IsSliding())
+        {
+            FVector Vel = Hero.GetVelocity();
+            FVector Local = Hero.GetActorRotation().UnrotateVector(FVector(Vel.X, Vel.Y, 0.0));
+            float SprintRef = Math::Max(Hero.Locomotion.SprintSpeed(), 1.0);
+            WantRoll = Math::Clamp(Local.Y / SprintRef, -1.0, 1.0) * SlideRollMax;
+        }
+        SlideRoll = Math::FInterpTo(SlideRoll, WantRoll, DeltaSeconds, SlideRollBlendSpeed);
+
         Camera.FieldOfView = Math::Lerp(BaseCameraFOV + SpeedFOVBonus, TargetFOV, FocusAlpha);
         Boom.TargetArmLength = Math::Lerp(BaseArmLength, TargetArm, FocusAlpha);
-        Camera.SetRelativeRotation(FRotator(KickPitch, KickYaw, 0.0));
+        Camera.SetRelativeRotation(FRotator(KickPitch, KickYaw, SlideRoll));
         Camera.SetRelativeLocation(CameraBaseRelLocation + FVector(0.0, 0.0, DipZ));
     }
 }

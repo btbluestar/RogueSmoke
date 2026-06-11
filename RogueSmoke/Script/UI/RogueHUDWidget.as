@@ -360,20 +360,30 @@ class URogueHUDWidget : UUserWidget
             ResultHint.SetVisibility(ESlateVisibility::HitTestInvisible);
     }
 
-    // Crosshair bloom proxy: tighten when focusing, widen while moving (hip-fire). Full heat-driven bloom
-    // needs weapon heat replicated to the owning client (server-only today) — a follow-up; the host reads
-    // its own weapon directly, so this is exact for the host and a good approximation for remote clients.
+    // Crosshair bloom: scale tracks the weapon's live spread cone (GetSpreadDegrees — heat + movement
+    // + focus). Exact on the listen-server host; on remote clients heat is server-only so this degrades
+    // to the movement/focus modifiers over base spread (continuous, still reads correctly). Smoothed so
+    // per-shot heat blooms and decays like Destiny instead of snapping between fixed sizes.
+    private float CrosshairScale = 1.0;
+
     private void RefreshCrosshair()
     {
         if (Crosshair == nullptr || Hero == nullptr)
             return;
 
-        float Scale = 1.0;
-        if (Hero.bFocusing)
-            Scale = 0.6;
-        else if (Hero.CharacterMovement != nullptr && Hero.CharacterMovement.Velocity.Size() > 50.0)
-            Scale = 1.6;
-        Crosshair.SetRenderScale(FVector2D(Scale, Scale));
+        float TargetScale = 1.0;
+        URogueWeaponComponent Weapon = Hero.Weapon;
+        if (Weapon != nullptr && Weapon.Definition != nullptr)
+        {
+            bool bMoving = Hero.CharacterMovement != nullptr && Hero.CharacterMovement.Velocity.Size() > 50.0;
+            float SpreadDeg = Weapon.GetSpreadDegrees(bMoving, Hero.bFocusing);
+            TargetScale = 0.5 + SpreadDeg * 0.125;   // 1 deg -> 0.63, 8 deg -> 1.5, focused ~0.55
+        }
+        else if (Hero.bFocusing)
+            TargetScale = 0.6;
+
+        CrosshairScale = Math::FInterpTo(CrosshairScale, TargetScale, Gameplay::GetWorldDeltaSeconds(), 12.0);
+        Crosshair.SetRenderScale(FVector2D(CrosshairScale, CrosshairScale));
     }
 
     // Flash the hitmarker for HitMarkerDuration after the hero records a confirmed hit (set locally on the

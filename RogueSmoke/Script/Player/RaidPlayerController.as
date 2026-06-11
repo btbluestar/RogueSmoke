@@ -275,7 +275,10 @@ class ARaidPlayerController : APlayerController
     {
         AHeroCharacter Hero = GetHero();
         if (Hero != nullptr)
+        {
+            Hero.SetFireHeldForFacing(true);   // owner-side mirror: facing must not wait for the RPC
             Hero.Server_SetWantsToFire(true);
+        }
     }
 
     UFUNCTION()
@@ -283,7 +286,10 @@ class ARaidPlayerController : APlayerController
     {
         AHeroCharacter Hero = GetHero();
         if (Hero != nullptr)
+        {
+            Hero.SetFireHeldForFacing(false);
             Hero.Server_SetWantsToFire(false);
+        }
     }
 
     UFUNCTION()
@@ -551,6 +557,9 @@ class ARaidPlayerController : APlayerController
             Print(f"[MoveTune] KickSpringStiffness = {C.KickSpringStiffness}; KickSpringDamping = {C.KickSpringDamping};", 20.0);
             Print(f"[MoveTune] LandDipPerFallSpeed = {C.LandDipPerFallSpeed}; LandDipMax = {C.LandDipMax};", 20.0);
             Print(f"[MoveTune] DipSpringStiffness = {C.DipSpringStiffness}; DipSpringDamping = {C.DipSpringDamping};", 20.0);
+            Print(f"[MoveTune] SlideRollMax = {C.SlideRollMax}; SlideRollBlendSpeed = {C.SlideRollBlendSpeed};", 20.0);
+            Print("[MoveTune] current values (paste-ready HeroCharacter.as facing defaults):", 20.0);
+            Print(f"[MoveTune] IdleFreeLookYawLimit = {Hero.IdleFreeLookYawLimit}; IdleAlignYawRate = {Hero.IdleAlignYawRate};", 20.0);
             return;
         }
 
@@ -595,6 +604,11 @@ class ARaidPlayerController : APlayerController
         else if (Key == "landdipmax")                   C.LandDipMax = Value;
         else if (Key == "dipspringstiffness")           C.DipSpringStiffness = Value;
         else if (Key == "dipspringdamping")             C.DipSpringDamping = Value;
+        else if (Key == "sliderollmax")                 C.SlideRollMax = Value;
+        else if (Key == "sliderollblendspeed")          C.SlideRollBlendSpeed = Value;
+        // Facing knobs live on the hero (idle free-look).
+        else if (Key == "idlefreelookyawlimit")         Hero.IdleFreeLookYawLimit = Value;
+        else if (Key == "idlealignyawrate")             Hero.IdleAlignYawRate = Value;
         else
         {
             Print(f"[MoveTune] unknown param '{Param}' — run bare MoveTune to list every name", 8.0);
