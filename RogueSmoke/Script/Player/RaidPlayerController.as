@@ -530,6 +530,7 @@ class ARaidPlayerController : APlayerController
             return;
         }
         URogueLocomotionComponent L = Hero.Locomotion;
+        URogueCameraFeelComponent C = Hero.CameraFeel;
 
         FString Key = Param.ToLower();
         if (Key.IsEmpty() || Key == "dump")
@@ -544,6 +545,12 @@ class ARaidPlayerController : APlayerController
             Print(f"[MoveTune] SlideEntryMinFraction = {L.SlideEntryMinFraction}; SlideExitSpeedFraction = {L.SlideExitSpeedFraction}; SlideGroundFriction = {L.SlideGroundFriction};", 20.0);
             Print(f"[MoveTune] SlideBraking = {L.SlideBraking}; SlideDownhillAccel = {L.SlideDownhillAccel}; SlideMaxDuration = {L.SlideMaxDuration};", 20.0);
             Print(f"[MoveTune] SlideBoostCooldown = {L.SlideBoostCooldown}; SlideSustainMinSlope = {L.SlideSustainMinSlope}; bRequireSprintToSlide = {L.bRequireSprintToSlide};", 20.0);
+            Print("[MoveTune] current values (paste-ready CameraFeelComponent.as defaults):", 20.0);
+            Print(f"[MoveTune] SprintFOVBonus = {C.SprintFOVBonus}; SlideFOVBonus = {C.SlideFOVBonus}; FOVBlendSpeed = {C.FOVBlendSpeed};", 20.0);
+            Print(f"[MoveTune] FireKickPitch = {C.FireKickPitch}; FireKickYawRange = {C.FireKickYawRange}; FireKickMaxOffset = {C.FireKickMaxOffset};", 20.0);
+            Print(f"[MoveTune] KickSpringStiffness = {C.KickSpringStiffness}; KickSpringDamping = {C.KickSpringDamping};", 20.0);
+            Print(f"[MoveTune] LandDipPerFallSpeed = {C.LandDipPerFallSpeed}; LandDipMax = {C.LandDipMax};", 20.0);
+            Print(f"[MoveTune] DipSpringStiffness = {C.DipSpringStiffness}; DipSpringDamping = {C.DipSpringDamping};", 20.0);
             return;
         }
 
@@ -574,6 +581,20 @@ class ARaidPlayerController : APlayerController
         else if (Key == "slideboostcooldown")           L.SlideBoostCooldown = Value;
         else if (Key == "slidesustainminslope")         L.SlideSustainMinSlope = Value;
         else if (Key == "brequiresprinttoslide")        L.bRequireSprintToSlide = Value != 0.0;
+        // Camera-feel knobs: read per-tick by the component, so the assignment alone is live
+        // (ApplyMovementConfig below is harmless for them).
+        else if (Key == "sprintfovbonus")               C.SprintFOVBonus = Value;
+        else if (Key == "slidefovbonus")                C.SlideFOVBonus = Value;
+        else if (Key == "fovblendspeed")                C.FOVBlendSpeed = Value;
+        else if (Key == "firekickpitch")                C.FireKickPitch = Value;
+        else if (Key == "firekickyawrange")             C.FireKickYawRange = Value;
+        else if (Key == "firekickmaxoffset")            C.FireKickMaxOffset = Value;
+        else if (Key == "kickspringstiffness")          C.KickSpringStiffness = Value;
+        else if (Key == "kickspringdamping")            C.KickSpringDamping = Value;
+        else if (Key == "landdipperfallspeed")          C.LandDipPerFallSpeed = Value;
+        else if (Key == "landdipmax")                   C.LandDipMax = Value;
+        else if (Key == "dipspringstiffness")           C.DipSpringStiffness = Value;
+        else if (Key == "dipspringdamping")             C.DipSpringDamping = Value;
         else
         {
             Print(f"[MoveTune] unknown param '{Param}' — run bare MoveTune to list every name", 8.0);

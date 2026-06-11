@@ -15,7 +15,7 @@ class AHeroCharacter : ARogueHeroBase
     default CameraBoom.TargetArmLength = 350.0;                   // over-the-shoulder distance (GDD §9)
     default CameraBoom.SocketOffset = FVector(0.0, 60.0, 60.0);   // shoulder offset (right + up)
     default CameraBoom.bUsePawnControlRotation = true;            // aim drives the boom
-    default CameraBoom.bEnableCameraLag = true;
+    default CameraBoom.bEnableCameraLag = false;                  // camera bolted to the pawn — lag smoothing eats the spring kick/dip displacements, so the feel layer needs a rigid camera
 
     UPROPERTY(DefaultComponent, Attach = CameraBoom)
     UCameraComponent FollowCamera;
@@ -42,6 +42,10 @@ class AHeroCharacter : ARogueHeroBase
     // --- Movement (D-0015): sprint / crouch / slide / double-jump state machine. ---
     UPROPERTY(DefaultComponent)
     URogueLocomotionComponent Locomotion;
+
+    // --- Camera juice (owning-client cosmetic): focus zoom, FOV kicks, fire kick, landing dip. ---
+    UPROPERTY(DefaultComponent)
+    URogueCameraFeelComponent CameraFeel;
 
     // --- Shooting (modular weapon system) ---
     // Runtime weapon state (ammo/heat/spread/reload). Logic only; the weapon mesh is content on the BP.
@@ -71,11 +75,6 @@ class AHeroCharacter : ARogueHeroBase
     // owning client can predict it. The camera zoom itself is owning-client cosmetic only. ---
     UPROPERTY(Replicated)
     bool bFocusing = false;
-
-    private float FocusAlpha = 0.0;          // owning-client camera blend 0..1
-    const float BaseCameraFOV = 90.0;
-    const float BaseArmLength = 350.0;       // mirrors CameraBoom.TargetArmLength default
-    const float FocusBlendSpeed = 9.0;       // FInterp speed for the zoom blend
 
     // World time of the last confirmed enemy hit on the owning client; the HUD flashes a hitmarker.
     UPROPERTY(BlueprintReadOnly, Category = "Weapon")
@@ -158,6 +157,9 @@ class AHeroCharacter : ARogueHeroBase
         Locomotion.SetBaseSpeed(CurrentMoveSpeed);
         ASC.RegisterAttributeChangedCallback(URogueCombatSet, n"MoveSpeed", this, n"OnMoveSpeedChanged");
 
+        // Camera feel: hand it the camera rig (owning-client cosmetic; ticks from the hero Tick).
+        CameraFeel.Initialize(this, CameraBoom, FollowCamera);
+
         // Down/revive: subscribes (server) to Health hitting 0. Self-gates to authority.
         Down.Initialize(this);
 
@@ -184,6 +186,15 @@ class AHeroCharacter : ARogueHeroBase
             + AimYaw.GetForwardVector() * 60.0
             + AimYaw.GetRightVector() * 30.0
             + FVector(0.0, 0.0, 40.0);
+    }
+
+    // The weapon definition for cosmetic use on ANY machine: runtime definition where valid
+    // (server/host), else the class-default DefaultWeapon (same fallback as WeaponMesh).
+    URogueWeaponDefinition GetCosmeticWeaponDef() const
+    {
+        if (Weapon != nullptr && Weapon.Definition != nullptr)
+            return Weapon.Definition;
+        return DefaultWeapon;
     }
 
     // Keep locomotion's base speed in sync with the MoveSpeed attribute (e.g. the Swift upgrade).
@@ -255,6 +266,8 @@ class AHeroCharacter : ARogueHeroBase
     {
         float FallSpeed = Math::Abs(CharacterMovement.Velocity.Z);
         Locomotion.NotifyLanded(FallSpeed);
+        if (IsLocallyControlled())
+            CameraFeel.NotifyLanded(FallSpeed);
     }
 
     UFUNCTION(BlueprintCallable)
@@ -319,23 +332,6 @@ class AHeroCharacter : ARogueHeroBase
         Locomotion.SetFocus(bWants);
     }
 
-    // Owning-client cosmetic: blend the focus camera (FOV zoom + boom pull-in) toward the focus state.
-    private void UpdateFocusCamera(float DeltaSeconds)
-    {
-        float Target = bFocusing ? 1.0 : 0.0;
-        FocusAlpha = Math::FInterpTo(FocusAlpha, Target, DeltaSeconds, FocusBlendSpeed);
-
-        float TargetFOV = 70.0;          // fallbacks for remote clients (Weapon.Definition is server-only)
-        float TargetArm = 220.0;
-        if (Weapon != nullptr && Weapon.Definition != nullptr)
-        {
-            TargetFOV = Weapon.Definition.FocusFOV;
-            TargetArm = Weapon.Definition.FocusArmLength;
-        }
-        FollowCamera.FieldOfView = Math::Lerp(BaseCameraFOV, TargetFOV, FocusAlpha);
-        CameraBoom.TargetArmLength = Math::Lerp(BaseArmLength, TargetArm, FocusAlpha);
-    }
-
     // Server: drive weapon timing and full-auto refire. Overriding Tick is what makes the class tick.
     UFUNCTION(BlueprintOverride)
     void Tick(float DeltaSeconds)
@@ -344,9 +340,9 @@ class AHeroCharacter : ARogueHeroBase
         if (IsLocallyControlled() || HasAuthority())
             Locomotion.TickLocomotion(DeltaSeconds);
 
-        // Owning client: blend the focus camera zoom (cosmetic, local only).
+        // Owning client: camera feel (focus zoom + FOV kicks + fire kick + landing dip; cosmetic, local only).
         if (IsLocallyControlled())
-            UpdateFocusCamera(DeltaSeconds);
+            CameraFeel.TickCameraFeel(DeltaSeconds);
 
         if (HasAuthority())
         {
@@ -424,6 +420,7 @@ class AHeroCharacter : ARogueHeroBase
 
         if (IsLocallyControlled())
         {
+            CameraFeel.NotifyFired();
             if (Weapon != nullptr && Weapon.Definition != nullptr)
             {
                 AddControllerPitchInput(-Weapon.Definition.RecoilPitchPerShot);
