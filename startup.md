@@ -69,8 +69,11 @@ faithful. AngelScript `Print()` lines land in the log as `LogBlueprintUserMessag
   `Tools\BootLevel.ps1 -Map /Game/Levels/DebuggingLevels/DL_Upgrades -Exec "UpgradeSmoke" -Grep "Upgrade"`
   (Run **script files**, not inline `Start-Process` one-liners — the machine's antivirus
   AMSI-blocks inline launchers.)
-- **Full regression gate:** `Tools\SmokeTest.ps1` — boots every debug level, PASS/FAIL table,
-  exit 1 on failure. **Run this before claiming a change works and before any commit.**
+- **Full regression gate:** `Tools\SmokeTest.ps1` — 9 boot cases (RaidArena, 6× `DL_Enemy_*`,
+  `DL_Upgrades` twice: once for `UpgradeSmoke`+`UpgradeFlowSmoke`, once for `EvoSmoke`+
+  `DirectorReport` — separate boots because UpgradeSmoke applies every pool GE and would
+  pre-set the evolution flags). PASS/FAIL table, exit 1 on failure. **Run this before claiming
+  a change works and before any commit.**
 - **Levels:** `DL_Combat` (sandbox; taunt→cluster→barrage combo), `DL_Enemy_<Archetype>` ×6
   (one enemy each via `AEnemyTestStand`), `DL_Upgrades` (firing range — `AUpgradeTestRange` spawns
   `ATargetDummy` formations: SOLO for damage/DoT, LINE for pierce, CLUSTER for chain).
@@ -180,7 +183,7 @@ Treat every gameplay change as a networked change.
 | Authoritative technical reference (read before touching combat/abilities/Mass) | `Rogue_Smoke_MVP_Architecture.md` |
 | System overview + authority model | `ARCHITECTURE.md` |
 | AngelScript conventions + replication patterns | `CODING_STANDARDS.md` |
-| Has this been decided already? (D-0001 … D-0018) | `DECISIONS.md` — **check before re-litigating** |
+| Has this been decided already? (D-0001 … D-0020) | `DECISIONS.md` — **check before re-litigating** |
 | What does this term mean exactly? | `GLOSSARY.md` — one name per concept; use these exact terms |
 | Engine build / project bring-up | `SETUP.md` |
 | Determinism + multiplayer + headless testing detail | `TESTING.md` |
