@@ -99,6 +99,15 @@ struct FWeaponShotParams
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
 	float PoisonDuration = 6.f;
+
+	/** v3 evolutions (D-0020): > 0 means chain arcs also Burn their target at
+	 *  ArcDamage * ChainIgniteFraction / BurnDuration DPS for BurnDuration (Searing Arcs). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
+	float ChainIgniteFraction = 0.f;
+
+	/** Extra chain arcs when the directly-hit victim is Clustered (Overwhelm evolution). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shot")
+	int32 ClusterChainBonusArcs = 0;
 };
 
 UCLASS()
@@ -182,6 +191,18 @@ public:
 	/** Apply Damage to every player pawn within Radius of Center (explosions, slams). Server-only. */
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	void ApplyRadialDamageToPlayers(FVector Center, float Radius, float Damage, AActor* DamageInstigator);
+
+	/** Apply a DoT to every LIVE registered enemy within Radius (Toxic Burst death cloud).
+	 *  DoT only — no instant damage — so cascades are time-gated by dot ticks (bounded by
+	 *  design, like chains). Returns how many enemies were dotted. Server-only. */
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	int32 ApplyDotInSphere(FVector Center, float Radius, ERogueDotType Type,
+	                       float DamagePerSecond, float Duration, AActor* DamageInstigator);
+
+	/** Grant Shield to every player pawn, clamped to each pawn's MaxShield (Iron Bulwark).
+	 *  Goes through a transient instant GE so RogueHealthSet stays the single write path. */
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	void GrantShieldToSquad(float Amount);
 
 	// --- Cues (cosmetic, replicated) ---
 	/**

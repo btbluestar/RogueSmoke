@@ -38,6 +38,11 @@ public:
 	/** True for elites/bosses (gate the "arena cleared" objective); false for fodder. See GetEliteCount. */
 	bool CountsAsObjectiveTarget() const { return bCountsAsObjectiveTarget; }
 
+	/** Director-injected wave elites are pressure, not clear-gates: the raid objective flags
+	 *  them false at spawn. Pooled actors keep the last value, so spawn sites set it explicitly. */
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	void SetCountsAsObjectiveTarget(bool bCounts) { bCountsAsObjectiveTarget = bCounts; }
+
 	/** Begin steering toward Target at Strength (uu/s) for Duration seconds. Server-only stub. */
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	void ApplyPull(const FVector& Target, float Strength, float Duration);

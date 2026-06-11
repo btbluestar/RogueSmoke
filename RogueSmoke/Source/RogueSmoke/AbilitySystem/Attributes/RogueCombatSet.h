@@ -42,6 +42,17 @@ public:
 	ATTRIBUTE_ACCESSORS(URogueCombatSet, PoisonChance);
 	ATTRIBUTE_ACCESSORS(URogueCombatSet, MagazineBonus);
 	ATTRIBUTE_ACCESSORS(URogueCombatSet, ReloadSpeedBonus);
+	ATTRIBUTE_ACCESSORS(URogueCombatSet, ChainIgniteFraction);
+	ATTRIBUTE_ACCESSORS(URogueCombatSet, ClusterChainBonusArcs);
+	ATTRIBUTE_ACCESSORS(URogueCombatSet, PoisonBurstDps);
+	ATTRIBUTE_ACCESSORS(URogueCombatSet, ClusterKillShieldAmount);
+	ATTRIBUTE_ACCESSORS(URogueCombatSet, TauntRadiusBonus);
+	ATTRIBUTE_ACCESSORS(URogueCombatSet, TauntClusterDurationBonus);
+	ATTRIBUTE_ACCESSORS(URogueCombatSet, TauntDamage);
+	ATTRIBUTE_ACCESSORS(URogueCombatSet, TauntVortex);
+	ATTRIBUTE_ACCESSORS(URogueCombatSet, BarrageDamageBonus);
+	ATTRIBUTE_ACCESSORS(URogueCombatSet, BarrageSalvoCount);
+	ATTRIBUTE_ACCESSORS(URogueCombatSet, BarrageCarpet);
 
 protected:
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
@@ -61,6 +72,17 @@ protected:
 	UFUNCTION() void OnRep_PoisonChance(const FAngelscriptGameplayAttributeData& Old)         { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
 	UFUNCTION() void OnRep_MagazineBonus(const FAngelscriptGameplayAttributeData& Old)        { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
 	UFUNCTION() void OnRep_ReloadSpeedBonus(const FAngelscriptGameplayAttributeData& Old)     { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
+	UFUNCTION() void OnRep_ChainIgniteFraction(const FAngelscriptGameplayAttributeData& Old)     { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
+	UFUNCTION() void OnRep_ClusterChainBonusArcs(const FAngelscriptGameplayAttributeData& Old)   { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
+	UFUNCTION() void OnRep_PoisonBurstDps(const FAngelscriptGameplayAttributeData& Old)          { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
+	UFUNCTION() void OnRep_ClusterKillShieldAmount(const FAngelscriptGameplayAttributeData& Old) { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
+	UFUNCTION() void OnRep_TauntRadiusBonus(const FAngelscriptGameplayAttributeData& Old)        { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
+	UFUNCTION() void OnRep_TauntClusterDurationBonus(const FAngelscriptGameplayAttributeData& Old) { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
+	UFUNCTION() void OnRep_TauntDamage(const FAngelscriptGameplayAttributeData& Old)             { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
+	UFUNCTION() void OnRep_TauntVortex(const FAngelscriptGameplayAttributeData& Old)             { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
+	UFUNCTION() void OnRep_BarrageDamageBonus(const FAngelscriptGameplayAttributeData& Old)      { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
+	UFUNCTION() void OnRep_BarrageSalvoCount(const FAngelscriptGameplayAttributeData& Old)       { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
+	UFUNCTION() void OnRep_BarrageCarpet(const FAngelscriptGameplayAttributeData& Old)           { FAngelscriptGameplayAttributeData O = Old; OnRep_Attribute(O); }
 
 private:
 	// Drives ACharacter::CharacterMovement->MaxWalkSpeed (hero listens for changes).
@@ -116,4 +138,48 @@ private:
 	// Shrinks reload time: ReloadSeconds / (1 + ReloadSpeedBonus).
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_ReloadSpeedBonus, Category = "Weapon", meta = (AllowPrivateAccess = true))
 	FAngelscriptGameplayAttributeData ReloadSpeedBonus;
+
+	// --- v3 behavior evolutions + hero ability tracks (D-0020). Same contract as the weapon
+	// track: all default 0 = behavior off; instant ADD_BASE GEs stack on repeat picks.
+	// Flags (TauntVortex/BarrageCarpet) are "treat >= 1 as on".
+
+	// Chain arcs also ignite: arc targets get Burn at ArcDamage * fraction / BurnDuration.
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_ChainIgniteFraction, Category = "Evolution", meta = (AllowPrivateAccess = true))
+	FAngelscriptGameplayAttributeData ChainIgniteFraction;
+
+	// Extra chain arcs when the directly-hit victim is Clustered (Overwhelm evolution).
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_ClusterChainBonusArcs, Category = "Evolution", meta = (AllowPrivateAccess = true))
+	FAngelscriptGameplayAttributeData ClusterChainBonusArcs;
+
+	// Enemies dying while Poisoned burst: poison DoT at this DPS in a sphere (RaidGameMode death path).
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_PoisonBurstDps, Category = "Evolution", meta = (AllowPrivateAccess = true))
+	FAngelscriptGameplayAttributeData PoisonBurstDps;
+
+	// Flat Shield granted to the squad per Clustered kill (Iron Bulwark).
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_ClusterKillShieldAmount, Category = "Evolution", meta = (AllowPrivateAccess = true))
+	FAngelscriptGameplayAttributeData ClusterKillShieldAmount;
+
+	// Taunt track: additive radius (uu) / Clustered duration (s); TauntDamage > 0 makes the
+	// taunt hit (Concussive Taunt); TauntVortex >= 1 turns it into a re-pulling vortex.
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_TauntRadiusBonus, Category = "Ability", meta = (AllowPrivateAccess = true))
+	FAngelscriptGameplayAttributeData TauntRadiusBonus;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_TauntClusterDurationBonus, Category = "Ability", meta = (AllowPrivateAccess = true))
+	FAngelscriptGameplayAttributeData TauntClusterDurationBonus;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_TauntDamage, Category = "Ability", meta = (AllowPrivateAccess = true))
+	FAngelscriptGameplayAttributeData TauntDamage;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_TauntVortex, Category = "Ability", meta = (AllowPrivateAccess = true))
+	FAngelscriptGameplayAttributeData TauntVortex;
+
+	// Barrage track: multiplicative damage bonus; extra echo strikes; carpet flag.
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_BarrageDamageBonus, Category = "Ability", meta = (AllowPrivateAccess = true))
+	FAngelscriptGameplayAttributeData BarrageDamageBonus;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_BarrageSalvoCount, Category = "Ability", meta = (AllowPrivateAccess = true))
+	FAngelscriptGameplayAttributeData BarrageSalvoCount;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_BarrageCarpet, Category = "Ability", meta = (AllowPrivateAccess = true))
+	FAngelscriptGameplayAttributeData BarrageCarpet;
 };

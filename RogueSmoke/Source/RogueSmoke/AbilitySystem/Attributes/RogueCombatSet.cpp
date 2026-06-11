@@ -17,6 +17,17 @@ URogueCombatSet::URogueCombatSet()
 	InitPoisonChance(0.0f);
 	InitMagazineBonus(0.0f);
 	InitReloadSpeedBonus(0.0f);
+	InitChainIgniteFraction(0.0f);
+	InitClusterChainBonusArcs(0.0f);
+	InitPoisonBurstDps(0.0f);
+	InitClusterKillShieldAmount(0.0f);
+	InitTauntRadiusBonus(0.0f);
+	InitTauntClusterDurationBonus(0.0f);
+	InitTauntDamage(0.0f);
+	InitTauntVortex(0.0f);
+	InitBarrageDamageBonus(0.0f);
+	InitBarrageSalvoCount(0.0f);
+	InitBarrageCarpet(0.0f);
 }
 
 void URogueCombatSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -44,7 +55,13 @@ void URogueCombatSet::PreAttributeChange(const FGameplayAttribute& Attribute, fl
 	}
 	else if (Attribute == GetWeaponDamageBonusAttribute() || Attribute == GetFireRateBonusAttribute() ||
 	         Attribute == GetPierceCountAttribute() || Attribute == GetChainCountAttribute() ||
-	         Attribute == GetMagazineBonusAttribute() || Attribute == GetReloadSpeedBonusAttribute())
+	         Attribute == GetMagazineBonusAttribute() || Attribute == GetReloadSpeedBonusAttribute() ||
+	         Attribute == GetChainIgniteFractionAttribute() || Attribute == GetClusterChainBonusArcsAttribute() ||
+	         Attribute == GetPoisonBurstDpsAttribute() || Attribute == GetClusterKillShieldAmountAttribute() ||
+	         Attribute == GetTauntRadiusBonusAttribute() || Attribute == GetTauntClusterDurationBonusAttribute() ||
+	         Attribute == GetTauntDamageAttribute() || Attribute == GetTauntVortexAttribute() ||
+	         Attribute == GetBarrageDamageBonusAttribute() || Attribute == GetBarrageSalvoCountAttribute() ||
+	         Attribute == GetBarrageCarpetAttribute())
 	{
 		// No negative weapon stats — a debuff system would want its own design pass, not underflow.
 		NewValue = FMath::Max(NewValue, 0.0f);
