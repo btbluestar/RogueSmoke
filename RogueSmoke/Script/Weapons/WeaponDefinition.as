@@ -85,6 +85,32 @@ class URogueWeaponDefinition : UPrimaryDataAsset
     UPROPERTY(EditDefaultsOnly, Category = "Cosmetic")
     UAnimMontage FireMontage;
 
-    UPROPERTY(EditDefaultsOnly, Category = "Cosmetic")
-    USoundBase FireSound;
+    // --- Feel: VFX (all optional; null = debug-line fallback) ---
+    UPROPERTY(EditDefaultsOnly, Category = "Feel|VFX")
+    UNiagaraSystem MuzzleFlashFX;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Feel|VFX")
+    UNiagaraSystem TracerFX;           // expects a user vector param "TracerEnd"
+
+    UPROPERTY(EditDefaultsOnly, Category = "Feel|VFX")
+    UNiagaraSystem ImpactWorldFX;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Feel|VFX")
+    UNiagaraSystem ImpactEnemyFX;
+
+    // --- Feel: audio (all optional; null = silent) ---
+    UPROPERTY(EditDefaultsOnly, Category = "Feel|Audio")
+    USoundBase FireSound;              // short per-shot (transient+body); 4-6 round-robins inside the cue
+
+    UPROPERTY(EditDefaultsOnly, Category = "Feel|Audio")
+    USoundBase FireTailSound;          // played once on trigger release (the tail sells power); Task 12 wires the call site
+
+    UPROPERTY(EditDefaultsOnly, Category = "Feel|Audio")
+    USoundBase ReloadSound;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Feel|Audio")
+    USoundBase HitTickSound;           // owning client, confirmed hit
+
+    UPROPERTY(EditDefaultsOnly, Category = "Feel|Audio")
+    USoundBase KillConfirmSound;       // owning client, killing blow (Task 12 wires it)
 }

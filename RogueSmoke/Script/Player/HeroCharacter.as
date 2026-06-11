@@ -451,16 +451,54 @@ class AHeroCharacter : ARogueHeroBase
             Weapon.StartReload();
     }
 
-    // Cosmetic, fire-and-forget: muzzle tracer(s) on all machines + recoil and a hitmarker on the
-    // owning client. MuzzleLocation is the gun muzzle (computed server-side) so tracers come from the
-    // weapon, not the camera (D-0014). bHitEnemy flags that a pellet damaged an enemy this shot.
+    // Cosmetic, fire-and-forget: muzzle flash / tracer(s) / impacts + fire sound on all machines,
+    // recoil and a hitmarker on the owning client. MuzzleLocation is the gun muzzle (computed
+    // server-side) so tracers come from the weapon, not the camera (D-0014). ImpactIsEnemy is
+    // per-pellet (surface-aware impact FX); bHitEnemy flags that any pellet damaged an enemy.
+    // All FX/audio slots on the definition are optional: null = debug-line / silent fallback.
     UFUNCTION(NetMulticast, Unreliable)
-    void Multicast_FireFX(FVector MuzzleLocation, TArray<FVector> Impacts, bool bHitEnemy)
+    void Multicast_FireFX(FVector MuzzleLocation, TArray<FVector> Impacts, TArray<bool> ImpactIsEnemy, bool bHitEnemy)
     {
         PlayUpperBodyMontage(FireMontage);
 
-        for (FVector Impact : Impacts)
-            System::DrawDebugLine(MuzzleLocation, Impact, FLinearColor(1.0, 1.0, 0.0), 0.05, 2.0);
+        URogueWeaponDefinition Def = GetCosmeticWeaponDef();
+        for (int i = 0; i < Impacts.Num(); i++)
+        {
+            FVector Impact = Impacts[i];
+
+            // Tracer: spawn aimed muzzle->impact and hand the system its endpoint.
+            if (Def != nullptr && Def.TracerFX != nullptr)
+            {
+                FRotator TracerRot = (Impact - MuzzleLocation).ToOrientationRotator();
+                UNiagaraComponent Tracer = Niagara::SpawnSystemAtLocation(Def.TracerFX, MuzzleLocation, TracerRot);
+                if (Tracer != nullptr)
+                    Tracer.SetVectorParameter(n"TracerEnd", Impact);
+            }
+            else
+            {
+                System::DrawDebugLine(MuzzleLocation, Impact, FLinearColor(1.0, 1.0, 0.0), 0.05, 2.0);
+            }
+
+            // Surface-aware impact: enemy flesh vs world geometry.
+            if (Def != nullptr)
+            {
+                bool bEnemyImpact = i < ImpactIsEnemy.Num() && ImpactIsEnemy[i];
+                UNiagaraSystem ImpactFX = bEnemyImpact ? Def.ImpactEnemyFX : Def.ImpactWorldFX;
+                if (ImpactFX != nullptr)
+                    Niagara::SpawnSystemAtLocation(ImpactFX, Impact);
+            }
+        }
+
+        if (Def != nullptr)
+        {
+            // Muzzle flash rides the gun (one per cartridge, not per pellet). A bad socket name
+            // silently attaches to the mesh root — acceptable cosmetic degradation.
+            if (Def.MuzzleFlashFX != nullptr)
+                Niagara::SpawnSystemAttached(Def.MuzzleFlashFX, WeaponMesh, Def.MuzzleSocket,
+                    FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, true);
+            if (Def.FireSound != nullptr)
+                Gameplay::SpawnSoundAtLocation(Def.FireSound, MuzzleLocation);
+        }
 
         if (IsLocallyControlled())
         {
@@ -471,15 +509,22 @@ class AHeroCharacter : ARogueHeroBase
                 AddControllerYawInput(Math::RandRange(-Weapon.Definition.RecoilYawRange, Weapon.Definition.RecoilYawRange));
             }
             if (bHitEnemy)
+            {
                 LastHitConfirmTime = Gameplay::GetTimeSeconds();
+                if (Def != nullptr && Def.HitTickSound != nullptr)
+                    Gameplay::SpawnSound2D(Def.HitTickSound);
+            }
         }
     }
 
-    // Cosmetic, fire-and-forget: reload montage on the upper body on all machines.
+    // Cosmetic, fire-and-forget: reload montage + reload sound on all machines.
     UFUNCTION(NetMulticast, Unreliable)
     void Multicast_ReloadFX()
     {
         PlayUpperBodyMontage(ReloadMontage);
+        URogueWeaponDefinition Def = GetCosmeticWeaponDef();
+        if (Def != nullptr && Def.ReloadSound != nullptr)
+            Gameplay::SpawnSoundAtLocation(Def.ReloadSound, GetActorLocation());
     }
 
     private void PlayUpperBodyMontage(UAnimMontage Montage)
