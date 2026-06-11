@@ -372,6 +372,14 @@ Sim proxies: sliding mirrors through `bIsSliding` on the anim instance — also 
 
 ## Phase 2 — Gun models
 
+> **EXECUTION LOG (Tasks 4-7, 2026-06-12):** all done and verified. Highlights/deviations:
+> - Plugins enabled in .uproject (Lyra graphs need them): `AnimationLocomotionLibrary`, `AnimationWarping`, `Metasound`.
+> - `AimPitch`/`AimYaw` flipped to `BlueprintReadWrite`; ABP's shadowing BP-vars (those two + 5 `GameplayTag_*`) deleted; full chain (`ABP_Mannequin_Base` + `ABP_ItemAnimLayersBase` + `ABP_RifleAnimLayers`) compiles with ZERO errors on the AS parent.
+> - Probes green: turn-in-place (RootYawOffset −120→−7.5 under smooth yaw, feet <3cm drift), locomotion (DisplacementSpeed==600 at run, no foot-slide), jump (GroundDistance feeds), MoveSmoke 3/3.
+> - Slide = dynamic montages (`PlaySlotAnimationAsDynamicMontage` on DefaultSlot) driven by a Tick edge-detector — NOT a montage asset with sections; GASP set retargeted via `RTG_UEFN_to_UE5_Mannequin` (8 anims at `Animations/Slide/MM_Slide_*`). Verified live: In → 2s loop-hold → Out_Idle_Crouch. In→Loop handover untested (In clip outlives short slides) — feel-pass item.
+> - **MAJOR FIND:** hero BPs carried template EventGraph cruft — an unconnected `Event Tick` node had been **swallowing the AS Tick since v1** (TickLocomotion/TickFacing/full-auto refire never ran!), plus BP-side AddMappingContext + IA_Move→DoMove double input. All 10 nodes purged from both BPs. `TickSlideAnim()` now runs BEFORE `TickLocomotion()` (same-frame start/end edge ordering).
+> - Synthetic-probe gotchas for future sessions: unfocused editor runs 8-30fps; `Print(text, 0.0)` never logs; pawn gets pinned at arena walls after repeated forward-drive runs (teleport home between probes).
+
 ### Task 8: Attach SK_Rifle with its weapon ABP
 
 - [ ] **Step 1: Inspect current gun visual:** `blueprint_outline` each hero BP — find the existing weapon mesh component (name + socket). Verify the Lyra socket python-side: list `SKM_Manny` skeleton sockets, expect `weapon_r` on `hand_r`.

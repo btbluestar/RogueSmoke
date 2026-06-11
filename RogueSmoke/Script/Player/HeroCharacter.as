@@ -111,6 +111,29 @@ class AHeroCharacter : ARogueHeroBase
     UPROPERTY(EditDefaultsOnly, Category = "Animation")
     bool bActorLevelFreeLook = false;
 
+    // GASP slide set (retargeted onto the Lyra skeleton) played as dynamic montages on the
+    // full-body slot — slide is OUR mechanic, Lyra's graph knows nothing about it (D-0022).
+    UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
+    UAnimSequenceBase SlideInAnim;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
+    UAnimSequenceBase SlideLoopAnim;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
+    UAnimSequenceBase SlideOutStandAnim;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
+    UAnimSequenceBase SlideOutCrouchAnim;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
+    UAnimSequenceBase SlideOutRunAnim;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
+    FName SlideMontageSlot = n"DefaultSlot";
+
+    private bool bSlideAnimActive = false;
+    private float SlideLoopStartTime = 0.0;
+
     // Owner+server mirror of held-fire intent: bWantsToFire is server-only, but facing must
     // agree on the predicting owner too or the body snaps on correction.
     private bool bFireHeldForFacing = false;
@@ -289,10 +312,17 @@ class AHeroCharacter : ARogueHeroBase
 
         // Visible weapon mesh (all machines): attach to the right hand and set the asset from the class
         // default (available everywhere even though the runtime Weapon.Definition is server-only today).
-        WeaponMesh.AttachToComponent(Mesh, n"hand_r", EAttachmentRule::SnapToTarget,
+        // Lyra mannequin carries an authored grip socket (weapon_r on hand_r); fall back to the
+        // bare hand bone on meshes that lack it.
+        FName GripSocket = Mesh.DoesSocketExist(n"weapon_r") ? n"weapon_r" : n"hand_r";
+        WeaponMesh.AttachToComponent(Mesh, GripSocket, EAttachmentRule::SnapToTarget,
             EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, false);
         if (DefaultWeapon != nullptr && DefaultWeapon.WeaponMesh != nullptr)
+        {
             WeaponMesh.SetSkeletalMeshAsset(DefaultWeapon.WeaponMesh);
+            if (DefaultWeapon.WeaponAnimClass.IsValid())
+                WeaponMesh.SetAnimInstanceClass(DefaultWeapon.WeaponAnimClass);
+        }
 
         // Lyra linked-layer: overlay the held weapon's anim set onto the base locomotion graph.
         if (WeaponAnimLayer.IsValid())
@@ -467,6 +497,9 @@ class AHeroCharacter : ARogueHeroBase
         // Slide physics run wherever movement is simulated (predicted client + authority).
         if (IsLocallyControlled() || HasAuthority())
         {
+            // Anim edge-detect BEFORE the locomotion tick: a slide that starts and ends across
+            // one frame boundary must still register its start edge here.
+            TickSlideAnim();
             Locomotion.TickLocomotion(DeltaSeconds);
             TickFacing(DeltaSeconds);
         }
@@ -569,6 +602,61 @@ class AHeroCharacter : ARogueHeroBase
         return A;
     }
 
+    // Slide anim driver: edge-detect the locomotion slide state every Tick (all machines — the
+    // state derives from replicated movement, so owner predicts, server confirms, proxies mirror).
+    private void TickSlideAnim()
+    {
+        bool bSlidingNow = Locomotion != nullptr && Locomotion.IsSliding();
+        if (bSlidingNow == bSlideAnimActive)
+        {
+            // Mid-slide: hand over from the one-shot In to the Loop once the In has played out.
+            if (bSlidingNow && SlideLoopAnim != nullptr && SlideLoopStartTime > 0.0
+                && Gameplay::GetTimeSeconds() >= SlideLoopStartTime)
+            {
+                PlaySlideAnim(SlideLoopAnim, 9999);
+                SlideLoopStartTime = 0.0;
+            }
+            return;
+        }
+        bSlideAnimActive = bSlidingNow;
+        if (bSlidingNow)
+        {
+            if (SlideInAnim != nullptr)
+            {
+                PlaySlideAnim(SlideInAnim, 1);
+                SlideLoopStartTime = Gameplay::GetTimeSeconds() + SlideInAnim.GetPlayLength() - 0.2;
+            }
+            else if (SlideLoopAnim != nullptr)
+            {
+                PlaySlideAnim(SlideLoopAnim, 9999);
+            }
+        }
+        else
+        {
+            SlideLoopStartTime = 0.0;
+            // Exit pick: crouch-held -> crouch exit; still fast -> run exit; else stand exit.
+            UAnimSequenceBase Out = SlideOutStandAnim;
+            if (Locomotion != nullptr && Locomotion.IsCrouchHeld() && SlideOutCrouchAnim != nullptr)
+                Out = SlideOutCrouchAnim;
+            else
+            {
+                FVector V = GetVelocity();
+                if (FVector(V.X, V.Y, 0.0).Size() > 500.0 && SlideOutRunAnim != nullptr)
+                    Out = SlideOutRunAnim;
+            }
+            if (Out != nullptr)
+                PlaySlideAnim(Out, 1);
+        }
+    }
+
+    private void PlaySlideAnim(UAnimSequenceBase Anim, int LoopCount)
+    {
+        UAnimInstance AnimInst = Mesh.GetAnimInstance();
+        if (AnimInst == nullptr)
+            return;
+        AnimInst.PlaySlotAnimationAsDynamicMontage(Anim, SlideMontageSlot, 0.15, 0.25, 1.0, LoopCount, -1.0, 0.0);
+    }
+
     // Resolve an input tag to the granted ability spec and activate it (server-authoritative).
     private void ActivateGrantedAbility(FGameplayTag InputTag)
     {
@@ -633,6 +721,7 @@ class AHeroCharacter : ARogueHeroBase
         PlayUpperBodyMontage(FireMontage);
 
         URogueWeaponDefinition Def = GetCosmeticWeaponDef();
+        PlayWeaponMontage(Def != nullptr ? Def.WeaponFireMontage : nullptr);
         for (int i = 0; i < Impacts.Num(); i++)
         {
             FVector Impact = Impacts[i];
@@ -717,6 +806,7 @@ class AHeroCharacter : ARogueHeroBase
     {
         PlayUpperBodyMontage(ReloadMontage);
         URogueWeaponDefinition Def = GetCosmeticWeaponDef();
+        PlayWeaponMontage(Def != nullptr ? Def.WeaponReloadMontage : nullptr);
         if (Def != nullptr && Def.ReloadSound != nullptr)
             Gameplay::SpawnSoundAtLocation(Def.ReloadSound, GetActorLocation());
     }
@@ -728,6 +818,15 @@ class AHeroCharacter : ARogueHeroBase
         UAnimInstance AnimInst = Mesh.GetAnimInstance();
         if (AnimInst != nullptr)
             AnimInst.Montage_Play(Montage);
+    }
+
+    private void PlayWeaponMontage(UAnimMontage Montage)
+    {
+        if (Montage == nullptr || WeaponMesh == nullptr || WeaponMesh.GetSkeletalMeshAsset() == nullptr)
+            return;
+        UAnimInstance WeapAnim = WeaponMesh.GetAnimInstance();
+        if (WeapAnim != nullptr)
+            WeapAnim.Montage_Play(Montage);
     }
 
     // Apply a chosen upgrade server-side. The GameMode validates the card against the player's

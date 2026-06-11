@@ -85,6 +85,17 @@ class URogueWeaponDefinition : UPrimaryDataAsset
     UPROPERTY(EditDefaultsOnly, Category = "Cosmetic")
     UAnimMontage FireMontage;
 
+    // Anim blueprint the visible gun mesh runs (Lyra weapon ABPs animate bolt/magazine).
+    UPROPERTY(EditDefaultsOnly, Category = "Animation")
+    TSubclassOf<UAnimInstance> WeaponAnimClass;
+
+    // Montages played on the GUN's own mesh (not the character): fire kick / reload sequence.
+    UPROPERTY(EditDefaultsOnly, Category = "Animation")
+    UAnimMontage WeaponFireMontage;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Animation")
+    UAnimMontage WeaponReloadMontage;
+
     // --- Feel: VFX (all optional; null = debug-line fallback) ---
     UPROPERTY(EditDefaultsOnly, Category = "Feel|VFX")
     UNiagaraSystem MuzzleFlashFX;
