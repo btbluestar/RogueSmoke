@@ -85,6 +85,15 @@
 - **Utility card** — consolation filler (squad heal, small stat dribble) padding a hand that
   eligibility filtering left short; a pick screen never shows a dead/short hand.
 - **Squad reroll** — one shared charge per raid; any player may spend it to re-roll their own hand.
+- **Behavior evolution** — a chest/milestone card that changes a *mechanic*, not a number
+  (chain arcs ignite, poisoned enemies burst on death, taunt becomes a vortex). Hit-path
+  evolutions compile into the seam; death-path evolutions script on the kill event. (D-0020)
+- **Ability track** — a hero-gated card line: stat cards → milestone → behavior evolution
+  (Taunt: Magnetic Pull → Concussive Taunt → Event Horizon; Barrage: High Explosives →
+  Twin Salvo → Carpet Bombing). `RequiredHeroClass` keeps it out of the wrong hero's hand.
+- **Wave director** — the pure function (`RaidDirector::ComputeWavePlan`) scaling fodder-wave
+  pressure with team level and squad size: size, tempo, deterministic elite injections.
+  Injected elites never gate the arena clear.
 - **Meta-progression** — persistence *between* runs (scope still open).
 
 ## Technical / architecture

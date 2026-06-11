@@ -76,7 +76,9 @@ faithful. AngelScript `Print()` lines land in the log as `LogBlueprintUserMessag
   `ATargetDummy` formations: SOLO for damage/DoT, LINE for pierce, CLUSTER for chain).
 - **Console execs** (type in `~` or pass via `-ExecCmds`; all retry-poll ~30 s so they survive
   firing before the hero spawns): `ListUpgrades`, `GrantUpgrade <partial>`, `GrantAllUpgrades`,
-  `UpgradeSmoke`, `UpgradeFlowSmoke` (D-0019 caps/milestones/duo-gates/reroll battery),
+  `UpgradeSmoke`, `UpgradeFlowSmoke` (D-0019 caps/milestones/duo-gates/reroll/hero-gate battery),
+  `EvoSmoke` (D-0020 behavior-evolution battery — run WITHOUT UpgradeSmoke in the same session),
+  `DirectorReport` (D-0020 wave-director plan table + checks),
   `RaidXPReport` (XP-curve table), `WeaponSmoke`, `TelegraphSmoke`, `RaidGiveXP <n>`, `RaidKillOneElite`,
   `RaidKillElites`, `RaidGoToChest`, `RaidDebugCam`, `RaidRestart`, `RaidWin`/`RaidLose`,
   `RaidResults`, `RaidPause`. Grep `[XP]`, `[Upgrades]`, `[Chest]`, `[Telegraph]`.
@@ -152,14 +154,18 @@ Treat every gameplay change as a networked change.
   One **squad reroll** per raid; the 30 s watchdog **auto-picks** card 0 for AFK players; picks
   validate server-side against the offered hand. The Brood-mother drops an **upgrade chest** —
   stand next to it for a squad **synergy-upgrade** pick (only source of synergy cards; offers
-  only squad-eligible cards). Pool: 24 cards incl. 5 synergy + 4 milestone + 2 utility.
+  only squad-eligible cards). Pool: 35 cards incl. 5 synergy + 4 **behavior evolutions**
+  (chest: Searing Arcs / Toxic Burst / Critical Mass / Iron Bulwark), hero-gated **ability
+  tracks** (Taunt → Event Horizon vortex; Barrage → Twin Salvo → Carpet Bombing), milestones
+  + 2 utility (D-0020). A **wave director** scales fodder pressure with team level + squad
+  size (deterministic elite injections from level 4; injected elites never gate the clear).
 - **UI suite** (D-0016, CommonUI): main menu (`L_MainMenu`), hero-select lobby with ready/start,
   HUD (health, run clock, `LVL n x/y XP`), upgrade card screen, escape menu, results.
 - **Multiplayer:** LAN/direct-IP listen server (D-0012, NULL subsystem).
 
 **Known thin spots / open threads:**
-- Synergy cards are **stat-combo GEs** (duo-gated, squad-applied) — full Swarm-style behavior
-  evolutions (new weapon/ability mechanics) are future work (see D-0019 consequences).
+- Behavior evolutions exist (D-0020) but have **no bespoke VFX** — arcs/bursts/vortex/carpet
+  ride debug-draw + telegraph rings until the Niagara cue pass.
 - Burn/poison DoTs have **no victim tint** (DoT state is server-only; needs a replicated flag).
 - XP curve (50 + 35/level), rarity floors+caps, and per-archetype `XPValue`s are first-pass
   numbers awaiting a real-play balance pass; enemy art is placeholder shapes; no boss healthbar.

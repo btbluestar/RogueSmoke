@@ -326,6 +326,39 @@ Format per entry: ID, date, status, the decision, the reasoning, and consequence
   pierce and chain tracks; full Swarm-style behavior evolutions (new weapon mechanics) remain
   future work; balance numbers are first-pass.
 
+### D-0020 — Behavior evolutions, hero ability tracks, wave director
+
+- **Status:** Decided — spec `docs/superpowers/specs/2026-06-11-upgrade-loop-v3-design.md`.
+  Builds on D-0019; delivers the behavior evolutions D-0019 deferred.
+- **Decision:** (1) **Behavior evolutions execute hybrid**: hit-path branches compile into
+  `UCombatSubsystem::ProcOnHitEffects`, switched by new `URogueCombatSet` attributes
+  (`ChainIgniteFraction` = arcs ignite, `ClusterChainBonusArcs` = extra arcs vs Clustered);
+  death-path behaviors (`PoisonBurstDps` poison death cloud, `ClusterKillShieldAmount` squad
+  shield) run in AngelScript on `USpawnDirector::OnEnemyKilled` — it broadcasts BEFORE pool
+  recycle, so corpse DoT/Clustered state is readable. **No generic on-hit event**: that would
+  script the per-bullet hot path (D-0002). (2) **Hero ability tracks** gated by
+  `URogueUpgradeDef.RequiredHeroClass` (checked in `IsEligible`; null pawn = ineligible).
+  Stats → milestone → evolution via D-0019 self-prereqs. Taunt: Magnetic Pull / Iron Grip →
+  Concussive Taunt → **Event Horizon** (vortex re-pulls + refreshes Clustered); Barrage:
+  High Explosives → Twin Salvo → **Carpet Bombing** (telegraphed strip of 5 pads). Ability
+  behaviors are server-side timers in the instanced GAS abilities, switched by flag attributes
+  (≥ 1 = on). (3) **Wave director** = pure function `RaidDirector::ComputeWavePlan(level,
+  waveIndex, players, tunables)` — no RNG, no world reads — consumed by
+  `ARaidObjective.TickFodderWaves`: +0.8 fodder/level, interval −0.35s/level (floor 3.5s),
+  elite injections every 3rd wave from level 4 / every 2nd from level 8 (rotation keyed to
+  wave index), wave size ×1.5 per extra player, caps raised per extra player. Injected elites
+  get `SetCountsAsObjectiveTarget(false)` — pressure, never clear-gates.
+- **Mechanics:** 11 new combat-set attributes; two seam additions (`ApplyDotInSphere`,
+  `GrantShieldToSquad` — clamps to MaxShield in C++); Toxic Burst applies DoT only (no instant
+  damage), so cascades are time-gated by dot ticks and need no recursion guard. Pool 24 → 35
+  cards (`Tools/py_make_loop_v3_content.py`).
+- **Verification:** `EvoSmoke` (7 behavior checks vs director-spawned dummies) +
+  `DirectorReport` (6 pure-function checks) run as a separate SmokeTest boot from
+  `UpgradeSmoke` (which pre-sets every flag GE); `UpgradeFlowSmoke` check 7 covers hero gating.
+- **Consequences:** synergy cards now transform play, not just stats; Vanguard/Bombardier each
+  have a build identity track; raid pressure follows the team power curve. Balance numbers are
+  first-pass; Niagara cues for arcs/bursts/vortex remain on the cue-pass backlog.
+
 ---
 
 ## Still open
