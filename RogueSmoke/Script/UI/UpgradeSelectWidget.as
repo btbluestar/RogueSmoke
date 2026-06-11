@@ -75,6 +75,18 @@ class UUpgradeSelectWidget : UCommonActivatableWidget
         return Cards.Num() > 0 ? Cards[0].GetFocusWidget() : nullptr;
     }
 
+    // On close (pick made or watchdog force-close), CommonUI's own restore of the underlying
+    // HUD host's Game/capture config is eaten by an editor-only focus guard (slate focus sits
+    // on the clicked card's dying button at this exact frame) and never retried — restore it
+    // deterministically through the PC.
+    UFUNCTION(BlueprintOverride)
+    void OnDeactivated()
+    {
+        ARaidPlayerController PC = Cast<ARaidPlayerController>(GetOwningPlayer());
+        if (PC != nullptr)
+            PC.RestoreTopmostInputConfig();
+    }
+
     private void BuildFrame()
     {
         if (bBuilt)

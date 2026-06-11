@@ -8,7 +8,7 @@
 > references were replaced since: abilities run on **GAS** (D-0013), the camera is
 > third-person shooter (D-0014), UI is **CommonUI** (D-0016), the enemy roster is the
 > bio-horde (D-0017), and the upgrade flow is the level/chest loop (D-0018–20);
-> `AClusterableElite`/`UStatsComponent` no longer exist and `WBP_UpgradeSelect` needs no
+> `UStatsComponent` no longer exists (stats are GAS attributes) and `WBP_UpgradeSelect` needs no
 > layout. **To play the game today:** open `/Game/Levels/RaidArena` and press Play — see
 > `HANDOFF_gameplay_loop.md` for the walkthrough. AI agents: read **`startup.md`** instead.
 > The fresh-clone/toolchain steps (§0–§2) are still accurate.

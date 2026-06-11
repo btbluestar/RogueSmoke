@@ -96,7 +96,13 @@ class UEscapeMenuWidget : UCommonActivatableWidget
     {
         ARaidPlayerController PC = Cast<ARaidPlayerController>(GetOwningPlayer());
         if (PC != nullptr)
+        {
             PC.NotifyPauseMenuClosed();
+            // CommonUI's own restore of the underlying widget's input config is eaten by an
+            // editor-only focus guard at this exact frame (focus is on our dying button);
+            // deterministically re-apply whatever is topmost now.
+            PC.RestoreTopmostInputConfig();
+        }
     }
 
     UFUNCTION()

@@ -48,4 +48,14 @@ class URogueHUDHost : UCommonActivatableWidget
         Config.bHideCursorDuringViewportCapture = true;
         return Config;
     }
+
+    // Apply our Game/capture config directly on activation: the router's own application for a
+    // root that activates at map start is silently dropped by an editor-only focus guard (slate
+    // focus dangles right after travel destroyed the old map's focused widget) and never
+    // retried — see RogueUI::ApplyDesiredInputConfig.
+    UFUNCTION(BlueprintOverride)
+    void OnActivated()
+    {
+        RogueUI::ApplyDesiredInputConfig(this);
+    }
 }

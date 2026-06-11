@@ -126,6 +126,13 @@ Treat every gameplay change as a networked change.
   (use `unreal.log` + `-abslog`).
 - Verify `BP_*` parent classes before trusting a Blueprint — a misparented `BP_RaidGamemode`
   once silently killed GAS and run state.
+- **CommonUI never applies a fallback root's input config** in practice: the one-shot apply in
+  `FActivatableTreeRoot::ApplyLeafmostNodeConfig` is eaten by an editor-builds-only
+  focus-path guard (slate focus dangles at map boot and right after a click destroys its
+  button) and is never retried → stuck cursor / no mouse capture. Fix in place: the C++ shim
+  `RogueUI::ApplyDesiredInputConfig` (HUD host `OnActivated` + `RogueUILayout.ReapplyTopmostConfig`
+  on every screen close). Diagnose router state with `CommonUI.DumpActivatableTree` /
+  `CommonUI.DumpInputConfig` + `LogUIActionRouter VeryVerbose`.
 - Headless paused-tick timers elapse much faster than wall-clock (clamped per-frame dt at high
   FPS) — "30 s" watchdogs fire in ~5 s headlessly; correct in real play.
 - PowerShell 5.1: no `&&`/`||`, and embedded double quotes in native-command args (e.g.

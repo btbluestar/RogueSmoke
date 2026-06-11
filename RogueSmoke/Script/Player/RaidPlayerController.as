@@ -115,6 +115,15 @@ class ARaidPlayerController : APlayerController
         ActiveUpgradeWidget = nullptr;
     }
 
+    // Called by closing GameMenu/Menu screens: re-apply the input config of whatever is now
+    // topmost. CommonUI's own fallback apply is silently dropped by an editor-builds-only
+    // focus guard at the exact frame a screen pops (see RogueUI::ApplyDesiredInputConfig).
+    void RestoreTopmostInputConfig()
+    {
+        if (Layout != nullptr)
+            Layout.ReapplyTopmostConfig();
+    }
+
     UFUNCTION(BlueprintOverride)
     void BeginPlay()
     {
