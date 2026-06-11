@@ -41,7 +41,7 @@ $Cases = @(
     @{ Name = "Enemy_BroodMother";  Map = "/Game/Levels/DebuggingLevels/DL_Enemy_BroodMother"; Expect = "BROOD-MOTHER (boss): spawned 1" }
     # Upgrade firing range + the GE->attribute battery: every pool upgrade must move an attribute.
     @{ Name = "Upgrades";           Map = "/Game/Levels/DebuggingLevels/DL_Upgrades";
-       Expect = @("[UpgradeTest] range ready: solo=1 line=4 cluster=5", "[UpgradeSmoke] RESULT 16/16", "[FlowSmoke] RESULT 6/6")
+       Expect = @("[UpgradeTest] range ready: solo=1 line=4 cluster=5", "[UpgradeSmoke] RESULT 24/24", "[FlowSmoke] RESULT 6/6")
        Exec = "UpgradeSmoke, UpgradeFlowSmoke"; Window = 60 }
 )
 
