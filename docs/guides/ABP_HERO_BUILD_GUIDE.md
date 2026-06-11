@@ -57,11 +57,11 @@ Tunables on the same class: `JogAuthoredSpeed` (default 450), `LandRecoverySecon
 
 ### 1.1 Create the asset
 
-- [ ] In the Content Browser, navigate to `/Game/Characters/Mannequins/Anims/`.
-- [ ] Right-click empty space → **Animation** → **Blend Space**. (On some UE5 menu layouts it's
+- [x] In the Content Browser, navigate to `/Game/Characters/Mannequins/Anims/`.
+- [x] Right-click empty space → **Animation** → **Blend Space**. (On some UE5 menu layouts it's
       under **Animation → Legacy → Blend Space**. Either way: **Blend Space**, NOT "Blend Space 1D".)
-- [ ] A skeleton picker opens. Select **SK_Mannequin** (`/Game/Characters/Mannequins/Meshes/SK_Mannequin`).
-- [ ] Name the asset **`BS_Rifle_Strafe`**. Double-click to open it.
+- [x] A skeleton picker opens. Select **SK_Mannequin** (`/Game/Characters/Mannequins/Meshes/SK_Mannequin`).
+- [x] Name the asset **`BS_Rifle_Strafe`**. Double-click to open it.
 
 ### 1.2 Axis setup
 
@@ -89,9 +89,9 @@ Tunables on the same class: `JogAuthoredSpeed` (default 450), `LandRecoverySecon
 
 ### 1.3 Place the 18 samples
 
-- [ ] Find the **Asset Browser** panel (bottom-right of the Blend Space editor; Window → Asset
+- [x] Find the **Asset Browser** panel (bottom-right of the Blend Space editor; Window → Asset
       Browser if hidden). It lists every animation compatible with SK_Mannequin.
-- [ ] Drag each animation from the Asset Browser onto the grid at the position in this table.
+- [x] Drag each animation from the Asset Browser onto the grid at the position in this table.
       With Snap to Grid on, drops snap to grid intersections. The **walk row is the middle grid
       line (Speed 225)**, the **jog row is the top line (Speed 450)**:
 
@@ -109,32 +109,32 @@ Tunables on the same class: `JogAuthoredSpeed` (default 450), `LandRecoverySecon
 
   (Even with Wrap Input on, place `Bwd` at both edges — wrap interpolates across the seam, the
   duplicate samples anchor it.)
-- [ ] Verify every sample's exact coordinates: in **Asset Details → Blend Samples**, each entry
+- [x] Verify every sample's exact coordinates: in **Asset Details → Blend Samples**, each entry
       shows its animation and X/Y values. Fix any mis-drop by editing the numbers directly.
-- [ ] Sanity check: hold **Ctrl** and move the mouse over the grid — the preview character blends
+- [x] Sanity check: hold **Ctrl** and move the mouse over the grid — the preview character blends
       between directions. Walking the green preview dot along the ±180 edge must NOT pop.
-- [ ] **Save**.
+- [x] **Save**.
 
 ### 1.4 SIDEBAR — measure the authored jog speed (do once)
 
 The `450` figure is the assumed root speed of the jog clips. If it's wrong, feet slide. Measure it:
 
-- [ ] Open `MF_Rifle_Jog_Fwd` (the animation asset itself, double-click).
-- [ ] Look in **Asset Details** for root-motion info. If the clip carries root motion, get the
+- [x] Open `MF_Rifle_Jog_Fwd` (the animation asset itself, double-click).
+- [x] Look in **Asset Details** for root-motion info. If the clip carries root motion, get the
       distance the root bone travels: in the viewport's **Skeleton Tree**, select the `root` bone,
       scrub the timeline to frame 0 and note the translation in the bone transform readout, scrub
       to the last frame, note it again. `speed = (distance in cm) / Sequence Length` (Sequence
       Length is shown in Asset Details).
-- [ ] If the clip is in-place (no root translation — common for strafe sets), eyeball it instead:
+- [x] If the clip is in-place (no root translation — common for strafe sets), eyeball it instead:
       you'll do the definitive check in Part 7 anyway (set `StrafeSpeed` in the preview and watch
       for foot-sliding), so proceed with 450 for now.
-- [ ] **If the measured speed differs from 450 by more than 10%:** update BOTH of these to the
+- [x] **If the measured speed differs from 450 by more than 10%:** update BOTH of these to the
       measured value:
   1. `BS_Rifle_Strafe` → Asset Details → Vertical Axis → **Maximum Axis Value**.
   2. `JogAuthoredSpeed` in `RogueSmoke/Script/Player/HeroAnimInstance.as` (the `UPROPERTY` default
      near the bottom; AngelScript hot-reloads on save — tell whoever runs the session so it gets
      compile-verified and committed).
-- [ ] Same idea for the walk row: if walk clips measure far from 225, uncheck **Snap to Grid** on
+- [x] Same idea for the walk row: if walk clips measure far from 225, uncheck **Snap to Grid** on
       the Vertical Axis and type the measured speed into each walk sample's Y value in **Blend
       Samples**. Close is good enough here — the jog row is the one that must be exact.
 
@@ -214,37 +214,37 @@ offers **Play MF_Rifle_Idle_ADS**) — or drag the asset in from the Asset Brows
 output to the state's **Output Animation Pose** node.
 
 **State: Idle**
-- [ ] Add **Play MF_Rifle_Idle_ADS**. Select the node; in **Details**: **Loop** ✅.
-- [ ] Details → **Sync** section: **Sync Group Name** = `Locomotion` (type it), **Sync Group Role**
+- [x] Add **Play MF_Rifle_Idle_ADS**. Select the node; in **Details**: **Loop** ✅.
+- [x] Details → **Sync** section: **Sync Group Name** = `Locomotion` (type it), **Sync Group Role**
       = `Always Follower`. (If your Details shows a **Method** dropdown in the Sync section, set it
       to `Sync Group` first — the Name/Role fields appear then.)
 
 **State: Cycle** (the workhorse)
-- [ ] Add the blendspace player: right-click → search `BS_Rifle_Strafe` → **Blendspace Player
+- [x] Add the blendspace player: right-click → search `BS_Rifle_Strafe` → **Blendspace Player
       'BS_Rifle_Strafe'**. The node has two float input pins named after the axes: **Direction**
       and **Speed**.
-- [ ] From My Blueprint, drag the **`Direction`** variable onto the canvas → **Get Direction** →
+- [x] From My Blueprint, drag the **`Direction`** variable onto the canvas → **Get Direction** →
       wire to the node's **Direction** pin.
-- [ ] Drag **`StrafeSpeed`** → Get → wire to the **Speed** pin. (NOT `GroundSpeed` —
+- [x] Drag **`StrafeSpeed`** → Get → wire to the **Speed** pin. (NOT `GroundSpeed` —
       `StrafeSpeed` is already clamped to the axis max; raw GroundSpeed would pin the blendspace
       while sprinting and fight the play-rate trick.)
-- [ ] Expose the Play Rate pin: select the blendspace player node → **Details** → find **Play
+- [x] Expose the Play Rate pin: select the blendspace player node → **Details** → find **Play
       Rate**. At the right edge of that row there's a small pin/dropdown control — choose **Expose
       as Pin**. A **Play Rate** input pin appears on the node.
-- [ ] Drag **`PlayRate`** → Get → wire to the **Play Rate** pin. (This is the anti-foot-slide:
+- [x] Drag **`PlayRate`** → Get → wire to the **Play Rate** pin. (This is the anti-foot-slide:
       above jog speed the clip plays faster instead of the feet sliding.)
-- [ ] Details → Sync: **Sync Group Name** = `Locomotion`, **Sync Group Role** = `Can Be Leader`.
+- [x] Details → Sync: **Sync Group Name** = `Locomotion`, **Sync Group Role** = `Can Be Leader`.
       ← the jog blendspace is the sync LEADER; idle and crouch follow its foot phase.
 
 **State: JumpStart**
-- [ ] Add **Play MM_Rifle_Jump_Start**. Details: **Loop** ☐ (unchecked). No sync group.
+- [x] Add **Play MM_Rifle_Jump_Start**. Details: **Loop** ☐ (unchecked). No sync group.
 
 **State: FallLoop**
-- [ ] Add **Play MM_Rifle_Jump_Fall_Loop**. Details: **Loop** ✅. No sync group.
+- [x] Add **Play MM_Rifle_Jump_Fall_Loop**. Details: **Loop** ✅. No sync group.
       (GASP `Fall_Loop` also exists; the rifle-template clip matches the rifle pose set — prefer it.)
 
 **State: Land**
-- [ ] Add **Play Land_Run_Light** (the GASP bake at `/Game/Characters/Mannequins/Anims/GASP/Land_Run_Light`).
+- [x] Add **Play Land_Run_Light** (the GASP bake at `/Game/Characters/Mannequins/Anims/GASP/Land_Run_Light`).
       Details: **Loop** ☐. No sync group.
 - [ ] Note for later (don't build now): `Land_Run_Heavy` and `Land_Stand_Light` exist for a
       fall-speed/movement-aware landing blend (e.g. **Blend Poses by bool** on `LandRecoveryAlpha`
@@ -252,11 +252,12 @@ output to the state's **Output Animation Pose** node.
       impact weight.
 
 **State: Slide**
-- [ ] Two candidate loops exist — **preview both and pick one**:
+- [x] Two candidate loops exist — **preview both and pick one**:
       `/Game/Characters/Mannequins/Anims/GASP/Slide_Loop_FootOut` and
       `/Game/Characters/Mannequins/Anims/Slide/Slide_KneesOut_Loop`. Open each asset, eyeball which
       silhouette you prefer with a rifle (FootOut = leg extended, KneesOut = tucked).
 - [ ] Add **Play <your pick>**. Details: **Loop** ✅. No sync group.
+      
 - [ ] Note for later: `Slide_Enter` / `Slide_Exit_Run` exist for a 3-phase slide (enter → loop →
       exit). v1 uses the loop only.
 

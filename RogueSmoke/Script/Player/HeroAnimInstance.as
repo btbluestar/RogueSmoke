@@ -54,9 +54,9 @@ class URogueHeroAnimInstance : UAnimInstance
     UPROPERTY(BlueprintReadOnly, Category = "Landing")
     float LandRecoveryAlpha = 0.0;
 
-    // Authored root speed of the jog row; measure once in Task 8 and correct here if needed.
+    // Authored root speed of the jog row, measured from the source clips (jog 955, walk 466).
     UPROPERTY(EditDefaultsOnly, Category = "Tuning")
-    float JogAuthoredSpeed = 450.0;
+    float JogAuthoredSpeed = 955.0;
 
     UPROPERTY(EditDefaultsOnly, Category = "Tuning")
     float LandRecoverySeconds = 0.4;
