@@ -69,13 +69,34 @@ class URogueWeaponComponent : UActorComponent
         if (Definition == nullptr)
             return 0.0;
 
-        float Spread = Math::Lerp(Definition.SpreadMinDegrees, Definition.SpreadMaxDegrees,
-                                  Math::Clamp(CurrentHeat, 0.0, 1.0));
+        float Heat = Math::Clamp(CurrentHeat, 0.0, 1.0);
+        float Spread;
+        if (Definition.HeatToSpreadCurve.Num() >= 2)
+            Spread = EvalHeatToSpread(Heat);
+        else
+            Spread = Math::Lerp(Definition.SpreadMinDegrees, Definition.SpreadMaxDegrees, Heat);
         if (bMoving)
             Spread *= Definition.MovingSpreadMultiplier;
         if (bFocusing)
             Spread *= Definition.FocusSpreadMultiplier;
         return Spread;
+    }
+
+    // Piecewise-linear eval of Definition.HeatToSpreadCurve (points sorted by X at authoring time).
+    private float EvalHeatToSpread(float Heat) const
+    {
+        const TArray<FVector2D>& Pts = Definition.HeatToSpreadCurve;
+        if (Heat <= Pts[0].X)
+            return Pts[0].Y;
+        for (int i = 1; i < Pts.Num(); i++)
+        {
+            if (Heat <= Pts[i].X)
+            {
+                float T = (Heat - Pts[i - 1].X) / Math::Max(Pts[i].X - Pts[i - 1].X, 0.001);
+                return Math::Lerp(Pts[i - 1].Y, Pts[i].Y, T);
+            }
+        }
+        return Pts[Pts.Num() - 1].Y;
     }
 
     // Called right after a shot resolves (server). Spends ammo, heats up, starts the refire gate.

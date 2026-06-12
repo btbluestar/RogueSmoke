@@ -606,6 +606,15 @@ class ARaidPlayerController : APlayerController
             Print(f"[MoveTune] SlideRollMax = {C.SlideRollMax}; SlideRollBlendSpeed = {C.SlideRollBlendSpeed};", 20.0);
             Print("[MoveTune] current values (paste-ready HeroCharacter.as facing defaults):", 20.0);
             Print(f"[MoveTune] IdleFreeLookYawLimit = {Hero.IdleFreeLookYawLimit}; IdleAlignYawRate = {Hero.IdleAlignYawRate};", 20.0);
+            // Stamina pips (D-0023): live count plus the two regen tunables on the hero.
+            Print(f"[MoveTune] Stamina = {Hero.GetStamina()}/{Hero.GetMaxStamina()}; StaminaRegenSeconds = {Hero.StaminaRegenSeconds}; StaminaRegenDelay = {Hero.StaminaRegenDelay};", 20.0);
+            // Weapon spread/heat knobs (tunes the shared definition ASSET in memory; host-only live tuning, not persisted).
+            if (Hero.Weapon != nullptr && Hero.Weapon.Definition != nullptr)
+            {
+                URogueWeaponDefinition WD = Hero.Weapon.Definition;
+                Print("[MoveTune] current values (weapon spread/heat; tunes shared DA in memory):", 20.0);
+                Print(f"[MoveTune] HeatPerShot = {WD.HeatPerShot}; HeatCooldownPerSecond = {WD.HeatCooldownPerSecond}; SpreadRecoveryDelay = {WD.SpreadRecoveryDelay};", 20.0);
+            }
             return;
         }
 
@@ -655,6 +664,32 @@ class ARaidPlayerController : APlayerController
         // Facing knobs live on the hero (idle free-look).
         else if (Key == "idlefreelookyawlimit")         Hero.IdleFreeLookYawLimit = Value;
         else if (Key == "idlealignyawrate")             Hero.IdleAlignYawRate = Value;
+        // Stamina pip regen knobs live on the hero (D-0023).
+        else if (Key == "staminaregenseconds")          Hero.StaminaRegenSeconds = Value;
+        else if (Key == "staminaregendelay")            Hero.StaminaRegenDelay = Value;
+        // Weapon spread/heat knobs — tune the shared definition ASSET in memory (host-only live
+        // tuning; not persisted; takes effect on the next shot/cooldown tick, no reload needed).
+        else if (Key == "heatpershot")
+        {
+            if (Hero.Weapon == nullptr || Hero.Weapon.Definition == nullptr) { Print("[MoveTune] heatpershot: no weapon equipped", 5.0); return; }
+            Hero.Weapon.Definition.HeatPerShot = Value;
+            Print(f"[MoveTune] {Param} = {Value} (applied to weapon definition in memory)", 6.0);
+            return;
+        }
+        else if (Key == "heatcooldown")
+        {
+            if (Hero.Weapon == nullptr || Hero.Weapon.Definition == nullptr) { Print("[MoveTune] heatcooldown: no weapon equipped", 5.0); return; }
+            Hero.Weapon.Definition.HeatCooldownPerSecond = Value;
+            Print(f"[MoveTune] {Param} = {Value} (applied to weapon definition in memory)", 6.0);
+            return;
+        }
+        else if (Key == "spreadrecoverydelay")
+        {
+            if (Hero.Weapon == nullptr || Hero.Weapon.Definition == nullptr) { Print("[MoveTune] spreadrecoverydelay: no weapon equipped", 5.0); return; }
+            Hero.Weapon.Definition.SpreadRecoveryDelay = Value;
+            Print(f"[MoveTune] {Param} = {Value} (applied to weapon definition in memory)", 6.0);
+            return;
+        }
         else
         {
             Print(f"[MoveTune] unknown param '{Param}' — run bare MoveTune to list every name", 8.0);
@@ -668,11 +703,12 @@ class ARaidPlayerController : APlayerController
             Print(f"[MoveTune] {Param} = {Value} (applied)", 6.0);
     }
 
-    // --- Debug: slide-rule battery (feel pass). Asserts StartSlide's three Apex-rule invariants:
-    // boost below the arming threshold, hard cap regardless, no boost above the threshold.
-    // All three read the velocity SYNCHRONOUSLY after CrouchPressed — no tick runs between the
-    // press and the read, so the speed we read is exactly StartSlide's transform of the velocity
-    // we set. `[MoveSmoke] RESULT 3/3` is the SmokeTest.ps1 assertion (RaidArena case).
+    // --- Debug: slide-rule battery (feel pass). Asserts StartSlide's three Apex-rule invariants
+    // (boost below the arming threshold, hard cap regardless, no boost above the threshold) plus
+    // the D-0023 stamina spend math. All checks read SYNCHRONOUSLY after the call — no tick runs
+    // between the press and the read, so the speed we read is exactly StartSlide's transform of
+    // the velocity we set (and no tick means checks 1-3 never observe a slide edge, so they stay
+    // pip-neutral). `[MoveSmoke] RESULT 4/4` is the SmokeTest.ps1 assertion (RaidArena case).
     // Polls at boot like the other batteries so it works as -ExecCmds.
     private int MoveSmokeRetries = 0;
 
@@ -742,7 +778,28 @@ class ARaidPlayerController : APlayerController
         Hero.CrouchReleased();
         Hero.SetSprint(false);
 
-        Print(f"[MoveSmoke] RESULT {Pass}/3", 15.0);
+        // 4) Stamina gate math (D-0023): one spend drops exactly one pip — synthetic, no PIE
+        //    timing. On authority with a pip banked the count must read S0 - 1; anywhere else
+        //    (no authority, or already empty) the spend must be a no-op.
+        float S0 = Hero.GetStamina();
+        Hero.SpendStaminaPip();
+        float S1 = Hero.GetStamina();
+        float SExpected = (HasAuthority() && S0 >= 1.0) ? S0 - 1.0 : S0;
+        bool bCheck4 = Math::Abs(S1 - SExpected) < 0.001;
+        if (bCheck4)
+            Pass++;
+        else
+            Print(f"[MoveSmoke] FAIL 4: stamina spend (before={S0} after={S1} expected={SExpected})", 15.0);
+        // Restore the spent pip so the smoke is side-effect free (no public restore — write the
+        // base value back through the same ASC path SpendStaminaPip mutates; server only).
+        if (HasAuthority())
+        {
+            UAngelscriptAbilitySystemComponent ASC = Hero.GetRogueAbilitySystem();
+            if (ASC != nullptr)
+                ASC.SetAttributeBaseValue(URogueMovementSet, n"Stamina", S0);
+        }
+
+        Print(f"[MoveSmoke] RESULT {Pass}/4", 15.0);
     }
 
     private float FlatSpeed(UCharacterMovementComponent Move) const

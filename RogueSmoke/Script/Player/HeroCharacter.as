@@ -139,6 +139,18 @@ class AHeroCharacter : ARogueHeroBase
     private bool bSlideAnimActive = false;
     private float SlideLoopStartTime = 0.0;
 
+    // --- Stamina pips (D-0023, Deadlock model): slide and slide-hop each cost one pip; sprint is
+    // free. Server spends/regens on the GAS attribute (URogueMovementSet); the owning client
+    // predicts gating off the replicated value, so movement never waits on the server. ---
+    UPROPERTY(EditDefaultsOnly, Category = "Stamina")
+    float StaminaRegenSeconds = 2.5;     // one pip per this many seconds
+
+    UPROPERTY(EditDefaultsOnly, Category = "Stamina")
+    float StaminaRegenDelay = 1.0;       // regen pause after any spend
+
+    private float StaminaRegenAccumulator = 0.0;
+    private float StaminaRegenDelayRemaining = 0.0;
+
     // Owner+server mirror of held-fire intent: bWantsToFire is server-only, but facing must
     // agree on the predicting owner too or the body snaps on correction.
     private bool bFireHeldForFacing = false;
@@ -360,6 +372,65 @@ class AHeroCharacter : ARogueHeroBase
         return DefaultWeapon;
     }
 
+    // --- Stamina pips (D-0023). Reads work on any machine — the attribute replicates from the
+    // PlayerState ASC — which is what lets the owning client predict the slide gate locally. ---
+    float GetStamina() const
+    {
+        UAngelscriptAbilitySystemComponent ASC = GetRogueAbilitySystem();
+        return ASC != nullptr ? ASC.GetAttributeCurrentValue(URogueMovementSet, n"Stamina", 0.0) : 0.0;
+    }
+
+    float GetMaxStamina() const
+    {
+        UAngelscriptAbilitySystemComponent ASC = GetRogueAbilitySystem();
+        return ASC != nullptr ? ASC.GetAttributeCurrentValue(URogueMovementSet, n"MaxStamina", 0.0) : 0.0;
+    }
+
+    bool HasStaminaPip() const { return GetStamina() >= 1.0; }
+
+    // Server only: burn one pip and restart the regen pause. SetAttributeBaseValue fires the
+    // change callbacks and replicates, so the owner's predicted gate catches up on its own.
+    // The C++ set clamps 0..Max; the Math::Max is belt-and-suspenders.
+    void SpendStaminaPip()
+    {
+        if (!HasAuthority())
+            return;
+        UAngelscriptAbilitySystemComponent ASC = GetRogueAbilitySystem();
+        if (ASC == nullptr)
+            return;
+        float Current = ASC.GetAttributeCurrentValue(URogueMovementSet, n"Stamina", 0.0);
+        ASC.SetAttributeBaseValue(URogueMovementSet, n"Stamina", Math::Max(Current - 1.0, 0.0));
+        StaminaRegenDelayRemaining = StaminaRegenDelay;
+        StaminaRegenAccumulator = 0.0;
+    }
+
+    // Server only (called from the authority block in Tick): wait out the post-spend pause,
+    // then accumulate toward the next whole pip — pips return one at a time, never fractional.
+    private void TickStaminaRegen(float DeltaSeconds)
+    {
+        UAngelscriptAbilitySystemComponent ASC = GetRogueAbilitySystem();
+        if (ASC == nullptr)
+            return;
+        float Current = ASC.GetAttributeCurrentValue(URogueMovementSet, n"Stamina", 0.0);
+        float Max = ASC.GetAttributeCurrentValue(URogueMovementSet, n"MaxStamina", 0.0);
+        if (Current >= Max)
+        {
+            StaminaRegenAccumulator = 0.0;
+            return;
+        }
+        if (StaminaRegenDelayRemaining > 0.0)
+        {
+            StaminaRegenDelayRemaining -= DeltaSeconds;
+            return;
+        }
+        StaminaRegenAccumulator += DeltaSeconds;
+        if (StaminaRegenAccumulator >= StaminaRegenSeconds)
+        {
+            StaminaRegenAccumulator -= StaminaRegenSeconds;
+            ASC.SetAttributeBaseValue(URogueMovementSet, n"Stamina", Math::Min(Current + 1.0, Max));
+        }
+    }
+
     // Keep locomotion's base speed in sync with the MoveSpeed attribute (e.g. the Swift upgrade).
     UFUNCTION()
     void OnMoveSpeedChanged(FAngelscriptAttributeChangedData Data)
@@ -409,7 +480,13 @@ class AHeroCharacter : ARogueHeroBase
             return;
         // Slide-hop: jumping out of a slide keeps 100% of horizontal velocity (D-0015 rework).
         if (Locomotion.IsSliding())
+        {
             Locomotion.NotifySlideJump();
+            // Slide-hop costs a pip (D-0023). DoJump only runs where the input lands, so this
+            // covers the listen-server host; remote clients are charged in OnJumped below.
+            if (HasAuthority())
+                SpendStaminaPip();
+        }
         // Auto-stand like Apex/Deadlock: stock CanJump refuses while crouched, and UnCrouch
         // is a no-op when already standing. Landing re-entry keys off the held crouch input.
         UnCrouch();
@@ -420,6 +497,12 @@ class AHeroCharacter : ARogueHeroBase
     UFUNCTION(BlueprintOverride)
     void OnJumped()
     {
+        // Remote clients' slide-hops reach the server through the CMC saved move, not DoJump —
+        // at server-side jump time bSliding is still set (the airborne convergence in
+        // TickLocomotion clears it later), so this is their authoritative pip spend. The host
+        // never double-pays: its DoJump already ran NotifySlideJump, clearing IsSliding().
+        if (HasAuthority() && Locomotion.IsSliding())
+            SpendStaminaPip();
         Locomotion.NotifyJumped(JumpCurrentCount);
     }
 
@@ -456,6 +539,10 @@ class AHeroCharacter : ARogueHeroBase
     {
         if (IsIncapacitated())
             return;
+        // Out of pips -> crouch, not slide (no hard input eat): dropping sprint makes
+        // RequestCrouchOrSlide degrade to a plain crouch. Predicted off the replicated attribute.
+        if (Locomotion.IsSprinting() && !HasStaminaPip())
+            Locomotion.SetSprint(false);
         Locomotion.RequestCrouchOrSlide();
         Server_CrouchPressed();
     }
@@ -463,6 +550,9 @@ class AHeroCharacter : ARogueHeroBase
     UFUNCTION(Server)
     void Server_CrouchPressed()
     {
+        // Mirror the out-of-pips degrade so the server's crouch-vs-slide decision matches the owner's.
+        if (!HasStaminaPip())
+            Locomotion.SetSprint(false);
         Locomotion.RequestCrouchOrSlide();
     }
 
@@ -517,6 +607,9 @@ class AHeroCharacter : ARogueHeroBase
         {
             // Down/revive bleed-out + revive-proximity (server-authoritative).
             Down.TickDown(DeltaSeconds);
+
+            // Stamina pip regen (server-authoritative; the attribute replicates the result. D-0023).
+            TickStaminaRegen(DeltaSeconds);
 
             if (Weapon != nullptr)
             {
@@ -626,6 +719,10 @@ class AHeroCharacter : ARogueHeroBase
         bSlideAnimActive = bSlidingNow;
         if (bSlidingNow)
         {
+            // The server observes the slide's start edge here and charges the pip (the owner
+            // predicted the gate in CrouchPressed; the spend itself is authority-only. D-0023).
+            if (HasAuthority())
+                SpendStaminaPip();
             if (SlideInAnim != nullptr)
             {
                 PlaySlideAnim(SlideInAnim, 1);

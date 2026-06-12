@@ -43,6 +43,16 @@ class URogueWeaponDefinition : UPrimaryDataAsset
     UPROPERTY(EditDefaultsOnly, Category = "Spread")
     float HeatCooldownPerSecond = 0.6;
 
+    // Optional Lyra-shaped heat->spread curve (X = heat 0..1, Y = spread degrees). When points
+    // exist they REPLACE the Min/Max lerp: flat early (accurate opening shots), steep late —
+    // the Lyra rifle feel. Empty array = legacy linear lerp. (D-0022 phase 5)
+    UPROPERTY(EditDefaultsOnly, Category = "Spread")
+    TArray<FVector2D> HeatToSpreadCurve;
+    default HeatToSpreadCurve.Add(FVector2D(0.0, 1.0));
+    default HeatToSpreadCurve.Add(FVector2D(0.35, 1.6));
+    default HeatToSpreadCurve.Add(FVector2D(0.7, 3.5));
+    default HeatToSpreadCurve.Add(FVector2D(1.0, 8.0));
+
     UPROPERTY(EditDefaultsOnly, Category = "Spread")
     float SpreadRecoveryDelay = 0.2;
 

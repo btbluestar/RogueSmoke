@@ -51,6 +51,16 @@ class URogueHUDWidget : UUserWidget
     private AHeroCharacter Hero;
     private bool bBuilt = false;
 
+    // Stamina pips (D-0023): discrete sprint/slide charges shown as small squares under the health
+    // bar. Pip count tracks GetMaxStamina(), so a future +1-max-pip meta upgrade shows up without a
+    // HUD change. Pips are rebuilt on count change; fill state is restyled every tick (polling, same
+    // idiom as RefreshCrosshair). Own-player only — Hero is always the owning pawn.
+    private UHorizontalBox StaminaRow;
+    private TArray<UImage> StaminaPips;
+    const float StaminaPipSize = 14.0;       // square pip edge, px (layout space)
+    const float StaminaPipGap = 4.0;         // gap between pips
+    const float StaminaSpentAlpha = 0.25;    // spent pip = accent at low alpha
+
     // Off-screen edge indicators: a pool of arrow glyphs reused each tick (teal = teammate, red = elite).
     // They mark where an off-screen ally or threat is, clamped to the screen border and rotated to point at it.
     private TArray<UTextBlock> EdgeMarkers;   // rotating arrow glyphs
@@ -152,6 +162,12 @@ class URogueHUDWidget : UUserWidget
         HealthBar.SetPercent(1.0);
         AddChild(HealthBar, FAnchors(0.0, 1.0), FVector2D(0.0, 1.0), FVector2D(40.0, -40.0), FVector2D(320.0, 18.0), false);
 
+        // Stamina pips (D-0023): just under the health bar, same left edge. The row is an auto-sized
+        // horizontal box; the pips themselves are created/recreated in RefreshStamina once a hero
+        // exists (count comes from the live MaxStamina attribute, not a HUD constant).
+        StaminaRow = Cast<UHorizontalBox>(ConstructWidget(UHorizontalBox::StaticClass()));
+        AddChild(StaminaRow, FAnchors(0.0, 1.0), FVector2D(0.0, 1.0), FVector2D(40.0, -18.0), FVector2D(), true);
+
         // Ammo: bottom-right.
         AmmoText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
         AddChild(AmmoText, FAnchors(1.0, 1.0), FVector2D(1.0, 1.0), FVector2D(-40.0, -40.0), FVector2D(), true);
@@ -219,6 +235,7 @@ class URogueHUDWidget : UUserWidget
     {
         RefreshHero();
         RefreshVitals();
+        RefreshStamina();
         RefreshAmmo();
         RefreshObjective();
         RefreshEdgeIndicators();
@@ -555,6 +572,50 @@ class URogueHUDWidget : UUserWidget
             float MaxShield = ASC.GetAttributeCurrentValue(URogueHealthSet, n"MaxShield", 0.0);
             ShieldBar.SetPercent(MaxShield > 0.0 ? Math::Clamp(Shield / MaxShield, 0.0, 1.0) : 0.0);
             ShieldBar.SetVisibility(MaxShield > 0.0 ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+        }
+    }
+
+    // Stamina pips (D-0023): poll the hero's stamina floats each tick (the HUD already polls for the
+    // crosshair — no attribute delegates). Pip i is FILLED while Stamina >= i+1; spent pips fade to
+    // low-alpha accent. Rebuilding on a MaxStamina change keeps the row honest under meta upgrades.
+    private void RefreshStamina()
+    {
+        if (StaminaRow == nullptr || Hero == nullptr)
+            return;
+
+        int PipCount = Math::Max(0, Math::RoundToInt(Hero.GetMaxStamina()));
+        if (PipCount != StaminaPips.Num())
+            RebuildStaminaPips(PipCount);
+
+        float Stamina = Hero.GetStamina();
+        for (int i = 0; i < StaminaPips.Num(); ++i)
+        {
+            if (StaminaPips[i] == nullptr)
+                continue;
+            FLinearColor PipColor = Accent;
+            PipColor.A = (Stamina >= float(i + 1)) ? 1.0 : StaminaSpentAlpha;
+            StaminaPips[i].SetColorAndOpacity(PipColor);
+        }
+    }
+
+    // Tear down and recreate the pip images to match the live MaxStamina. Rare (spawn + upgrades),
+    // so the simple clear-and-rebuild beats diffing the child list.
+    private void RebuildStaminaPips(int PipCount)
+    {
+        StaminaRow.ClearChildren();
+        StaminaPips.Empty();
+        for (int i = 0; i < PipCount; ++i)
+        {
+            UImage Pip = Cast<UImage>(ConstructWidget(UImage::StaticClass()));
+            if (Pip == nullptr)
+                continue;
+            // Default brush is the solid white box; size it down to a small square and tint via
+            // SetColorAndOpacity in RefreshStamina.
+            Pip.SetDesiredSizeOverride(FVector2D(StaminaPipSize, StaminaPipSize));
+            UHorizontalBoxSlot PipSlot = StaminaRow.AddChildToHorizontalBox(Pip);
+            if (PipSlot != nullptr && i > 0)
+                PipSlot.SetPadding(FMargin(StaminaPipGap, 0.0, 0.0, 0.0));
+            StaminaPips.Add(Pip);
         }
     }
 

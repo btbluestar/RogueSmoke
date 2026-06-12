@@ -1,5 +1,12 @@
 # ABP_Hero Build Guide — click-by-click
 
+> **⚠️ RETIRED (2026-06-12, D-0022):** the hand-built `ABP_Hero` this guide produces has been
+> superseded by the migrated **Lyra animation stack** (`ABP_Mannequin_Base` + linked anim
+> layers, re-parented onto `URogueHeroAnimInstance` via CoreRedirects). See
+> `docs/superpowers/specs/2026-06-12-lyra-anim-migration-design.md`. The v1 assets stay on
+> disk until parity sign-off; this guide is kept as a historical record of the v1 build and
+> the measured-speed lessons in §1.4.
+
 > **Who this is for:** a motivated non-animator building the hero's layered animation setup
 > in the Unreal Editor 5.7 GUI. You need to know how to open assets and drag pins — everything
 > else is spelled out below. Node names are written EXACTLY as they appear in the editor's

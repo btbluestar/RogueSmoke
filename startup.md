@@ -152,15 +152,23 @@ Treat every gameplay change as a networked change.
 - **Movement & feel** (D-0015 + D-0021): sprint / slide / **slide-hop** / double-jump via
   `URogueLocomotionComponent` — Deadlock-lean physics (gravity 1.8, instant accel, slide =
   fastest ground state with Apex anti-bhop arming). `UCameraFeelComponent` (lag off, landing
-  dip, sprint/slide FOV, cosmetic spring-recovered fire kick). **Layered ABP**: AngelScript
-  `URogueHeroAnimInstance` computes, user-built `ABP_Hero` blends (strafe blendspace +
-  spine_01 upper-body layer + `AO_Rifle` aim offset + `UpperBody` montage slot) — replaced
-  the template `ABP_TP_Rifle` on both heroes. Live tuning: **`MoveTune`** exec (39 knobs,
-  `MoveTune dump` to bake); **`MoveSmoke`** (slide-rule battery) gates SmokeTest.
-- **Shooting feedback** (D-0021): fire/reload montages, pooled HUD damage numbers
-  (shooter-only), kill confirm + hitmarker kill-pop, fire-stop tail hook; weapon
-  `Feel|VFX` / `Feel|Audio` slots (muzzle/tracer/impacts, fire/tail/reload/hit-tick/
-  kill-confirm) are **null-safe and unassigned** pending the asset drop.
+  dip, sprint/slide FOV, cosmetic spring-recovered fire kick). Live tuning: **`MoveTune`** exec
+  (`MoveTune dump` to bake); **`MoveSmoke`** (slide rules + stamina, 4 checks) gates SmokeTest.
+  **Stamina pips** (D-0023): 3 pips on `URogueMovementSet` (GAS) — slide/slide-hop cost 1,
+  sprint free, timed regen, HUD pip row; upgrade-ready via plain GEs.
+- **Animation** (D-0022, **Lyra stack**): heroes run Lyra's `ABP_Mannequin_Base` (distance
+  matching, turn-in-place/RootYawOffset) + **linked anim layers** (`ABP_RifleAnimLayers`;
+  pistol/shotgun/unarmed sets imported for later weapons), re-parented onto AngelScript
+  `URogueHeroAnimInstance` via **CoreRedirects** — mesh is Lyra's `SKM_Manny`. Slide = GASP
+  slide set as dynamic montages off the locomotion edge. The v1 `ABP_Hero` stack is unhooked,
+  on disk until parity sign-off (guide retired). Surface-aware **footsteps** via the ported
+  ContextEffects system (C++ `Feedback/ContextEffects/`).
+- **Shooting feedback** (D-0021 + D-0022): Lyra `SK_Rifle` in hand (animated bolt/mag ABP),
+  Lyra fire/reload montages on character AND gun, **full-auto fixed** (BP Tick stub +
+  `bFullAuto=False` were eating it), pooled HUD damage numbers (shooter-only), kill confirm +
+  hitmarker kill-pop, fire-stop tail; FireFX slots now LIVE with Lyra assets (layered
+  MetaSound fire, muzzle flash, tracer, concrete impacts, tail wave). Heat→spread has an
+  optional Lyra-shaped curve (`HeatToSpreadCurve`).
 - **Enemy roster** (D-0017, bio-horde): Crawler fodder + Carapace / Spitter / Bloater / Lunger
   elites (`AAttackingElite` base, per-archetype AS attack overrides) + **Brood-mother** mini-boss.
   Full telegraph language: ground danger rings, body pulse, per-archetype swell — replicated.
@@ -193,6 +201,10 @@ Treat every gameplay change as a networked change.
 - XP curve (50 + 35/level), rarity floors+caps, and per-archetype `XPValue`s are first-pass
   numbers awaiting a real-play balance pass; enemy art is placeholder shapes; no boss healthbar.
 - Meta-progression scope, late-join policy, and max party size are still open decisions.
+- **Lyra-stack proxy gaps** (D-0022, replication pass pending): remote players' slide montages
+  don't play on other clients; `GameplayTag_IsFiring` stance bool doesn't reach sim proxies.
+  User feel checkpoints A/B (`docs/superpowers/plans/2026-06-12-lyra-checkpoint-*.md`) are
+  queued; **v1 anim stack retirement awaits that sign-off**.
 
 ## 6. Where to look things up
 
@@ -203,7 +215,7 @@ Treat every gameplay change as a networked change.
 | Authoritative technical reference (read before touching combat/abilities/Mass) | `Rogue_Smoke_MVP_Architecture.md` |
 | System overview + authority model | `ARCHITECTURE.md` |
 | AngelScript conventions + replication patterns | `CODING_STANDARDS.md` |
-| Has this been decided already? (D-0001 … D-0021) | `DECISIONS.md` — **check before re-litigating** |
+| Has this been decided already? (D-0001 … D-0023) | `DECISIONS.md` — **check before re-litigating** |
 | What does this term mean exactly? | `GLOSSARY.md` — one name per concept; use these exact terms |
 | Engine build / project bring-up | `SETUP.md` |
 | Determinism + multiplayer + headless testing detail | `TESTING.md` |

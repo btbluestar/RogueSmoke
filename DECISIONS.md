@@ -410,6 +410,85 @@ Format per entry: ID, date, status, the decision, the reasoning, and consequence
   null-safe and empty until a Lyra-content/free-pack asset drop. Turn-in-place, hitstop, crit
   styling, footstep foley remain deferred.
 
+### D-0022 — Lyra animation stack adopted (linked layers via CoreRedirect re-parent, skeleton swap)
+
+- **Status:** Decided — spec `docs/superpowers/specs/2026-06-12-lyra-anim-migration-design.md`,
+  plan `docs/superpowers/plans/2026-06-12-lyra-anim-migration.md` (execution log inline).
+  v1 hand-built stack (`ABP_Hero`, `BS_Rifle_Strafe`, GASP-retargeted clips) stays on disk,
+  unhooked, until the user's parity sign-off; then a cleanup commit retires it.
+- **Decision:**
+  1. **Heroes run Lyra's production anim stack**: `ABP_Mannequin_Base` (distance matching,
+     turn-in-place/RootYawOffset, cardinal strafes) + `ALI_ItemAnimLayers` linked-layer system
+     with `ABP_RifleAnimLayers` linked at spawn (`Mesh.LinkAnimClassLayers`); future weapons =
+     link a different layer asset, data not graph work. Hero mesh/skeleton swapped to Lyra's
+     full-detail `SKM_Manny` / `SK_Mannequin` (UE5-mannequin hierarchy — no retargets for Lyra
+     content, ever).
+  2. **CoreRedirects are the migration mechanism, not graph surgery**: ini ClassRedirects map
+     `LyraAnimInstance` → our AS `URogueHeroAnimInstance` (the ABP re-parents at load; graph
+     compiles with ZERO errors after deleting 7 shadowed BP vars), and the ContextEffects
+     classes → our C++ ports. **StructRedirects are required separately** for any renamed
+     USTRUCT a copied asset serializes (learned the hard way: library entries deserialized
+     empty without them).
+  3. **Parent surface stays thin**: the graph computes locomotion data itself from the pawn;
+     our AS instance supplies only `GroundDistance` (airborne trace) + `GameplayTag_*` bools
+     (IsFiring/IsADS/IsDashing/... from replicated state) + `AimPitch`/`AimYaw` (now
+     BlueprintReadWrite — the Lyra graph writes them per-frame in its own instance).
+  4. **Slide stays ours**: GASP slide set retargeted onto the Lyra skeleton
+     (`Animations/Slide/MM_Slide_*`, via GASP's own `RTG_UEFN_to_UE5_Mannequin`), played as
+     **dynamic montages on DefaultSlot** from a Tick edge-detector on `Locomotion.IsSliding()`
+     — zero Lyra-graph modifications. v1's actor-level idle free-look (`TickFacing`) is gated
+     OFF (`bActorLevelFreeLook=false`): RootYawOffset + authored turn anims own feet-planted
+     idle now.
+  5. **Guns are real**: `DA_Weapon_AssaultRifle` gained `WeaponMesh = SK_Rifle` (the v1 slot
+     was EMPTY — no visible gun ever), `WeaponAnimClass = ABP_Weap_Rifle` (animated bolt/mag),
+     weapon-mesh fire/reload montages; character montages swapped to `AM_MM_Rifle_*`; grip
+     prefers the authored `weapon_r` socket. **`bFullAuto` was False in the DA** — fixed; with
+     the Tick fix below this is why held-LMB full-auto never worked.
+  6. **Lyra FX/audio fill the (previously all-empty) FireFX slots**: layered
+     `MSS_Weapons_Rifle_Fire` MetaSound, `NS_WeaponFire_MuzzleFlash_Rifle`, tracer, concrete
+     impact, AutoRifle tail wave. ContextEffects (5-class C++ port in
+     `Source/RogueSmoke/Feedback/ContextEffects/`) drives surface-aware footsteps from the
+     notifies already authored on Lyra's anims (tag tables `DT_AnimEffectTags`/`DT_SurfaceTypes`
+     registered; surface→context map in DefaultGame.ini). Heat→spread gained an optional
+     Lyra-shaped piecewise curve (`HeatToSpreadCurve`, flat-early/steep-late; empty = legacy
+     linear lerp).
+  7. **Plugins enabled**: `AnimationLocomotionLibrary`, `AnimationWarping`, `Metasound`.
+- **Root-cause fix recorded:** the hero BPs carried template EventGraph cruft — an unconnected
+  `Event Tick` node had been **silently swallowing the AS `AHeroCharacter.Tick` since v1**
+  (locomotion tick, idle facing, camera-feel tick, full-auto refire never ran), plus a BP-side
+  `AddMappingContext` and an `IA_Move → DoMove` double input path. All purged; hero BPs are
+  pure asset assignment again (see bp-parent-class gotcha).
+- **Verification:** ABP chain compiles clean on the AS parent; machine probes green
+  (turn-in-place RootYawOffset −120→−7.5 under smooth yaw with feet <3 cm drift;
+  DisplacementSpeed==GroundSpeed at run; GroundDistance feeds distance-matched landings; slide
+  In→Loop→Out montages live; char+gun fire montages per shot; full-auto empties the mag with
+  auto-reload mid-hold; footstep audio components spawn on the mesh while running); SmokeTest
+  9/9 per phase. User feel checkpoints: `docs/superpowers/plans/2026-06-12-lyra-checkpoint-A.md`
+  (+B at finish).
+- **Consequences / deferred:** known sim-proxy gaps for the replication pass (remote slide
+  montage is owner+server-gated; `GameplayTag_IsFiring` doesn't reach simulated proxies — fire
+  montages multicast so shots still animate); slide-in is left-foot-only and the In→Loop
+  handover is untested on long slides; tracer endpoint param not wired (steered by spawn
+  rotation); `ImpactEnemyFX` deliberately empty (no Lyra flesh FX); Lyra dynamic audio mixing,
+  accolades, Quinn body remain catalogued gems.
+
+### D-0023 — Stamina pips (Deadlock model) on GAS attributes
+
+- **Status:** Decided — part of the D-0022 workstream (spec §Phase 6).
+- **Decision:** 3 discrete stamina pips; **slide costs 1, slide-hop's jump costs 1, sprint is
+  free** (gating sprint would fight the movement identity). Pips regen one at a time
+  (`StaminaRegenSeconds 2.5`, post-spend pause `StaminaRegenDelay 1.0`; both MoveTune knobs).
+  `Stamina`/`MaxStamina` live on **`URogueMovementSet`** (C++ `UAngelscriptAttributeSet`,
+  granted via both hero `DA_*_AbilitySet` assets) so future meta-progression upgrades are plain
+  GameplayEffects on `MaxStamina`/regen — same shape as every other card.
+- **Authority:** server spends (slide-start edge in `TickSlideAnim`; slide-jump via
+  `DoJump`/`OnJumped` paths) and regens; the owning client predicts the gate by reading the
+  replicated attribute (out of pips → crouch instead of slide, input never eaten).
+- **UI:** HUD pip row under the health bar (accent color, spent = 25 % alpha); pip count tracks
+  `MaxStamina` so +1-pip upgrades render automatically.
+- **Verification:** MoveSmoke check 4 (spend/restore atomic, battery now 4/4 — SmokeTest gate
+  updated); live probe: slide spends 3→2, regen returns to 3.
+
 ---
 
 ## Still open

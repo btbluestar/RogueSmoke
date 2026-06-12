@@ -44,7 +44,9 @@
 - **Sprint** — hold-to-run; raises move speed in any direction (omnidirectional). Base 600 ×1.6 = 960.
 - **Slide** — the fastest ground state: crouch while sprinting boosts to 1.3× sprint (cap 1.5×),
   carries on low friction, sustains downhill, ends when speed bleeds below 0.9× base. The MVP's
-  skill-expression traversal move. (D-0021 numbers supersede the D-0015 list.)
+  skill-expression traversal move. (D-0021 numbers supersede the D-0015 list.) Costs one
+  **stamina pip** (D-0023); out of pips, the crouch press degrades to a plain crouch. Animated
+  by the GASP slide set as dynamic montages — see Anim instance.
 - **Slide-hop** — jumping out of a slide: auto-stands, keeps the slide's speed through the air
   (`FallingLateralFriction 0`), and re-enters the slide on landing if crouch is held. The
   **boost-arming threshold** (boost only applies below 1.1× sprint speed) means chains *carry*
@@ -57,10 +59,35 @@
   `MoveTune <Param> <Value>` sets one live in PIE, `MoveTune dump` prints the block to bake into
   component defaults. Partner exec **MoveSmoke** asserts the slide rules (boost/cap/anti-bhop)
   and gates SmokeTest.
-- **Anim instance** — `URogueHeroAnimInstance` (AngelScript): computes every variable the
-  `ABP_Hero` graph reads (speed/direction/play-rate, aim deltas from `BaseAimRotation`,
-  slide/sprint/land state). Script computes, the graph only blends — lower body follows
-  locomotion, upper body aims at the crosshair (D-0021).
+- **Anim instance** — `URogueHeroAnimInstance` (AngelScript): the data source both anim stacks
+  read. For the live **Lyra stack** (D-0022) it is the re-parented base class of
+  `ABP_Mannequin_Base` and supplies `GroundDistance` + the `GameplayTag_*` bools from
+  replicated state; the graph computes its own locomotion data. The retired v1 fields
+  (StrafeSpeed/PlayRate/Direction…) remain for the on-disk `ABP_Hero` until parity sign-off.
+- **Stamina pip** — one discrete charge of the movement economy (D-0023): slide and slide-hop
+  each cost 1, sprint is free; regen one pip per `StaminaRegenSeconds` after a post-spend
+  pause. Lives on `URogueMovementSet` (GAS) so upgrades are plain GameplayEffects; HUD renders
+  one square per pip under the health bar.
+
+## Animation (Lyra stack, D-0022)
+
+- **Lyra anim stack** — `ABP_Mannequin_Base` + linked anim layers, copied verbatim from Lyra
+  5.7 and re-parented onto our AS anim instance via CoreRedirects. Distance matching,
+  turn-in-place, cardinal strafes — production-grade locomotion we did not hand-build.
+- **Linked anim layer** — a per-weapon anim overlay (`ABP_RifleAnimLayers`, pistol/shotgun
+  variants imported) implementing `ALI_ItemAnimLayers`, linked at runtime with
+  `Mesh.LinkAnimClassLayers`. Weapon swap = link a different layer; the base graph never changes.
+- **RootYawOffset / turn-in-place** — Lyra's feet-planted idle: the actor yaw follows the
+  camera but the mesh root counter-rotates (offset accumulates), and authored turn anims unwind
+  it past the clamp. Replaces v1's actor-level idle free-look (`bActorLevelFreeLook`, now off).
+- **CoreRedirects migration** — ini Class/StructRedirects that re-point Lyra C++ class/struct
+  references in copied assets at our classes on load. Rule of thumb: every renamed UCLASS needs
+  a ClassRedirect, every renamed USTRUCT that assets serialize needs a StructRedirect (entries
+  deserialize EMPTY without it — no warning).
+- **ContextEffects** — the ported Lyra system (C++, `Feedback/ContextEffects/`) that turns
+  anim notifies into surface-aware footstep/land sounds + VFX: notify (tag) → component →
+  subsystem → `CFX_*` library lookup by effect tag + surface context. Surface comes from a
+  foot trace's physical material via the `RogueContextEffectsSettings` map.
 
 ## Synergy system (signature feature)
 
