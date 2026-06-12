@@ -78,6 +78,11 @@ class AHeroCharacter : ARogueHeroBase
     // so the hero polls the transition in Tick rather than hooking every call site.
     private bool bWasReloading = false;
 
+    // Surface-aware footstep/jump effects (Lyra ContextEffects port, D-0022 phase 4): listens for
+    // AnimNotify_RogueContextEffects on the hero's anims; libraries assigned on the hero BPs.
+    UPROPERTY(DefaultComponent)
+    URogueContextEffectComponent ContextEffects;
+
     // Visible weapon mesh, attached to the right hand. Its muzzle socket (WeaponDefinition.MuzzleSocket)
     // is the true bullet origin for third-person convergence (D-0014). Mesh asset comes from the
     // equipped definition; assigned on all machines so clients see the gun too.
