@@ -666,3 +666,44 @@ Regen in `Tick` (server only): delay counts down; then accumulate; each `Stamina
 - Spec coverage: Phase 0→Tasks 1-2; Phase 1→3-7; Phase 2→8-10; Phase 3→11; Phase 4→12; Phase 5→13; Phase 6→14-16; verification/docs→6,10,17. Gems catalog/out-of-scope items intentionally unplanned.
 - Known-unknown protocol: Task 3 is the decision gate; Tasks 4/5/9/11 consume its recorded outputs (var list, slot names, paths) rather than guessing.
 - Type consistency: `WeaponAnimLayer`/`SlideMontage`/`WeaponFireMontage` (Task 5/7/9), `HasStaminaPip`/`SpendStaminaPip` (Tasks 15-16), `URogueMovementSet` (14-16) — names match across tasks.
+
+## Checkpoint-A bug-fix log (2026-06-13, post-user feel test)
+
+User results: 1 torso never tracks camera (FAIL), 2 starts/stops OK, 3 slide "does not work
+at all" (FAIL), 4 jump/land OK, 5 gun present but "turned 90deg right off" (FAIL), 6 full-auto
+OK, 7 not tested. Items 1/3/5 traced to TWO root causes, both fixed and machine-verified:
+
+**Slide invisible (item 3).** The slide dynamic montages played into `DefaultSlot` — Lyra's
+`ABP_Mannequin_Base` has only `FullBodySlot` + `UpperBodySlot`, and a montage into a missing
+slot advances (all probe metrics pass) without ever touching the pose. The overnight probes
+asserted montage state, never the pose — that's how it slipped. Fix:
+`AHeroCharacter.SlideMontageSlot` default → `FullBodySlot`. Verified visually (slide pose
+on screen mid-montage from an external camera).
+
+**Frozen torso aim + gun 90° right (items 1 + 5 — one bug).** Deleting the colliding
+AimPitch/AimYaw BP vars during the original re-parent silently deleted their Set nodes,
+gutting `UpdateAimingData` (entry exec dangling) — graph-side aim data never written. Our AS
+substitute wrote `AimYaw ≈ 0` by construction (actor yaw follows control), but the item
+layers' aim offset needs `AimYaw = -RootYawOffset` (Lyra's graph writes this) to counter the
+planted-feet root rotation; with 0 the upper body froze and the rifle pointed wherever the
+counter-rotated root pointed — up to ~90° off the crosshair. Fix: removed
+AimPitch/AimYaw UPROPERTYs + writes from `URogueHeroAnimInstance` (the graph owns them now),
+recopied PRISTINE `ABP_Mannequin_Base.uasset` from LyraStarterGame, deleted only the 5
+`GameplayTag_*` BP vars (verified consumed by zero base-graph nodes; layers read the AS
+parent's same-named props by name). Compile clean. Verified live: AimPitch tracks control
+pitch exactly; AimYaw mirrors −RootYawOffset during turns; RootYawOffset unwinds to 0 via
+turn anims; over-shoulder screenshot shows the rifle tracking the crosshair.
+NOTE: v1 `ABP_Hero` loses its AimPitch/AimYaw bindings if ever recompiled (loads fine);
+acceptable — it is unused and pending retirement.
+
+**Also fixed while in there:**
+- `AN_PlayWeaponMontage` + `BP_NotifyState_EarlyTransition` (un-portable Lyra/GASP notify
+  BPs) failed compile on every PIE start and threw a modal "Blueprint Compilation Errors"
+  dialog that blocked the game thread. Their broken graph bodies are stubbed (entry+return
+  only); both compile clean. Our AS code already covers what they did.
+- Harness environment: unfocused editor + `bThrottleCPUWhenNotForeground` produced ~3Hz
+  stepping that mimicked total movement paralysis and burned hours of false leads. Disabled
+  and persisted in Saved EditorPerProjectUserSettings.ini (see memory:
+  editor-background-throttle).
+
+Battery after fixes: MoveSmoke 4/4 in PIE; SmokeTest result recorded below by the commit.

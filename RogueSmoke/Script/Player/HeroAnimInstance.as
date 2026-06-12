@@ -41,14 +41,13 @@ class URogueHeroAnimInstance : UAnimInstance
     bool bIsSprinting = false;
 
     // --- Aim (upper body) ---
-    // BlueprintReadWrite: the Lyra ABP's UpdateAimingData node WRITES AimPitch/AimYaw per-frame
-    // inside its own anim instance; v1 ABP only read them. Changing to ReadWrite is backward-compatible.
-    UPROPERTY(BlueprintReadWrite, Category = "Aim")
-    float AimPitch = 0.0;
-
-    UPROPERTY(BlueprintReadWrite, Category = "Aim")
-    float AimYaw = 0.0;
-
+    // AimPitch/AimYaw deliberately do NOT live here. The Lyra graph (ABP_Mannequin_Base) owns
+    // them as its own BP variables, written per-frame by its thread-safe update functions; the
+    // item anim layers read them by name from the main instance. Declaring same-named UPROPERTYs
+    // on this parent collides at BP compile, and deleting the BP vars to resolve it silently
+    // deletes their writer nodes — which froze the torso aim and pointed the gun 90° off
+    // (checkpoint-A bugs #1/#5). The retired v1 ABP_Hero bound these two; it loses them if
+    // recompiled, which is acceptable pending its deletion.
     UPROPERTY(BlueprintReadOnly, Category = "Aim")
     float AimOffsetAlpha = 1.0;
 
@@ -121,11 +120,8 @@ class URogueHeroAnimInstance : UAnimInstance
         PlayRate = (GroundSpeed > JogAuthoredSpeed)
             ? Math::Clamp(GroundSpeed / JogAuthoredSpeed, 0.8, 1.6) : 1.0;
 
-        // Aim deltas from BaseAimRotation: replicated (compressed) to simulated proxies, unlike
-        // ControlRotation — this is what makes remote players' torsos track their crosshair.
-        FRotator AimRot = Hero.GetBaseAimRotation();
-        AimPitch = Math::Clamp(NormalizeAngle(AimRot.Pitch - ActorRot.Pitch), -90.0, 90.0);
-        AimYaw = Math::Clamp(NormalizeAngle(AimRot.Yaw - ActorRot.Yaw), -90.0, 90.0);
+        // Aim pitch/yaw are computed by the Lyra graph's own UpdateAimingData (BP vars on
+        // ABP_Mannequin_Base) — see the Aim section comment above. Only the v1 alpha remains.
         AimOffsetAlpha = Hero.IsIncapacitated() ? 0.0 : 1.0;
 
         // Lyra surface: ground distance feeds distance-matched landing (trace only while airborne).
@@ -165,11 +161,4 @@ class URogueHeroAnimInstance : UAnimInstance
             PrevFallSpeed = Math::Abs(Vel.Z);
     }
 
-    private float NormalizeAngle(float Angle) const
-    {
-        float A = Angle;
-        while (A > 180.0)  A -= 360.0;
-        while (A < -180.0) A += 360.0;
-        return A;
-    }
 }

@@ -133,8 +133,11 @@ class AHeroCharacter : ARogueHeroBase
     UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
     UAnimSequenceBase SlideOutRunAnim;
 
+    // Must be a slot that exists in the live anim graph. Lyra's ABP_Mannequin_Base has exactly
+    // two: FullBodySlot and UpperBodySlot — there is NO DefaultSlot, and a montage played into a
+    // missing slot advances silently without ever touching the pose (checkpoint-A bug #3).
     UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
-    FName SlideMontageSlot = n"DefaultSlot";
+    FName SlideMontageSlot = n"FullBodySlot";
 
     private bool bSlideAnimActive = false;
     private float SlideLoopStartTime = 0.0;

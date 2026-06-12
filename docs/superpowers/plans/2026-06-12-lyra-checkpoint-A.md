@@ -1,5 +1,14 @@
 # Lyra Migration — User Checkpoint A (after Phases 1–2)
 
+> **2026-06-13 UPDATE — your results are in and the three failures are fixed:**
+> - **#3 slide**: montages played into a slot Lyra's graph doesn't have (`DefaultSlot`) —
+>   they "played" invisibly. Now on `FullBodySlot`; slide pose verified on screen.
+> - **#1 torso + #5 gun-90°-right**: one bug. The graph's aim writers were accidentally
+>   deleted during the re-parent; `AimYaw` (= −RootYawOffset, the upper-body counter-rotation)
+>   was stuck at 0, freezing the torso and leaving the gun pointing with the offset root.
+>   Pristine ABP restored; aim pitch/yaw verified live, gun tracks the crosshair.
+> Please re-test 1/3/5 (and 7 when you can). Details: plan doc §"Checkpoint-A bug-fix log".
+
 Machine verification is green; these are the things only a human feel-pass can judge.
 Nothing blocks on this — Phases 3–6 continue; v1 retirement waits for your sign-off.
 
