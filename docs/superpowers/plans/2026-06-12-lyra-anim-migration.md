@@ -633,6 +633,34 @@ Regen in `Tick` (server only): delay counts down; then accumulate; each `Stamina
 
 ---
 
+> **EXECUTION LOG (Tasks 8-17, 2026-06-12, overnight autonomous run):** ALL PHASES COMPLETE.
+> Commits: `340ebd6` redirects → `5c83178` content+spike → `219869d` re-parent → `8416d1e` hero
+> switch → `114e839` phase-1 green + BP-stub purge → `02688ad` gun+full-auto → `4869201` FX/audio
+> → `6e3640f` ContextEffects → `47332fa` heat curve + stamina + HUD + docs. SmokeTest 9/9 after
+> every phase (one Enemy_Lunger boot flake from concurrent editor load, clean on idle rerun —
+> rule: keep the interactive editor idle during SmokeTest).
+> Deviations/findings beyond the Tasks 4-7 log:
+> - Full-auto had a SECOND root cause: `DA_Weapon_AssaultRifle.bFullAuto=False`. Fixed; verified
+>   mag-empty + auto-reload mid-hold.
+> - v1 never had a visible gun (DA WeaponMesh was empty) and ALL FireFX slots were empty.
+> - ContextEffects needed STRUCT redirects (5) on top of class redirects — struct payloads
+>   deserialize EMPTY without them, silently; and 4 jog anims had to be recopied pristine
+>   because pre-redirect resaves stripped the unresolvable notifies (data-lossy).
+> - CFX library's soft-referenced footstep MetaSounds dodge the registry dependency walk —
+>   copied by hand + closure (58 files).
+> - Task 13 shrank: v1 already had a complete linear heat model; added the optional Lyra-shaped
+>   `HeatToSpreadCurve` (backward compatible) instead of rebuilding; recoil values left as
+>   user-tuned.
+> - Task 14 grant site is DATA (`DA_*_AbilitySet.GrantedAttributes`), patched via python
+>   constructor-kwargs (set_editor_property on the struct instance is blocked for
+>   EditDefaultsOnly).
+> - MoveSmoke is now 4 checks; `Tools/SmokeTest.ps1` expectation updated to RESULT 4/4.
+> - Slide In→Loop handover VERIFIED on a long slide (montage swap at In-length −0.2 s); new
+>   minor: the Out anim after a long LOOPED slide didn't register once — polish item.
+> - Tasks 10/17 2-player items are user-side (MCP drives 1 player); proxy gaps documented in
+>   checkpoints A/B + D-0022. v1 retirement + finishing-a-development-branch await user
+>   sign-off on checkpoint B.
+
 ## Self-review notes
 
 - Spec coverage: Phase 0→Tasks 1-2; Phase 1→3-7; Phase 2→8-10; Phase 3→11; Phase 4→12; Phase 5→13; Phase 6→14-16; verification/docs→6,10,17. Gems catalog/out-of-scope items intentionally unplanned.
