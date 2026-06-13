@@ -57,7 +57,7 @@ class UResultsScreenWidget : UCommonActivatableWidget
         BackdropSlot.SetAnchors(FAnchors(0.0, 0.0, 1.0, 1.0));
         BackdropSlot.SetOffsets(FMargin(0.0, 0.0, 0.0, 0.0));
 
-        FLinearColor ResultColor = bVictory ? RogueUITheme::Victory : RogueUITheme::Danger;
+        FLinearColor ResultColor = bVictory ? RogueUITheme::Victory() : RogueUITheme::Danger();
         UTextBlock Title = RogueUITheme::MakeText(
             this, bVictory ? "RAID COMPLETE" : "SQUAD WIPED", ResultColor, 3.0);
         UCanvasPanelSlot TitleSlot = Root.AddChildToCanvas(Title);
@@ -65,7 +65,7 @@ class UResultsScreenWidget : UCommonActivatableWidget
         TitleSlot.SetAlignment(FVector2D(0.5, 0.5));
         TitleSlot.SetAutoSize(true);
 
-        UTextBlock Subtitle = RogueUITheme::MakeText(this, BuildSubtitle(GS), RogueUITheme::TextDim, 1.1);
+        UTextBlock Subtitle = RogueUITheme::MakeText(this, BuildSubtitle(GS), RogueUITheme::TextDim(), 1.1);
         UCanvasPanelSlot SubSlot = Root.AddChildToCanvas(Subtitle);
         SubSlot.SetAnchors(FAnchors(0.5, 0.25));
         SubSlot.SetAlignment(FVector2D(0.5, 0.5));
@@ -108,7 +108,7 @@ class UResultsScreenWidget : UCommonActivatableWidget
         Labels.Add("DOWNS");
         Labels.Add("REVIVES");
         Labels.Add("UPGRADES");
-        AddColumn(Table, "", RogueUITheme::TextDim, Labels, EHorizontalAlignment::HAlign_Right);
+        AddColumn(Table, "", RogueUITheme::TextDim(), Labels, EHorizontalAlignment::HAlign_Right);
 
         int TotalKills = 0;
         int TotalDealt = 0;
@@ -132,7 +132,7 @@ class UResultsScreenWidget : UCommonActivatableWidget
                 Values.Add(f"{PS.TimesDowned}");
                 Values.Add(f"{PS.Revives}");
                 Values.Add(f"{PS.UpgradesTaken}");
-                AddColumn(Table, PS.GetPlayerName(), RogueUITheme::Accent, Values,
+                AddColumn(Table, PS.GetPlayerName(), RogueUITheme::Accent(), Values,
                           EHorizontalAlignment::HAlign_Center);
 
                 TotalKills += PS.Kills;
@@ -151,7 +151,7 @@ class UResultsScreenWidget : UCommonActivatableWidget
         Totals.Add(f"{TotalDowns}");
         Totals.Add(f"{TotalRevives}");
         Totals.Add(f"{TotalUpgrades}");
-        AddColumn(Table, "TEAM", RogueUITheme::TextPrimary, Totals, EHorizontalAlignment::HAlign_Center);
+        AddColumn(Table, "TEAM", RogueUITheme::TextPrimary(), Totals, EHorizontalAlignment::HAlign_Center);
     }
 
     private void AddColumn(UHorizontalBox Table, FString Header, FLinearColor HeaderColor,
@@ -166,7 +166,7 @@ class UResultsScreenWidget : UCommonActivatableWidget
 
         for (FString Value : Values)
         {
-            UTextBlock ValueText = RogueUITheme::MakeText(this, Value, RogueUITheme::TextPrimary, 1.0);
+            UTextBlock ValueText = RogueUITheme::MakeText(this, Value, RogueUITheme::TextPrimary(), 1.0);
             UVerticalBoxSlot ValueSlot = Column.AddChildToVerticalBox(ValueText);
             ValueSlot.SetHorizontalAlignment(Align);
             ValueSlot.SetPadding(FMargin(0.0, 0.0, 0.0, 8.0));
@@ -188,13 +188,13 @@ class UResultsScreenWidget : UCommonActivatableWidget
         bool bHost = PC != nullptr && PC.HasAuthority();
         if (bHost)
         {
-            UButton PlayAgain = RogueUITheme::MakeTextButton(this, "  PLAY AGAIN  ", RogueUITheme::Accent);
+            UButton PlayAgain = RogueUITheme::MakeTextButton(this, "  PLAY AGAIN  ", RogueUITheme::Accent());
             PlayAgain.OnClicked.AddUFunction(this, n"HandlePlayAgain");
             FirstButton = PlayAgain;
             UHorizontalBoxSlot PlaySlot = ButtonRow.AddChildToHorizontalBox(PlayAgain);
             PlaySlot.SetPadding(FMargin(10.0, 0.0, 10.0, 0.0));
 
-            UButton Lobby = RogueUITheme::MakeTextButton(this, "  RETURN TO LOBBY  ", RogueUITheme::TextPrimary);
+            UButton Lobby = RogueUITheme::MakeTextButton(this, "  RETURN TO LOBBY  ", RogueUITheme::TextPrimary());
             Lobby.OnClicked.AddUFunction(this, n"HandleLobby");
             UHorizontalBoxSlot LobbySlot = ButtonRow.AddChildToHorizontalBox(Lobby);
             LobbySlot.SetPadding(FMargin(10.0, 0.0, 10.0, 0.0));
@@ -202,18 +202,18 @@ class UResultsScreenWidget : UCommonActivatableWidget
         else
         {
             UTextBlock Waiting = RogueUITheme::MakeText(
-                this, "Waiting for the host...", RogueUITheme::TextDim, 1.1);
+                this, "Waiting for the host...", RogueUITheme::TextDim(), 1.1);
             UHorizontalBoxSlot WaitSlot = ButtonRow.AddChildToHorizontalBox(Waiting);
             WaitSlot.SetPadding(FMargin(10.0, 8.0, 10.0, 0.0));
 
-            UButton Leave = RogueUITheme::MakeTextButton(this, "  LEAVE TO MENU  ", RogueUITheme::TextPrimary);
+            UButton Leave = RogueUITheme::MakeTextButton(this, "  LEAVE TO MENU  ", RogueUITheme::TextPrimary());
             Leave.OnClicked.AddUFunction(this, n"HandleLeave");
             FirstButton = Leave;
             UHorizontalBoxSlot LeaveSlot = ButtonRow.AddChildToHorizontalBox(Leave);
             LeaveSlot.SetPadding(FMargin(10.0, 0.0, 10.0, 0.0));
         }
 
-        UButton Quit = RogueUITheme::MakeTextButton(this, "  QUIT  ", RogueUITheme::TextDim);
+        UButton Quit = RogueUITheme::MakeTextButton(this, "  QUIT  ", RogueUITheme::TextDim());
         Quit.OnClicked.AddUFunction(this, n"HandleQuit");
         UHorizontalBoxSlot QuitSlot = ButtonRow.AddChildToHorizontalBox(Quit);
         QuitSlot.SetPadding(FMargin(10.0, 0.0, 10.0, 0.0));

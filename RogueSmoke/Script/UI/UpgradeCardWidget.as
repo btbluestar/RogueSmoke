@@ -60,7 +60,7 @@ class UUpgradeCardWidget : UUserWidget
         Frame = RogueUITheme::MakePanel(this, RogueUITheme::RarityColor(1), 4.0);
         SizeBox.AddChild(Frame);
 
-        UBorder Face = RogueUITheme::MakePanel(this, RogueUITheme::PanelDark, 14.0);
+        UBorder Face = RogueUITheme::MakePanel(this, RogueUITheme::PanelDark(), 14.0);
         Frame.AddChild(Face);
 
         UVerticalBox Column = Cast<UVerticalBox>(ConstructWidget(UVerticalBox::StaticClass()));
@@ -73,36 +73,36 @@ class UUpgradeCardWidget : UUserWidget
         IconSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
         IconSlot.SetPadding(FMargin(0.0, 6.0, 0.0, 14.0));
 
-        NameText = RogueUITheme::MakeText(this, "", RogueUITheme::TextPrimary, 1.35);
+        NameText = RogueUITheme::MakeText(this, "", RogueUITheme::TextPrimary(), 1.35);
         UVerticalBoxSlot NameSlot = Column.AddChildToVerticalBox(NameText);
         NameSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
         NameSlot.SetPadding(FMargin(0.0, 0.0, 0.0, 8.0));
 
-        RarityText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim, 0.9);
+        RarityText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 0.9);
         UVerticalBoxSlot RaritySlot = Column.AddChildToVerticalBox(RarityText);
         RaritySlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
         RaritySlot.SetPadding(FMargin(0.0, 0.0, 0.0, 12.0));
 
         // "Lv 2 -> 3" line: repeat picks read as deepening a track, not duplicates (Loop v2).
-        StackText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim, 0.95);
+        StackText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 0.95);
         UVerticalBoxSlot StackSlot = Column.AddChildToVerticalBox(StackText);
         StackSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
         StackSlot.SetPadding(FMargin(0.0, 0.0, 0.0, 8.0));
 
         // The "value": the short concrete stat line, accent-colored — numbers ON the card
         // (the RoR2 icons-only approach is the known anti-pattern).
-        ValueText = RogueUITheme::MakeText(this, "", RogueUITheme::Accent, 1.15);
+        ValueText = RogueUITheme::MakeText(this, "", RogueUITheme::Accent(), 1.15);
         UVerticalBoxSlot ValueSlot = Column.AddChildToVerticalBox(ValueText);
         ValueSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
         ValueSlot.SetPadding(FMargin(0.0, 0.0, 0.0, 12.0));
 
         // Duo/prereq line ("Requires: Incendiary Rounds + Heavy Caliber"): synergy legibility.
-        PrereqText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim, 0.85, true);
+        PrereqText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 0.85, true);
         UVerticalBoxSlot PrereqSlot = Column.AddChildToVerticalBox(PrereqText);
         PrereqSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
         PrereqSlot.SetPadding(FMargin(0.0, 0.0, 0.0, 8.0));
 
-        DescText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim, 1.0, true);
+        DescText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 1.0, true);
         UVerticalBoxSlot DescSlot = Column.AddChildToVerticalBox(DescText);
         DescSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Fill);
 
@@ -113,7 +113,7 @@ class UUpgradeCardWidget : UUserWidget
         FillSize.SizeRule = ESlateSizeRule::Fill;
         SpacerSlot.SetSize(FillSize);
 
-        HotkeyText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim, 1.0);
+        HotkeyText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 1.0);
         UVerticalBoxSlot HotkeySlot = Column.AddChildToVerticalBox(HotkeyText);
         HotkeySlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
     }

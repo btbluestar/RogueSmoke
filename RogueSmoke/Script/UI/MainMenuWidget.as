@@ -61,19 +61,19 @@ class UMainMenuWidget : UCommonActivatableWidget
         bBuilt = true;
 
         // Opaque dark backdrop — this IS the screen, not an overlay.
-        UBorder Backdrop = RogueUITheme::MakePanel(this, RogueUITheme::PanelDark, 0.0);
+        UBorder Backdrop = RogueUITheme::MakePanel(this, RogueUITheme::PanelDark(), 0.0);
         UCanvasPanelSlot BackdropSlot = Root.AddChildToCanvas(Backdrop);
         BackdropSlot.SetAnchors(FAnchors(0.0, 0.0, 1.0, 1.0));
         BackdropSlot.SetOffsets(FMargin(0.0, 0.0, 0.0, 0.0));
 
-        UTextBlock Title = RogueUITheme::MakeText(this, "ROGUESMOKE", RogueUITheme::Accent, 3.4);
+        UTextBlock Title = RogueUITheme::MakeText(this, "ROGUESMOKE", RogueUITheme::Accent(), 3.4);
         UCanvasPanelSlot TitleSlot = Root.AddChildToCanvas(Title);
         TitleSlot.SetAnchors(FAnchors(0.12, 0.2));
         TitleSlot.SetAlignment(FVector2D(0.0, 0.5));
         TitleSlot.SetAutoSize(true);
 
         UTextBlock Tagline = RogueUITheme::MakeText(
-            this, "co-op raid roguelike  -  pre-alpha", RogueUITheme::TextDim, 1.0);
+            this, "co-op raid roguelike  -  pre-alpha", RogueUITheme::TextDim(), 1.0);
         UCanvasPanelSlot TagSlot = Root.AddChildToCanvas(Tagline);
         TagSlot.SetAnchors(FAnchors(0.12, 0.27));
         TagSlot.SetAlignment(FVector2D(0.0, 0.5));
@@ -86,8 +86,8 @@ class UMainMenuWidget : UCommonActivatableWidget
         StackSlot.SetAlignment(FVector2D(0.0, 0.0));
         StackSlot.SetAutoSize(true);
 
-        HostButton = AddMenuButton(Stack, "  HOST GAME  ", n"HandleHost", RogueUITheme::TextPrimary);
-        AddMenuButton(Stack, "  JOIN GAME  ", n"HandleToggleJoin", RogueUITheme::TextPrimary);
+        HostButton = AddMenuButton(Stack, "  HOST GAME  ", n"HandleHost", RogueUITheme::TextPrimary());
+        AddMenuButton(Stack, "  JOIN GAME  ", n"HandleToggleJoin", RogueUITheme::TextPrimary());
 
         // Join row: IP box + CONNECT, collapsed until JOIN GAME is clicked.
         JoinRow = Cast<UHorizontalBox>(ConstructWidget(UHorizontalBox::StaticClass()));
@@ -100,11 +100,11 @@ class UMainMenuWidget : UCommonActivatableWidget
         UHorizontalBoxSlot BoxSlot = JoinRow.AddChildToHorizontalBox(AddressBox);
         BoxSlot.SetPadding(FMargin(0.0, 0.0, 8.0, 0.0));
 
-        UButton Connect = RogueUITheme::MakeTextButton(this, " CONNECT ", RogueUITheme::Accent);
+        UButton Connect = RogueUITheme::MakeTextButton(this, " CONNECT ", RogueUITheme::Accent());
         Connect.OnClicked.AddUFunction(this, n"HandleConnect");
         JoinRow.AddChildToHorizontalBox(Connect);
 
-        AddMenuButton(Stack, "  QUIT  ", n"HandleQuit", RogueUITheme::TextDim);
+        AddMenuButton(Stack, "  QUIT  ", n"HandleQuit", RogueUITheme::TextDim());
     }
 
     private UButton AddMenuButton(UVerticalBox Stack, FString Label, FName Handler, FLinearColor Color)

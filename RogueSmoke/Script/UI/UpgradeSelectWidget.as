@@ -105,7 +105,7 @@ class UUpgradeSelectWidget : UCommonActivatableWidget
         BackdropSlot.SetAnchors(FAnchors(0.0, 0.0, 1.0, 1.0));
         BackdropSlot.SetOffsets(FMargin(0.0, 0.0, 0.0, 0.0));
 
-        UTextBlock Title = RogueUITheme::MakeText(this, "CHOOSE AN UPGRADE", RogueUITheme::TextPrimary, 2.2);
+        UTextBlock Title = RogueUITheme::MakeText(this, "CHOOSE AN UPGRADE", RogueUITheme::TextPrimary(), 2.2);
         UCanvasPanelSlot TitleSlot = Root.AddChildToCanvas(Title);
         TitleSlot.SetAnchors(FAnchors(0.5, 0.18));
         TitleSlot.SetAlignment(FVector2D(0.5, 0.5));
@@ -117,14 +117,14 @@ class UUpgradeSelectWidget : UCommonActivatableWidget
         RowSlot.SetAlignment(FVector2D(0.5, 0.45));
         RowSlot.SetAutoSize(true);
 
-        UTextBlock Hint = RogueUITheme::MakeText(this, "Click a card or press its number — the raid is paused until everyone picks", RogueUITheme::TextDim, 1.0);
+        UTextBlock Hint = RogueUITheme::MakeText(this, "Click a card or press its number — the raid is paused until everyone picks", RogueUITheme::TextDim(), 1.0);
         UCanvasPanelSlot HintSlot = Root.AddChildToCanvas(Hint);
         HintSlot.SetAnchors(FAnchors(0.5, 0.82));
         HintSlot.SetAlignment(FVector2D(0.5, 0.5));
         HintSlot.SetAutoSize(true);
 
         // Lock-in status: who the squad is waiting on (replicated AwaitingPickNames).
-        WaitingText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim, 1.0);
+        WaitingText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 1.0);
         UCanvasPanelSlot WaitingSlot = Root.AddChildToCanvas(WaitingText);
         WaitingSlot.SetAnchors(FAnchors(0.5, 0.88));
         WaitingSlot.SetAlignment(FVector2D(0.5, 0.5));
@@ -132,7 +132,7 @@ class UUpgradeSelectWidget : UCommonActivatableWidget
 
         // Squad reroll: one shared charge; re-rolls THIS player's hand.
         RerollButton = Cast<UButton>(ConstructWidget(UButton::StaticClass()));
-        RerollLabel = RogueUITheme::MakeText(this, "REROLL (R)", RogueUITheme::TextPrimary, 1.1);
+        RerollLabel = RogueUITheme::MakeText(this, "REROLL (R)", RogueUITheme::TextPrimary(), 1.1);
         RerollButton.AddChild(RerollLabel);
         RerollButton.OnClicked.AddUFunction(this, n"HandleRerollClicked");
         UCanvasPanelSlot RerollSlot = Root.AddChildToCanvas(RerollButton);

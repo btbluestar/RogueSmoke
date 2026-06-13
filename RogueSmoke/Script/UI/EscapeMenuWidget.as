@@ -39,7 +39,7 @@ class UEscapeMenuWidget : UCommonActivatableWidget
         BackdropSlot.SetAnchors(FAnchors(0.0, 0.0, 1.0, 1.0));
         BackdropSlot.SetOffsets(FMargin(0.0, 0.0, 0.0, 0.0));
 
-        UTextBlock Title = RogueUITheme::MakeText(this, "PAUSED (the raid is not)", RogueUITheme::TextPrimary, 1.8);
+        UTextBlock Title = RogueUITheme::MakeText(this, "PAUSED (the raid is not)", RogueUITheme::TextPrimary(), 1.8);
         UCanvasPanelSlot TitleSlot = Root.AddChildToCanvas(Title);
         TitleSlot.SetAnchors(FAnchors(0.5, 0.3));
         TitleSlot.SetAlignment(FVector2D(0.5, 0.5));
@@ -51,14 +51,14 @@ class UEscapeMenuWidget : UCommonActivatableWidget
         StackSlot.SetAlignment(FVector2D(0.5, 0.0));
         StackSlot.SetAutoSize(true);
 
-        ResumeButton = AddButton(Stack, "  RESUME  ", n"HandleResume", RogueUITheme::Accent);
+        ResumeButton = AddButton(Stack, "  RESUME  ", n"HandleResume", RogueUITheme::Accent());
 
         APlayerController PC = GetOwningPlayer();
         if (PC != nullptr && PC.HasAuthority())
-            AddButton(Stack, "  RETURN TO LOBBY (squad)  ", n"HandleLobby", RogueUITheme::TextPrimary);
+            AddButton(Stack, "  RETURN TO LOBBY (squad)  ", n"HandleLobby", RogueUITheme::TextPrimary());
 
-        AddButton(Stack, "  LEAVE TO MENU  ", n"HandleLeave", RogueUITheme::TextPrimary);
-        AddButton(Stack, "  QUIT  ", n"HandleQuit", RogueUITheme::TextDim);
+        AddButton(Stack, "  LEAVE TO MENU  ", n"HandleLeave", RogueUITheme::TextPrimary());
+        AddButton(Stack, "  QUIT  ", n"HandleQuit", RogueUITheme::TextDim());
     }
 
     private UButton AddButton(UVerticalBox Stack, FString Label, FName Handler, FLinearColor Color)

@@ -81,14 +81,19 @@ class URogueHUDWidget : UUserWidget
     const float DamageNumberRiseCm = 90.0;  // world-space rise over the lifetime
     const float DamageNumberJitter = 18.0;  // XY scatter so multi-pellet hits don't stack into one glyph
 
-    // Palette (mirrors the mockup tokens): teal accent, red danger, light-blue shield.
-    const FLinearColor Accent = FLinearColor(0.27, 0.84, 0.77);
-    const FLinearColor Danger = FLinearColor(0.90, 0.28, 0.30);
-    const FLinearColor ShieldColor = FLinearColor(0.35, 0.62, 1.0);
+    // Palette: sourced once from the editable theme (DA_UITheme via RogueUITheme) in OnInitialized,
+    // so the user retints the HUD in-editor. Members (not consts) so they can be assigned at runtime;
+    // every Refresh below reads them unchanged. Defaults match the theme defaults if it sets nothing.
+    private FLinearColor Accent = FLinearColor(0.27, 0.84, 0.77);
+    private FLinearColor Danger = FLinearColor(0.90, 0.28, 0.30);
+    private FLinearColor ShieldColor = FLinearColor(0.35, 0.62, 1.0);
 
     UFUNCTION(BlueprintOverride)
     void OnInitialized()
     {
+        Accent = RogueUITheme::Accent();
+        Danger = RogueUITheme::Danger();
+        ShieldColor = RogueUITheme::Shield();
         BuildLayout();
     }
 

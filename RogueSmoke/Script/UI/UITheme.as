@@ -1,31 +1,45 @@
 // UITheme.as
 // Shared UI design tokens + construction helpers for the runtime-built widget trees
 // (RogueHUDWidget pattern: no UMG designer layouts — see that file's header for why).
-// Every screen pulls colors/sizes from here so a later art pass touches ONE place.
+// Every screen pulls colors from here so an art pass touches ONE place.
 //
-// Rarity colors follow the genre convention players already know (Hades/loot-tier
-// standard): common grey-white, rare blue, epic purple, legendary orange.
-
+// The palette now reads from a designer-editable DataAsset (URogueUIThemeData / DA_UITheme) via the
+// theme subsystem, so the user retints the whole UI in-editor without touching code. The functions
+// fall back to the original literals if the asset/subsystem isn't available, so nothing breaks.
+// Rarity colors follow the genre convention (Hades/loot-tier: common grey-white .. legendary orange).
 namespace RogueUITheme
 {
-    // Core palette (mirrors RogueHUDWidget / the HUD mockup tokens).
-    const FLinearColor Accent = FLinearColor(0.27, 0.84, 0.77);      // teal — interactive / positive
-    const FLinearColor Danger = FLinearColor(0.90, 0.28, 0.30);      // red — damage / defeat
-    const FLinearColor Victory = FLinearColor(0.35, 0.90, 0.40);     // green — success
-    const FLinearColor TextPrimary = FLinearColor(0.92, 0.95, 0.96);
-    const FLinearColor TextDim = FLinearColor(0.55, 0.60, 0.63);
-    const FLinearColor PanelDark = FLinearColor(0.045, 0.055, 0.07); // card / panel fill
-    const FLinearColor BackdropDim = FLinearColor(0.0, 0.0, 0.0);    // full-screen dim (use alpha)
+    // Resolve the cached theme (designer-authored DA_UITheme, else class defaults). May be null only
+    // if there's no GameInstance subsystem yet (not a normal UI context) — callers fall back.
+    URogueUIThemeData Data()
+    {
+        URogueUIThemeSubsystem Sub = URogueUIThemeSubsystem::Get();
+        return Sub != nullptr ? Sub.GetTheme() : nullptr;
+    }
+
+    // Core palette accessors. Were `const FLinearColor` — now functions so the values can come from
+    // the editable asset. Fallback literals mirror URogueUIThemeData's defaults.
+    FLinearColor Accent()      { URogueUIThemeData T = Data(); return T != nullptr ? T.Accent      : FLinearColor(0.27, 0.84, 0.77); }
+    FLinearColor Danger()      { URogueUIThemeData T = Data(); return T != nullptr ? T.Danger      : FLinearColor(0.90, 0.28, 0.30); }
+    FLinearColor Victory()     { URogueUIThemeData T = Data(); return T != nullptr ? T.Victory     : FLinearColor(0.35, 0.90, 0.40); }
+    FLinearColor TextPrimary() { URogueUIThemeData T = Data(); return T != nullptr ? T.TextPrimary : FLinearColor(0.92, 0.95, 0.96); }
+    FLinearColor TextDim()     { URogueUIThemeData T = Data(); return T != nullptr ? T.TextDim     : FLinearColor(0.55, 0.60, 0.63); }
+    FLinearColor PanelDark()   { URogueUIThemeData T = Data(); return T != nullptr ? T.PanelDark   : FLinearColor(0.045, 0.055, 0.07); }
+    FLinearColor BackdropDim() { URogueUIThemeData T = Data(); return T != nullptr ? T.BackdropDim : FLinearColor(0.0, 0.0, 0.0); }
+    FLinearColor Shield()      { URogueUIThemeData T = Data(); return T != nullptr ? T.Shield      : FLinearColor(0.35, 0.62, 1.0); }
 
     FLinearColor RarityColor(int Rarity)
     {
+        URogueUIThemeData T = Data();
+        if (T != nullptr)
+            return T.RarityFor(Rarity);
         if (Rarity >= 4)
-            return FLinearColor(1.0, 0.55, 0.15);   // legendary orange
+            return FLinearColor(1.0, 0.55, 0.15);    // legendary orange
         if (Rarity == 3)
-            return FLinearColor(0.62, 0.30, 0.90);  // epic purple
+            return FLinearColor(0.62, 0.30, 0.90);   // epic purple
         if (Rarity == 2)
-            return FLinearColor(0.25, 0.55, 1.0);   // rare blue
-        return FLinearColor(0.72, 0.75, 0.78);      // common grey-white
+            return FLinearColor(0.25, 0.55, 1.0);    // rare blue
+        return FLinearColor(0.72, 0.75, 0.78);       // common grey-white
     }
 
     FString RarityName(int Rarity)
