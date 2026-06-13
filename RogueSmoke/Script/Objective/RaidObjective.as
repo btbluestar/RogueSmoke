@@ -9,8 +9,12 @@
 // MVP scope notes:
 //  - Raid goal = "clear every elite in the handcrafted arena" (MVP §12), detected by
 //    polling UCombatSubsystem::GetEliteCount() rather than per-elite death wiring.
-//  - The defend wave is a HOOK (OnExtractionPhaseStarted) — the spawner isn't built yet.
-//  - Party-wipe detection depends on down/revive (MVP §12, not built) — exposed as a hook.
+//  - The defend wave spawns via OnExtractionPhaseStarted -> USpawnDirector::SpawnEliteWave.
+//    Caveat: it only spawns if DefendWaveEliteClass is set; it is NOT defaulted in BeginPlay
+//    (unlike EliteRoster/BossClass/InjectRoster), so out of the box the defend phase is just
+//    continued fodder pressure. See the core-loop-hardening plan, Task 3.
+//  - Party-wipe loss IS wired: URogueDownComponent runs down/revive and calls NotifyPartyWiped()
+//    when every hero is incapacitated, which ends the run in defeat (D-0010).
 
 enum ERaidPhase
 {

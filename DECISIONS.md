@@ -278,10 +278,11 @@ Format per entry: ID, date, status, the decision, the reasoning, and consequence
   AngelScript overrides — "script the decision, compile the simulation" (D-0002).
 - **Consequences:** elites count toward "clear the arena", fodder does not (`bCountsAsObjectiveTarget`).
   `RaidObjective` spawns a seeded elite mix + boss at raid start (defaults to this roster, so a raid is a
-  full loop with no editor wiring). **Open / polish:** per-archetype creature art + readability tint;
-  real telegraph VFX + attack/death GameplayCues (debug-draw for now); projectile + line-of-sight for
-  Spitter; smooth dash for Lunger; a boss healthbar. Cross-links D-0002 (seam), D-0003 (Mass fodder),
-  D-0013 (upgrades as GEs), D-0014 (shooter), D-0015 (slide dodges the Lunger).
+  full loop with no editor wiring). **Done since this entry:** Spitter projectile + line-of-sight gate
+  (`ASpitterProjectile`, `HasLineOfSightToActor`); Lunger smooth multi-frame dash (`StartDash` +
+  `DashContactRange`). **Still open / polish:** per-archetype creature art + readability tint; real
+  telegraph VFX + attack/death GameplayCues (debug-draw for now); a boss healthbar. Cross-links D-0002
+  (seam), D-0003 (Mass fodder), D-0013 (upgrades as GEs), D-0014 (shooter), D-0015 (slide dodges the Lunger).
 
 ### D-0018 — Upgrade acquisition loop: shared XP levels + mini-boss chest
 
