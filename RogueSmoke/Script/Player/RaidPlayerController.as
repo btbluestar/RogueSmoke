@@ -1725,6 +1725,156 @@ class ARaidPlayerController : APlayerController
     UFUNCTION(Exec)
     void RaidLose() { ForceRunPhase(ERunPhase::Defeat); }
 
+    // --- Debug: drive the whole raid loop to a terminal state and assert the win/loss bridges
+    // fire (they had no automated proof). `RaidLoopSmoke` runs the VICTORY path (clear the arena
+    // -> extraction opens -> CallExtraction spawns the defend wave -> survive the timer ->
+    // ERunPhase::Victory); `RaidLoopSmoke defeat` runs the LOSS bridge (NotifyPartyWiped ->
+    // ERaidPhase::Failed -> ERunPhase::Defeat). Each ends the run, so the two run in SEPARATE
+    // SmokeTest boots. Host/authority only; polls at boot like MoveSmoke. SmokeTest.ps1 asserts
+    // `[RaidLoopSmoke] RESULT 4/4` (victory) / `2/2` (defeat). ---
+    private FString RaidLoopMode = "victory";
+    private int RaidLoopRetries = 0;
+    private bool bRaidLoopExtracting = false;
+    private bool bRaidLoopWaveSpawned = false;
+
+    UFUNCTION(Exec)
+    void RaidLoopSmoke(FString Mode = "victory")
+    {
+        RaidLoopMode = (Mode == "defeat") ? "defeat" : "victory";
+        RaidLoopRetries = 0;
+        bRaidLoopExtracting = false;
+        bRaidLoopWaveSpawned = false;
+        RaidLoopSmokeStep();
+    }
+
+    // Re-entry point for the boot poll. SetTimer needs a parameterless UFUNCTION; re-firing the
+    // Exec directly would reset Mode to its "victory" default on every retry.
+    UFUNCTION()
+    void RaidLoopSmokeStep()
+    {
+        if (!HasAuthority())
+        {
+            Print("[RaidLoopSmoke] host only (authority required)", 8.0);
+            return;
+        }
+        if (RaidLoopMode == "defeat")
+            RaidLoopDefeatStep();
+        else
+            RaidLoopVictoryStep();
+    }
+
+    private void RaidLoopRetry()
+    {
+        if (RaidLoopRetries < 60)
+        {
+            RaidLoopRetries++;
+            System::SetTimer(this, n"RaidLoopSmokeStep", 0.5, false);
+            return;
+        }
+        int Total = (RaidLoopMode == "defeat") ? 2 : 4;
+        Print(f"[RaidLoopSmoke] RESULT 0/{Total} — timed out waiting for the loop", 15.0);
+    }
+
+    private ARaidObjective FindRaidObjective()
+    {
+        TArray<ARaidObjective> Objectives;
+        GetAllActorsOfClass(Objectives);
+        return Objectives.Num() > 0 ? Objectives[0] : nullptr;
+    }
+
+    private void RaidLoopVictoryStep()
+    {
+        ARaidObjective Obj = FindRaidObjective();
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (Obj == nullptr || Combat == nullptr || GS == nullptr)
+        {
+            RaidLoopRetry();
+            return;
+        }
+
+        if (Obj.Phase == ERaidPhase::InProgress)
+        {
+            // Wait until the gating elites have actually spawned, then arm a tiny defend wave and
+            // nuke the arena so the objective's own clear-detection opens extraction.
+            if (Combat.GetEliteCount() <= 0)
+            {
+                RaidLoopRetry();
+                return;
+            }
+            Obj.DefendWaveEliteClass = ACarapace;   // prove the spawner; shipping default is gated (plan Task 3)
+            Obj.ExtractionDefendSeconds = 0.1;       // collapse the hold so the boot test is quick
+            AHeroCharacter Hero = GetHero();
+            FVector Center = Hero != nullptr ? Hero.GetActorLocation() : Obj.GetActorLocation();
+            Combat.ApplyRadialDamage(Center, 1000000.0, 999999.0, 1.0, Hero);
+            RaidLoopRetry();
+            return;
+        }
+
+        if (Obj.Phase == ERaidPhase::ExtractionReady)
+        {
+            int Before = Combat.GetEliteCount();
+            Obj.CallExtraction();
+            bRaidLoopExtracting = (Obj.Phase == ERaidPhase::Extracting);
+            int After = Combat.GetEliteCount();
+            bRaidLoopWaveSpawned = (After - Before) >= Math::Max(1, Obj.DefendWaveCount / 2);
+            RaidLoopRetry();
+            return;
+        }
+
+        if (Obj.Phase == ERaidPhase::Extracting)
+        {
+            // Defend timer is ticking down (0.1s); just wait for it to expire into Extracted.
+            RaidLoopRetry();
+            return;
+        }
+
+        if (Obj.Phase == ERaidPhase::Extracted)
+        {
+            int Pass = 0;
+            if (bRaidLoopExtracting) Pass++;
+            else Print("[RaidLoopSmoke] FAIL: CallExtraction did not enter Extracting", 15.0);
+            if (bRaidLoopWaveSpawned) Pass++;
+            else Print("[RaidLoopSmoke] FAIL: defend wave did not spawn on extraction", 15.0);
+            Pass++;   // reached Extracted = survived the hold
+            if (GS.Phase == ERunPhase::Victory) Pass++;
+            else Print(f"[RaidLoopSmoke] FAIL: run phase is not Victory (got {GS.Phase})", 15.0);
+            Print(f"[RaidLoopSmoke] RESULT {Pass}/4", 15.0);
+            return;
+        }
+
+        // Failed during a victory run (e.g. nothing spawned) — surface it rather than hang.
+        Print("[RaidLoopSmoke] RESULT 0/4 — objective reached an unexpected terminal state", 15.0);
+    }
+
+    private void RaidLoopDefeatStep()
+    {
+        ARaidObjective Obj = FindRaidObjective();
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (Obj == nullptr || GS == nullptr)
+        {
+            RaidLoopRetry();
+            return;
+        }
+
+        // Trigger the loss bridge directly (DownComponent already covers the down/revive path that
+        // calls this once every hero is incapacitated). NotifyPartyWiped -> Failed -> Defeat is
+        // synchronous, so we can assert right after.
+        if (Obj.Phase != ERaidPhase::Failed)
+            Obj.NotifyPartyWiped();
+
+        if (Obj.Phase != ERaidPhase::Failed)
+        {
+            RaidLoopRetry();   // give it a tick if it hasn't applied yet
+            return;
+        }
+
+        int Pass = 1;   // reached Failed
+        if (GS.Phase == ERunPhase::Defeat) Pass++;
+        else Print(f"[RaidLoopSmoke] FAIL: run phase is not Defeat (got {GS.Phase})", 15.0);
+        Print(f"[RaidLoopSmoke] RESULT {Pass}/2", 15.0);
+    }
+
     // --- End-of-run results (CommonUI: pushed onto the Menu layer). Triggered by the HUD's
     // banner->panel timer, or instantly via the RaidResults console command. ---
     private UResultsScreenWidget ResultsScreen;

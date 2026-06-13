@@ -48,6 +48,12 @@ $Cases = @(
     @{ Name = "UpgradesEvo";        Map = "/Game/Levels/DebuggingLevels/DL_Upgrades";
        Expect = @("[EvoSmoke] RESULT 7/7", "[DirectorSmoke] RESULT 6/6")
        Exec = "EvoSmoke, DirectorReport"; Window = 75 }
+    # Full raid-loop bridges (D-0009/D-0010). Each outcome ends the run, so they boot separately:
+    # victory = clear -> extraction -> defend wave -> survive -> Victory; defeat = party-wipe -> Defeat.
+    @{ Name = "RaidLoopVictory";    Map = "/Game/Levels/RaidArena";
+       Expect = "[RaidLoopSmoke] RESULT 4/4"; Exec = "RaidLoopSmoke victory"; Window = 45 }
+    @{ Name = "RaidLoopDefeat";     Map = "/Game/Levels/RaidArena";
+       Expect = "[RaidLoopSmoke] RESULT 2/2"; Exec = "RaidLoopSmoke defeat"; Window = 30 }
 )
 
 $FatalPatterns = @("Fatal error", "Assertion failed", "Script call stack", "LogScript: Error")
