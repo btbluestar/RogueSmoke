@@ -1,7 +1,9 @@
 # Make the UI Editable by the Designer (you)
 
-> **Status: investigation + plan. LOW PRIORITY** (user said so 2026-06-13). Not started —
-> awaiting prioritization. Verify any implementation with `run_code_test` + `SmokeTest.ps1`.
+> **Status: COLOR PHASE DONE** (commit `1e778b1`, 2026-06-13; `run_code_test` clean, SmokeTest
+> 11/11). The whole UI palette is now editable via `DA_UITheme`. **Remaining (optional follow-up):**
+> sizes/font scales are still code consts — see "Notes" below. Verify any further work with
+> `run_code_test` + `SmokeTest.ps1`.
 
 **Goal:** Let the user tweak the UI's *look* (colors, sizes, fonts, key spacing) in the Unreal
 editor without prompting Claude to edit code. (User pain: "so I don't need to tweak the look by
