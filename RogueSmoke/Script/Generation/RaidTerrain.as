@@ -66,4 +66,58 @@ namespace RaidTerrain
         }
         return Out;
     }
+
+    const int kTerrainSalt = 2750159;   // prime; decorrelates terrain from RaidGen (1000003) / roster
+
+    // Build the heightfield for a seed. levels = how many quantized height steps the rim can reach.
+    FRaidTerrain Generate(int seed, int gridDim, float tileSize, float stepUU, int levels)
+    {
+        FRaidTerrain T;
+        T.GridDim = gridDim;
+        T.TileSize = tileSize;
+        T.StepUU = stepUU;
+
+        int s = seed + kTerrainSalt;
+        TArray<int> raw;
+        for (int j = 0; j < gridDim; j++)
+            for (int i = 0; i < gridDim; i++)
+                raw.Add(RawLevel(s, i, j, levels));
+
+        // Two blur passes -> gentle, walkable rolling terrain (still integer/deterministic).
+        TArray<int> blurred = BlurOnce(raw, gridDim);
+        blurred = BlurOnce(blurred, gridDim);
+        T.Heights = blurred;
+        return T;
+    }
+
+    // Grid index (clamped) for a world XY, given the footprint is centered on origin with
+    // total span = GridDim*TileSize.
+    int TileIndexAxis(const FRaidTerrain& T, float world)
+    {
+        float span = float(T.GridDim) * T.TileSize;
+        float localCoord = world + span * 0.5;            // shift origin to corner
+        int idx = Math::FloorToInt(localCoord / T.TileSize);
+        if (idx < 0) idx = 0;
+        if (idx >= T.GridDim) idx = T.GridDim - 1;
+        return idx;
+    }
+
+    // World-space terrain height (uu) under an XY position.
+    float WorldHeightAt(const FRaidTerrain& T, float x, float y)
+    {
+        if (T.Heights.Num() == 0)
+            return 0.0;
+        int i = TileIndexAxis(T, x);
+        int j = TileIndexAxis(T, y);
+        return float(T.Heights[j * T.GridDim + i]) * T.StepUU;
+    }
+
+    // Center of tile (i,j) in world XY.
+    FVector TileCenter(const FRaidTerrain& T, int i, int j)
+    {
+        float span = float(T.GridDim) * T.TileSize;
+        float x = -span * 0.5 + (float(i) + 0.5) * T.TileSize;
+        float y = -span * 0.5 + (float(j) + 0.5) * T.TileSize;
+        return FVector(x, y, 0.0);
+    }
 }
