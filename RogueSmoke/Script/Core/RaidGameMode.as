@@ -61,6 +61,24 @@ class ARaidGameMode : AGameModeBase
     UPROPERTY(BlueprintReadOnly, Category = "Run")
     URunManager RunManager;
 
+    // Plan 3: when true, this raid stamps the generated arena and spawns heroes on the Drop node.
+    // Default false → the existing hand-built RaidArena map is unaffected. Set true on BP_GenRaidGamemode.
+    UPROPERTY(EditDefaultsOnly, Category = "Run|Generated")
+    bool bGeneratedArena = false;
+
+    private FRaidLayout CachedLayout;
+    private bool bLayoutReady = false;
+
+    private void EnsureLayout()
+    {
+        if (bLayoutReady)
+            return;
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        int Seed = (GS != nullptr) ? GS.MasterSeed : 0;
+        CachedLayout = RaidArena::GetLayout(Seed);
+        bLayoutReady = true;
+    }
+
     UFUNCTION(BlueprintOverride)
     void BeginPlay()
     {
@@ -70,6 +88,17 @@ class ARaidGameMode : AGameModeBase
 
         RunManager = URunManager::Create(this);
         RunManager.StartRun();      // roll + replicate the master seed (D-0007)
+
+        if (bGeneratedArena)
+        {
+            ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+            if (GS != nullptr)
+            {
+                GS.bGeneratedArena = true;            // tells clients to stamp on OnRep_MasterSeed
+                EnsureLayout();
+                RaidArena::BuildFromSeed(GS.MasterSeed);   // server stamps its own copy
+            }
+        }
 
         // Upgrade loop (UpgradeLoop concept, 2026-06-11): shared XP from every kill + the
         // mini-boss chest. The pick-pause watchdog below must tick while the game is paused.
@@ -155,6 +184,17 @@ class ARaidGameMode : AGameModeBase
     // stack inside one start point.
     private FVector PickHeroSpawnPoint() const
     {
+        if (bGeneratedArena)
+        {
+            TArray<AHeroCharacter> Heroes;
+            GetAllActorsOfClass(Heroes);
+            // EnsureLayout is non-const; this method is const, so read a fresh deterministic layout.
+            ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+            int Seed = (GS != nullptr) ? GS.MasterSeed : 0;
+            FVector Drop = RaidArena::GetLayout(Seed).Drop.Center;
+            return Drop + FVector(120.0 * Heroes.Num(), 0.0, 150.0);
+        }
+
         TArray<AHeroCharacter> Existing;
         GetAllActorsOfClass(Existing);
 
