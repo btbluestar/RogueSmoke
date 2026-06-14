@@ -3,6 +3,8 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 UStaticMesh* URaidStampSubsystem::GetCubeMesh()
 {
@@ -12,6 +14,17 @@ UStaticMesh* URaidStampSubsystem::GetCubeMesh()
         CubeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
     }
     return CubeMesh;
+}
+
+UMaterialInterface* URaidStampSubsystem::GetGrayboxMaterial()
+{
+    if (!GrayboxMaterial)
+    {
+        // Unlit "Tint" material authored by Tools/make_graybox_material.py. Optional: if it isn't
+        // present the boxes simply render with the cube's default material (still collidable).
+        GrayboxMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_Graybox.M_Graybox"));
+    }
+    return GrayboxMaterial;
 }
 
 AActor* URaidStampSubsystem::EnsureHolder()
@@ -39,6 +52,12 @@ AActor* URaidStampSubsystem::EnsureHolder()
 
 int32 URaidStampSubsystem::StampBoxes(const TArray<FVector>& Centers, const TArray<FVector>& WorldSizes)
 {
+    // Untinted batch → neutral blockout gray (the §quiet floor/base color).
+    return StampBoxesColored(Centers, WorldSizes, FLinearColor(0.6f, 0.63f, 0.65f));
+}
+
+int32 URaidStampSubsystem::StampBoxesColored(const TArray<FVector>& Centers, const TArray<FVector>& WorldSizes, FLinearColor Color)
+{
     const int32 N = FMath::Min(Centers.Num(), WorldSizes.Num());
     if (N == 0)
     {
@@ -59,6 +78,16 @@ int32 URaidStampSubsystem::StampBoxes(const TArray<FVector>& Centers, const TArr
     ISM->RegisterComponent();
     ISM->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     ISM->SetCollisionProfileName(TEXT("BlockAll"));
+
+    // One tinted dynamic instance of the unlit graybox material for this whole batch.
+    if (UMaterialInterface* Base = GetGrayboxMaterial())
+    {
+        if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Base, ISM))
+        {
+            MID->SetVectorParameterValue(TEXT("Tint"), Color);
+            ISM->SetMaterial(0, MID);
+        }
+    }
 
     int32 Count = 0;
     for (int32 i = 0; i < N; ++i)

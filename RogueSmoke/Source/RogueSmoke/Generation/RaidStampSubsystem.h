@@ -12,6 +12,7 @@
 
 class UHierarchicalInstancedStaticMeshComponent;
 class UStaticMesh;
+class UMaterialInterface;
 
 UCLASS()
 class ROGUESMOKE_API URaidStampSubsystem : public UWorldSubsystem
@@ -26,16 +27,28 @@ public:
     UFUNCTION(BlueprintCallable, Category="Generation")
     int32 StampBoxes(const TArray<FVector>& Centers, const TArray<FVector>& WorldSizes);
 
+    /**
+     * Like StampBoxes, but all boxes in this batch share one tint (blockout color-coding). Each call
+     * makes its own ISM + dynamic instance of M_Graybox so the function color reads regardless of
+     * lighting. Call once per element type (floor / walls / cover / platform / landmark markers).
+     */
+    UFUNCTION(BlueprintCallable, Category="Generation")
+    int32 StampBoxesColored(const TArray<FVector>& Centers, const TArray<FVector>& WorldSizes, FLinearColor Color);
+
     /** Tear down everything stamped (ISM components + holder) — call before a re-stamp. */
     UFUNCTION(BlueprintCallable, Category="Generation")
     void ClearStamps();
 
 private:
     UStaticMesh* GetCubeMesh();
+    UMaterialInterface* GetGrayboxMaterial();
     AActor* EnsureHolder();
 
     UPROPERTY()
     TObjectPtr<UStaticMesh> CubeMesh;
+
+    UPROPERTY()
+    TObjectPtr<UMaterialInterface> GrayboxMaterial;
 
     UPROPERTY()
     TObjectPtr<AActor> Holder;
