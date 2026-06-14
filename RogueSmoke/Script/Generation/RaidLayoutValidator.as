@@ -60,8 +60,29 @@ namespace RaidValidate
         float Sep = (L.Drop.Center - L.Extraction.Center).Size();
         Check(R, Sep >= Cfg.DropExtractMinFrac * Diagonal, "drop-extract-separation");
 
-        // 3. At least one main objective site.
-        Check(R, L.MainSites.Num() >= 1, "has-main-site");
+        // 3. Zone count in the configured range.
+        Check(R, L.MainSites.Num() >= Cfg.ZoneCountMin && L.MainSites.Num() <= Cfg.ZoneCountMax,
+              "zone-count");
+
+        // 3b. Zone centers are min-separated (no overlapping play discs) and clear of drop/extraction.
+        bool bZoneSepOk = true;
+        bool bZoneClearOk = true;
+        for (int a = 0; a < L.MainSites.Num(); a++)
+        {
+            FVector Ca = L.MainSites[a].Center;
+            if (FVector(Ca.X - L.Drop.Center.X, Ca.Y - L.Drop.Center.Y, 0.0).Size() < Cfg.ZoneDropClearance - 0.5)
+                bZoneClearOk = false;
+            if (FVector(Ca.X - L.Extraction.Center.X, Ca.Y - L.Extraction.Center.Y, 0.0).Size() < Cfg.ZoneDropClearance - 0.5)
+                bZoneClearOk = false;
+            for (int b = a + 1; b < L.MainSites.Num(); b++)
+            {
+                FVector Cb = L.MainSites[b].Center;
+                if (FVector(Ca.X - Cb.X, Ca.Y - Cb.Y, 0.0).Size() < Cfg.ZoneMinSeparation - 0.5)
+                    bZoneSepOk = false;
+            }
+        }
+        Check(R, bZoneSepOk, "zone-separation");
+        Check(R, bZoneClearOk, "zone-drop-clearance");
 
         bool bCoreOk = true;
         bool bHoldOk = true;
