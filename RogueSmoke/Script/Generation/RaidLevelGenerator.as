@@ -129,13 +129,24 @@ namespace RaidGen
         L.Drop = MakeAnchorSite(ERaidSiteType::Drop, ERaidSlotType::Entrance, EdgeMidpoint(DropEdge, In));
         L.Extraction = MakeAnchorSite(ERaidSiteType::Extraction, ERaidSlotType::Exit, EdgeMidpoint(ExtEdge, In));
 
-        // One Skatepark main site near center, bounded jitter.
-        FVector SiteCenter = FVector(Rng.RandRange(-300.0, 300.0), Rng.RandRange(-300.0, 300.0), 0.0);
-        L.MainSites.Add(BuildSkatepark(SiteCenter, Cfg, Rng));
+        // 2-3 objective zones, placed by reserve-then-populate Poisson (drop+extraction reserved).
+        TArray<FVector> Reserved;
+        Reserved.Add(L.Drop.Center);
+        Reserved.Add(L.Extraction.Center);
+        int ZoneCount = Rng.RandRange(Cfg.ZoneCountMin, Cfg.ZoneCountMax);
+        TArray<FVector> Anchors = RaidPartition::PlaceZoneAnchors(
+            Rng, Cfg.ZoneAnchorMargin, ZoneCount, Cfg.ZoneMinSeparation, Reserved, Cfg.ZoneDropClearance);
 
-        // Flatten the terrain under the site, then sit ground nodes/cover on the (flattened) surface.
-        RaidTerrain::FlattenDisc(L.Terrain, SiteCenter.X, SiteCenter.Y, Cfg.ZonePlaneLevel,
-                                 Cfg.ZoneFlattenRadius, Cfg.ZoneFlattenInnerFrac);
+        for (int z = 0; z < Anchors.Num(); z++)
+        {
+            FVector SiteCenter = Anchors[z];
+            L.MainSites.Add(BuildSkatepark(SiteCenter, Cfg, Rng));
+            // Flatten this zone's play disc.
+            RaidTerrain::FlattenDisc(L.Terrain, SiteCenter.X, SiteCenter.Y, Cfg.ZonePlaneLevel,
+                                     Cfg.ZoneFlattenRadius, Cfg.ZoneFlattenInnerFrac);
+        }
+
+        // Sit all nodes/cover/anchors on the (per-zone flattened) surface.
         SitNodesOnTerrain(L, Cfg);
 
         return L;
