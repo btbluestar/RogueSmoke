@@ -1,27 +1,37 @@
-# MVP Progress — taunt→barrage slice (D-0008)
+# MVP Progress — bring-up COMPLETE
 
-Tracks the bring-up order from `SETUP.md` §5 / `Rogue_Smoke_MVP_Architecture.md` §9.
-Status legend: ✅ done · 🟡 scaffolded (unverified in-editor) · ⛔ blocked · ⬜ not started.
+> **Status (2026-06-11): the slice bring-up this file tracked is done.** Every step below
+> shipped and most were then superseded by larger systems. This file is now a historical
+> index of *where each step ended up* — current truth lives in **`DECISIONS.md`**
+> (D-0001…D-0020) and **`startup.md`** (how to build/verify anything today).
 
-| # | Step (SETUP §5) | Status | Notes |
-|---|-----------------|--------|-------|
-| 0 | Build UE 5.7 + AngelScript fork from source | ⬜ | Confirm stable 5.7 branch (D-0001). Prereq for *all* verification below. |
-| 1 | Hot-reload smoke test | 🟡 | `Script/SmokeTestActor.as` written. **Run this first**; don't proceed until hot-reload works. |
-| 2 | Verify API signatures vs running compiler | ⬜ | `Math::`, `::Get` accessors, `NewObject`/`TSubclassOf` forms used in script are *patterns*, not verified. |
-| 3 | Stand up `UCombatSubsystem` (C++) stub | 🟡 | `Source/RogueSmoke/Combat/` + `Enemies/EliteEnemyBase`. Actor-registry backend. Needs a C++ compile. |
-| 4 | First combo on Actors only | 🟡 | Abilities + `Vanguard`/`Bombardier` + `ClusterableElite` written. Needs BP subclasses + input wiring in-editor. |
-| 5 | Spike Mass fodder | ⬜ | Deferred — version-sensitive. **Spawn seam is ready:** `Spawning/SpawnDirector` has a working pooled-Actor backend for elites; Mass fodder plugs into `SpawnFodderWave()` (currently a logged placeholder) without changing callers. |
-| 6 | Upgrade + select widget | 🟡 | `Upgrades/` + `UI/UpgradeSelectWidget.as` written. Still needs the BP widget asset + an offer flow. |
-| 7 | Raid objective + extraction, 2-player test | 🟡 | `Objective/RaidObjective.as` written (single raid D-0009 + defend-timer extraction D-0010). Defend-wave now spawns via `SpawnDirector` (set `DefendWaveEliteClass`). Party-wipe still a hook pending down/revive. 2-player test needs the editor. |
+Original tracker: bring-up order from `SETUP.md` §5 for the taunt→barrage slice (D-0008).
 
-## To verify the slice in-editor (do in order)
+| # | Step (SETUP §5) | Status | Where it ended up |
+|---|-----------------|--------|-------------------|
+| 0 | Build UE 5.7 + AngelScript fork | ✅ | Source build at `F:\UEAS` (read-only), in daily use. |
+| 1 | Hot-reload smoke test | ✅ | Pipeline proven; `as-helper run_code_test` is the routine script gate now. |
+| 2 | Verify API signatures vs compiler | ✅ | Fork conventions captured in `startup.md` + `UPGRADES_SETUP.md` §"Fork API conventions". |
+| 3 | `UCombatSubsystem` (C++) | ✅ | The seam, both directions: player→enemy (`FireHitscan`, AoE/pull/mark, on-hit procs D-0019/20) and enemy→player (`ApplyDamageToPlayer`, D-0017). |
+| 4 | First combo on Actors | ✅ | Reimplemented on **GAS** (D-0013): `GA_Taunt`/`GA_Barrage`, each with an evolution track (D-0020). |
+| 5 | Fodder swarm | ✅ (interim) | Cheap-Actor Crawlers (`AFodderEnemy`) driven by the wave director (D-0020). **Mass backend still deferred** behind the `SpawnFodderWave()` seam (D-0003). |
+| 6 | Upgrade + select widget | ✅ | Grew into the full upgrade loop: team-XP level picks + synergy chest, per-player hands, stacks/prereqs, 35-card pool, behavior evolutions (D-0018/19/20). CommonUI screen, runtime-built cards. |
+| 7 | Raid objective + extraction | ✅ | Playable end-to-end in `/Game/Levels/RaidArena` (see `HANDOFF_gameplay_loop.md` for the play-through TL;DR). |
 
-1. **Smoke test** — place `ASmokeTestActor` in a level, Play, confirm the print; edit `Message`, save, confirm live hot-reload.
-2. **Compile C++** — build the editor target so `UCombatSubsystem`/`UHealthComponent`/`AEliteEnemyBase` exist; confirm `UCombatSubsystem::Get(this)` resolves from script.
-3. **Make content** — `BP_ClusterableElite` (assign a mesh), `BP_Vanguard`/`BP_Bombardier`, an `IA_PrimaryAbility` Enhanced Input action bound to `OnPrimaryAbilityPressed`.
-4. **Run the combo** — place several elites, Vanguard taunts (they converge + a cue), Bombardier barrages (clustered enemies take the bonus). Tune feel.
-5. **Upgrade** — offer `UUpgrade_ChainDetonation` via a BP `UpgradeSelectWidget`; confirm the barrage window widens.
+## What came after the slice (chronological)
 
-## What unblocks the rest
-- **Step 5 (Mass)** and the BP assets need the **built engine** — there's no substitute for the editor here.
-- **Step 7 (objective/extraction)** needs the **open design decisions resolved** first (run = single raid vs chained? extraction trigger/risk/failure cost?).
+- **D-0013** — abilities/attributes/upgrades moved onto GAS (AngelscriptGAS, Lyra patterns).
+- **D-0014** — camera became third-person over-shoulder shooter (was top-down).
+- **D-0015** — movement kit: sprint / crouch / slide / double-jump.
+- **D-0016** — CommonUI for all screens (layer stacks in `URogueUILayout`).
+- **D-0017** — bio-horde enemy roster (Crawler/Carapace/Spitter/Bloater/Lunger/Brood-mother).
+- **D-0018/19/20** — upgrade acquisition loop v1→v3: shared XP levels, chest, per-player hands,
+  eligibility, hero ability tracks, behavior evolutions, wave director.
+
+## Still ahead
+
+- **Mass fodder backend** (the one ⬜ left from the original plan — D-0003, version-sensitive).
+- **Niagara/GameplayCue polish pass** (telegraphs, arcs, bursts, vortex — debug draw today).
+- **Balance pass** (D-0019/20 numbers are first-pass).
+- **Open decisions** — meta-progression scope, party size, solo, friendly fire: see
+  `DECISIONS.md` §"Still open".

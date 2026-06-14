@@ -1,0 +1,99 @@
+// BroodMother.as
+// Mini-boss / raid anchor (GDD §4.4 boss): big HP, slow, and the climax of "clear the arena". Cycles
+// three telegraphed attacks — a ranged spit, a summoned Crawler wave (calls the spawn seam), and an
+// artillery AoE that lands at the target's CURRENT position so movement dodges it. Counts toward the
+// objective (inherited bCountsAsObjectiveTarget = true), so the raid isn't clear until the boss is down.
+// A boss healthbar + phase VFX are editor/content polish (see SUPERPOWERS_HANDOFF).
+class ABroodMother : AAttackingElite
+{
+    default MaxHealthOverride = 1200.0;
+    default MoveSpeed = 90.0;
+    default PreferredRange = 600.0;     // hangs back; it summons + lobs rather than melees
+    default AttackRange = 1500.0;       // long reach (ranged + artillery)
+    default AttackDamage = 18.0;        // ranged spit damage
+    default AttackInterval = 3.5;
+    default TelegraphSeconds = 1.0;     // big, readable wind-ups
+    default BodyScale = FVector(2.6, 2.6, 2.8);   // unmistakable silhouette
+    default BodyColor = FLinearColor(0.65, 0.10, 0.10, 1.0);   // dark-red boss
+    default XPValue = 150.0;            // boss kill = a big chunk of a team level
+
+    UPROPERTY(EditDefaultsOnly, Category = "Boss")
+    int SummonCount = 6;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Boss")
+    float SummonRadius = 350.0;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Boss")
+    float ArtilleryDamage = 30.0;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Boss")
+    float ArtilleryRadius = 450.0;
+
+    // Don't summon while at least this many enemies are already alive (so the boss can't flood the arena).
+    UPROPERTY(EditDefaultsOnly, Category = "Boss")
+    int MaxFieldEnemies = 40;
+
+    // Cycles 0 -> 1 -> 2 across attacks so the boss reads as a rotation, not a spam.
+    private int AttackPhase = 0;
+
+    // Artillery impact point, LOCKED when the wind-up starts (not the target's position at impact) —
+    // the dodge is real: the danger ring shows where the blast will land, and moving out clears it.
+    private FVector ArtilleryTarget;
+    private bool bArtilleryLocked = false;
+
+    UFUNCTION(BlueprintOverride)
+    void OnTelegraphStarted()
+    {
+        if (AttackPhase != 2)
+            return;
+        APawn Hero = GetCurrentTarget();
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
+        if (Hero == nullptr || Combat == nullptr)
+            return;
+        ArtilleryTarget = Hero.GetActorLocation();
+        bArtilleryLocked = true;
+        Combat.ShowTelegraphZone(ArtilleryTarget, ArtilleryRadius, TelegraphSeconds);
+    }
+
+    UFUNCTION(BlueprintOverride)
+    void PerformAttack()
+    {
+        UCombatSubsystem Combat = UCombatSubsystem::Get();
+        APawn Hero = GetCurrentTarget();
+
+        if (AttackPhase == 1)
+        {
+            // Summon a Crawler wave around the boss (the spawn seam; Mass fodder later) — but only if the
+            // field isn't already saturated, so the boss can't bury the arena in fodder.
+            USpawnDirector Director = USpawnDirector::Get();
+            bool bRoomToSpawn = Combat == nullptr
+                || Combat.CountEnemiesInSphere(GetActorLocation(), 1000000.0) < MaxFieldEnemies;
+            if (Director != nullptr && bRoomToSpawn)
+                Director.SpawnFodderWave(GetActorLocation(), SummonRadius, SummonCount);
+        }
+        else if (AttackPhase == 2)
+        {
+            // Artillery: blast the spot LOCKED at wind-up start (the ringed zone). Standing in the
+            // ring when the fill reaches the edge = hit; stepping out during the wind-up = dodge.
+            if (Combat != nullptr)
+            {
+                FVector Impact = bArtilleryLocked ? ArtilleryTarget
+                    : (Hero != nullptr ? Hero.GetActorLocation() : GetActorLocation());
+                Combat.ApplyRadialDamageToPlayers(Impact, ArtilleryRadius, ArtilleryDamage, this);
+            }
+            bArtilleryLocked = false;
+        }
+        else
+        {
+            // Ranged spit at the target — only if the boss has a clear line (break LoS to dodge it).
+            if (Combat != nullptr && Hero != nullptr)
+            {
+                FVector From = GetActorLocation() + FVector(0.0, 0.0, 60.0);
+                if (Combat.HasLineOfSightToActor(From, Hero, this))
+                    Combat.ApplyDamageToPlayer(Hero, AttackDamage, this);
+            }
+        }
+
+        AttackPhase = (AttackPhase + 1) % 3;
+    }
+}

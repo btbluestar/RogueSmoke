@@ -17,6 +17,8 @@
 
 class AEliteEnemyBase;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEnemyKilledSig, AEliteEnemyBase*, Enemy);
+
 UCLASS()
 class ROGUESMOKE_API USpawnDirector : public UWorldSubsystem
 {
@@ -25,6 +27,11 @@ class ROGUESMOKE_API USpawnDirector : public UWorldSubsystem
 public:
 	// NOTE: no hand-written Get() — the AngelScript fork auto-generates a static
 	// USpawnDirector::Get() for UWorldSubsystem types. In C++ use GetWorld()->GetSubsystem<>().
+
+	/** Server: fired for every pooled enemy death (fodder, elites, boss) BEFORE the corpse is
+	 *  recycled — the central kill event. The GameMode's shared-XP / chest loop hangs off this. */
+	UPROPERTY(BlueprintAssignable, Category="Spawning")
+	FOnEnemyKilledSig OnEnemyKilled;
 
 	/** Spawn or recycle one elite at a transform. Server-only. Null off-server / on failure. */
 	UFUNCTION(BlueprintCallable, Category="Spawning")

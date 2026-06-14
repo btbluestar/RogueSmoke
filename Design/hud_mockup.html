@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RogueSmoke — HUD Mockup (minimal / flat)</title>
+<style>
+  /* ---- Design tokens (these map 1:1 to Unreal: colors -> Slate brush tints,
+          sizes -> widget padding, font -> a CommonTextStyle) ---- */
+  :root{
+    --bg:#0b0d11;
+    --panel:rgba(16,19,25,0.82);   /* flat dark panel, slight transparency */
+    --panel-solid:#14181f;
+    --stroke:rgba(255,255,255,0.06);
+    --ink:#e7eaef;                 /* primary text */
+    --ink-dim:#8b929c;             /* labels / secondary */
+    --ink-faint:#5b626c;
+    --accent:#46d6c4;              /* single accent: friendly / ability-ready */
+    --warn:#f2b33d;                /* objective / extraction */
+    --danger:#e5484d;             /* low health / enemy */
+    --radius:10px;
+    --gap:14px;
+    --font:'Segoe UI',Inter,-apple-system,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#05060a;font-family:var(--font);color:var(--ink);
+    -webkit-font-smoothing:antialiased}
+  .frame-wrap{height:100%;display:flex;align-items:center;justify-content:center;padding:18px}
+  /* 16:9 game frame */
+  .stage{position:relative;width:min(100%,1600px);aspect-ratio:16/9;border-radius:14px;
+    overflow:hidden;background:
+      radial-gradient(120% 80% at 50% 18%, #1a2230 0%, #0e1219 48%, #070a10 100%);
+    box-shadow:0 24px 80px rgba(0,0,0,.6)}
+  /* faint floor grid so the HUD reads as an overlay, not a webpage */
+  .stage::before{content:"";position:absolute;inset:0;opacity:.16;
+    background-image:linear-gradient(rgba(255,255,255,.5) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(255,255,255,.5) 1px,transparent 1px);
+    background-size:64px 64px;
+    transform:perspective(620px) rotateX(62deg) translateY(34%) scale(1.7);
+    transform-origin:center 70%;
+    -webkit-mask-image:linear-gradient(to top,#000 0%,transparent 70%)}
+  .vignette{position:absolute;inset:0;pointer-events:none;
+    box-shadow:inset 0 0 220px 60px rgba(0,0,0,.55)}
+
+  /* tiny silhouette of the player + an enemy cluster, just for context */
+  .player{position:absolute;left:50%;top:58%;width:46px;height:96px;
+    transform:translateX(-50%);background:#0a0c10;border-radius:18px;opacity:.9;
+    box-shadow:0 10px 24px rgba(0,0,0,.5)}
+  .cluster{position:absolute;left:64%;top:40%;display:flex;gap:6px;opacity:.92}
+  .cluster i{width:18px;height:30px;background:#241115;border:1px solid var(--danger);
+    border-radius:7px;display:block}
+
+  /* ===== HUD layers ===== */
+  .hud{position:absolute;inset:0;pointer-events:none}
+  .hud > *{pointer-events:auto}
+
+  .label{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim)}
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+
+  /* crosshair (third-person shooter, D-0014) */
+  .crosshair{position:absolute;left:50%;top:50%;width:26px;height:26px;
+    transform:translate(-50%,-50%);opacity:.85}
+  .crosshair::before,.crosshair::after{content:"";position:absolute;background:var(--ink)}
+  .crosshair::before{left:50%;top:0;width:2px;height:8px;transform:translateX(-50%)}
+  .crosshair::after{left:50%;bottom:0;width:2px;height:8px;transform:translateX(-50%)}
+  .crosshair span{position:absolute;top:50%;width:8px;height:2px;background:var(--ink);transform:translateY(-50%)}
+  .crosshair span.l{left:0}.crosshair span.r{right:0}
+  .crosshair b{position:absolute;left:50%;top:50%;width:3px;height:3px;border-radius:50%;
+    background:var(--accent);transform:translate(-50%,-50%)}
+
+  /* top-center: objective + extraction */
+  .top-center{position:absolute;top:20px;left:50%;transform:translateX(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:8px}
+  .objective{display:flex;align-items:center;gap:12px;background:var(--panel);
+    border:1px solid var(--stroke);border-radius:var(--radius);padding:9px 16px;
+    backdrop-filter:blur(6px)}
+  .objective .dot{width:8px;height:8px;border-radius:50%;background:var(--warn)}
+  .objective .txt{font-size:13px;letter-spacing:.02em}
+  .objective .prog{color:var(--ink-dim);font-size:13px}
+  .extract{display:flex;align-items:center;gap:10px;background:rgba(242,179,61,.12);
+    border:1px solid rgba(242,179,61,.4);border-radius:var(--radius);padding:7px 14px}
+  .extract .pulse{width:9px;height:9px;border-radius:50%;background:var(--warn);
+    box-shadow:0 0 0 0 rgba(242,179,61,.6);animation:pulse 1.4s infinite}
+  @keyframes pulse{70%{box-shadow:0 0 0 8px rgba(242,179,61,0)}100%{box-shadow:0 0 0 0 rgba(242,179,61,0)}}
+  .extract .t{color:var(--warn);font-size:14px;font-weight:600;letter-spacing:.04em}
+
+  /* top-left: squad (co-op teammates) */
+  .squad{position:absolute;top:20px;left:20px;display:flex;flex-direction:column;gap:8px}
+  .mate{display:flex;align-items:center;gap:10px;background:var(--panel);
+    border:1px solid var(--stroke);border-radius:var(--radius);padding:8px 12px;min-width:190px}
+  .mate .pip{width:26px;height:26px;border-radius:7px;background:var(--panel-solid);
+    display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--accent);font-weight:700}
+  .mate .col{flex:1;display:flex;flex-direction:column;gap:4px}
+  .mate .nm{font-size:12px;letter-spacing:.02em}
+  .mate .hp{height:4px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden}
+  .mate .hp i{display:block;height:100%;background:var(--accent)}
+  .mate.down .pip{color:var(--danger)}
+  .mate.down .hp i{background:var(--danger)}
+  .mate .st{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)}
+
+  /* bottom-left: self vitals */
+  .vitals{position:absolute;left:20px;bottom:20px;width:300px}
+  .vitals .row{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px}
+  .vitals .hero{font-size:13px;letter-spacing:.06em;text-transform:uppercase}
+  .vitals .hero b{color:var(--accent);font-weight:600}
+  .hpbar{height:10px;border-radius:6px;background:rgba(255,255,255,.07);overflow:hidden;border:1px solid var(--stroke)}
+  .hpbar i{display:block;height:100%;width:78%;background:var(--accent)}
+  .vitals .hpnum{position:relative;top:-1px}
+  .vitals .hpnum .num{font-size:22px;font-weight:600}
+  .vitals .hpnum .max{color:var(--ink-faint);font-size:14px}
+  .vitals .sub{display:flex;gap:18px;margin-top:10px}
+  .vitals .sub .label span{color:var(--ink);font-size:14px;font-weight:600;margin-left:6px;letter-spacing:0}
+
+  /* bottom-center: abilities + synergy */
+  .abilities{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:8px}
+  .synergy{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--accent)}
+  .synergy .led{width:7px;height:7px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 8px var(--accent)}
+  .ability-row{display:flex;gap:10px}
+  .slot{position:relative;width:60px;height:60px;border-radius:12px;background:var(--panel);
+    border:1px solid var(--stroke);display:flex;align-items:center;justify-content:center}
+  .slot .ic{font-size:22px}
+  .slot .key{position:absolute;bottom:-7px;left:50%;transform:translateX(-50%);
+    background:var(--panel-solid);border:1px solid var(--stroke);border-radius:5px;
+    font-size:10px;padding:1px 6px;color:var(--ink-dim)}
+  .slot.ready{border-color:rgba(70,214,196,.5)}
+  .slot.ready .ic{color:var(--accent)}
+  .slot.cool{color:var(--ink-faint)}
+  .slot .cd{position:absolute;inset:0;border-radius:12px;
+    background:conic-gradient(rgba(8,10,14,.78) 0 38%, transparent 38% 100%)}
+  .slot .cdt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:16px;font-weight:600;color:var(--ink)}
+
+  /* bottom-right: weapon / ammo */
+  .weapon{position:absolute;right:20px;bottom:20px;text-align:right}
+  .weapon .nm{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim)}
+  .weapon .ammo{display:flex;align-items:baseline;gap:8px;justify-content:flex-end;margin-top:2px}
+  .weapon .ammo .cur{font-size:44px;font-weight:700;line-height:1}
+  .weapon .ammo .mag{font-size:18px;color:var(--ink-faint)}
+  .weapon .reserve{font-size:13px;color:var(--ink-dim);margin-top:2px}
+  .weapon .pips{display:flex;gap:3px;justify-content:flex-end;margin-top:8px}
+  .weapon .pips i{width:6px;height:12px;border-radius:2px;background:var(--accent)}
+  .weapon .pips i.spent{background:rgba(255,255,255,.12)}
+
+  /* edge indicators (off-screen teammate + clustered enemies, D-0014) */
+  .edge-mate{position:absolute;left:8px;top:62%;display:flex;align-items:center;gap:6px;
+    background:var(--panel);border:1px solid var(--stroke);border-radius:20px;padding:5px 10px 5px 6px}
+  .edge-mate .ar{color:var(--accent)}
+  .edge-mate .nm{font-size:11px;color:var(--ink-dim)}
+  .tag-cluster{position:absolute;left:64%;top:33%;background:rgba(229,72,77,.14);
+    border:1px solid rgba(229,72,77,.5);border-radius:6px;padding:3px 8px;font-size:10px;
+    letter-spacing:.14em;text-transform:uppercase;color:#ff9a9d}
+
+  .caption{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
+    font-size:11px;color:rgba(255,255,255,.28);letter-spacing:.08em}
+</style>
+</head>
+<body>
+<div class="frame-wrap">
+  <div class="stage">
+    <div class="player"></div>
+    <div class="cluster"><i></i><i></i><i></i><i></i></div>
+    <div class="vignette"></div>
+
+    <div class="hud">
+
+      <!-- crosshair -->
+      <div class="crosshair"><span class="l"></span><span class="r"></span><b></b></div>
+
+      <!-- objective + extraction -->
+      <div class="top-center">
+        <div class="objective">
+          <span class="dot"></span>
+          <span class="txt">Retrieve Data Cores</span>
+          <span class="prog num">2 / 3</span>
+        </div>
+        <div class="extract">
+          <span class="pulse"></span>
+          <span class="t">EXTRACTION — HOLD 0:48</span>
+        </div>
+      </div>
+
+      <!-- squad -->
+      <div class="squad">
+        <div class="mate">
+          <div class="pip">V</div>
+          <div class="col">
+            <div class="nm">Vanguard · Mara</div>
+            <div class="hp"><i style="width:92%"></i></div>
+          </div>
+        </div>
+        <div class="mate down">
+          <div class="pip">B</div>
+          <div class="col">
+            <div class="nm">Bombardier · Koto</div>
+            <div class="hp"><i style="width:18%"></i></div>
+          </div>
+          <div class="st">Downed</div>
+        </div>
+      </div>
+
+      <!-- self vitals -->
+      <div class="vitals">
+        <div class="row">
+          <span class="hero">Vanguard · <b>You</b></span>
+          <span class="hpnum"><span class="num">78</span><span class="max"> / 100</span></span>
+        </div>
+        <div class="hpbar"><i></i></div>
+        <div class="sub">
+          <span class="label">Scrap<span class="num">340</span></span>
+          <span class="label">Tier<span>II</span></span>
+        </div>
+      </div>
+
+      <!-- abilities -->
+      <div class="abilities">
+        <div class="synergy"><span class="led"></span>Setup Ready — Clustered x4</div>
+        <div class="ability-row">
+          <div class="slot ready">
+            <span class="ic">◎</span>
+            <span class="key">Q</span>
+          </div>
+          <div class="slot cool">
+            <span class="ic">✸</span>
+            <div class="cd"></div>
+            <div class="cdt num">3</div>
+            <span class="key">E</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- weapon -->
+      <div class="weapon">
+        <div class="nm">MK-2 Carbine</div>
+        <div class="ammo"><span class="cur num">24</span><span class="mag num">/ 30</span></div>
+        <div class="reserve num">120 reserve</div>
+        <div class="pips">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          <i class="spent"></i><i class="spent"></i>
+        </div>
+      </div>
+
+      <!-- edge indicators -->
+      <div class="edge-mate"><span class="ar">◄</span><span class="nm">Koto 22m</span></div>
+      <div class="tag-cluster">Clustered ×4</div>
+
+      <div class="caption">RogueSmoke — in-game HUD mockup · minimal / flat · not final art</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

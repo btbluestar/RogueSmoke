@@ -3,6 +3,7 @@
 #include "Enemies/EliteEnemyBase.h"
 #include "Combat/HealthComponent.h"
 #include "Combat/CombatSubsystem.h"
+#include "VFX/TelegraphZoneFX.h"
 #include "Engine/World.h"
 
 AEliteEnemyBase::AEliteEnemyBase()
@@ -50,8 +51,13 @@ void AEliteEnemyBase::Tick(float DeltaSeconds)
 	const float Now = GetWorld()->GetTimeSeconds();
 	if (Now < PullExpiresAtSeconds)
 	{
-		const FVector Dir = (PullTarget - GetActorLocation()).GetSafeNormal();
-		SetActorLocation(GetActorLocation() + Dir * PullStrength * DeltaSeconds, /*bSweep=*/true);
+		// Steer horizontally toward the taunt point. bSweep=false on purpose: a swept move from
+		// an actor placed at/under the floor (Z=0, half-buried) reports an immediate blocking hit
+		// and freezes — which made this stub a visible no-op. The pull only needs to read, so slide.
+		FVector Dir = PullTarget - GetActorLocation();
+		Dir.Z = 0.f;
+		Dir = Dir.GetSafeNormal();
+		SetActorLocation(GetActorLocation() + Dir * PullStrength * DeltaSeconds, /*bSweep=*/false);
 	}
 }
 
@@ -75,6 +81,22 @@ void AEliteEnemyBase::ApplyPull(const FVector& Target, float Strength, float Dur
 		PullTarget = Target;
 		PullStrength = Strength;
 		PullExpiresAtSeconds = GetWorld()->GetTimeSeconds() + Duration;
+	}
+}
+
+bool AEliteEnemyBase::IsBeingPulled() const
+{
+	return GetWorld() != nullptr && GetWorld()->GetTimeSeconds() < PullExpiresAtSeconds;
+}
+
+void AEliteEnemyBase::NotifyHealthVisual(bool bDamaged, bool bDied)
+{
+	// Death cue: a short expanding/fading disc at the feet, tinted per archetype — covers fodder,
+	// elites and the boss alike. Local-only (each machine fires its own from its health view), so
+	// it survives the pooled actor being hidden the same frame.
+	if (bDied)
+	{
+		ATelegraphZoneFX::SpawnLocalBurst(GetWorld(), GetActorLocation(), 150.f, GetDeathBurstColor());
 	}
 }
 

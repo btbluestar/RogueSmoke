@@ -51,6 +51,38 @@ From MVP arch §8 — the synergy must read clearly:
 If any of these is weak in playtest, the synergy fails its pillar. Fix presentation before
 adding more content — more content on top of an illegible synergy just hides the problem.
 
+## Debug levels + headless smoke (Claude-runnable)
+
+Isolated `DL_*` levels under `/Game/Levels/DebuggingLevels/` boot a real raid loop (GameMode,
+hero embodiment, spawn seam) around ONE thing, so they work in PIE **and** headlessly
+(`-game -nullrhi`, no window) — Claude Code uses them for unattended verification.
+
+- `DL_Combat` — general combat sandbox (taunt→cluster→barrage combo).
+- `DL_Enemy_<Archetype>` — one enemy archetype each (Crawler/Carapace/Spitter/Bloater/Lunger/
+  BroodMother), spawned by `AEnemyTestStand` with auto-respawn.
+- `DL_Upgrades` — the upgrade firing range: `AUpgradeTestRange` spawns passive dummy formations
+  shaped per upgrade class — SOLO (damage/burn/poison), LINE (pierce), CLUSTER (chain arcs).
+
+**Debug console execs** (type in `~`, or pass headlessly via `-ExecCmds="..."` — they poll for
+up to 30s so they survive firing before the hero spawns):
+- `ListUpgrades` / `GrantUpgrade <partial name>` (repeat to stack) / `GrantAllUpgrades`
+- `UpgradeSmoke` — applies every pool upgrade, asserts each GE moves an attribute
+  (`[UpgradeSmoke] RESULT n/n`); `WeaponSmoke` — fires one synthetic pierce+chain+DoT shot
+  and re-reads the victim 2s later.
+- `TelegraphSmoke` — rings a telegraph danger zone at the hero (cue-pass visual, no damage);
+  headlessly, grep the log for `[Telegraph] zone`.
+- `RaidGiveXP <n>` — grant shared team XP (100 = one level at the base curve → paused offer);
+  `RaidKillOneElite` — kill the nearest objective elite (steps the XP/chest flow one kill at a
+  time); `RaidGoToChest` — teleport onto the dropped mini-boss chest so it proximity-opens.
+  Grep `[XP]`, `[Upgrades]`, `[Chest]`.
+- `RaidDebugCam`, `RaidKillElites` (prints live count + total dealt), `RaidRestart`,
+  `RaidWin` / `RaidLose`, `RaidResults`, `RaidPause`.
+
+**Harnesses** (in `Tools/`):
+- `SmokeTest.ps1` — boots every level above, asserts spawn breadcrumbs + no fatals (PASS/FAIL table).
+- `BootLevel.ps1 -Map <path> [-Exec "<cmds>"] [-Grep <pattern>]` — one level, one exec battery,
+  grepped log. AngelScript `Print()` lines land in the log as `LogBlueprintUserMessages`.
+
 ## Pre-commit smoke checklist
 
 - [ ] Scripts compile (no broken `.as`).

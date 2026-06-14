@@ -19,15 +19,35 @@ public class RogueSmoke : ModuleRules
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"UMG",
-			"Slate"
+			"Slate",
+			// GAS (Lyra-style ability system; ASC bound to AngelScript via the AngelscriptGAS plugin).
+			"GameplayAbilities",
+			"GameplayTags",
+			"GameplayTasks",
+			// AngelscriptGAS exposes UAngelscriptAbilitySystemComponent / UAngelscriptAttributeSet etc.
+			// (the C++ bases our PlayerState/HeroBase/attribute sets build on).
+			"AngelscriptGAS",
+			// CommonUI: layer-stack push shim (BP_AddWidget is private, so AngelScript can't
+			// reflect it — RogueUIStatics wraps the public C++ template AddWidget instead).
+			"CommonUI",
+			// ContextEffects (Feedback/ContextEffects, ported from Lyra):
+			// Niagara for UNiagaraSystem/Component + SpawnSystemAttached,
+			// DeveloperSettings for URogueContextEffectsSettings (UDeveloperSettings),
+			// PhysicsCore for EPhysicalSurface / Chaos/ChaosEngineInterface.h / UPhysicalMaterial.
+			"Niagara",
+			"DeveloperSettings",
+			"PhysicsCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"RogueSmoke",
+			"RogueSmoke/AbilitySystem",
+			"RogueSmoke/AbilitySystem/Attributes",
 			"RogueSmoke/Combat",
 			"RogueSmoke/Enemies",
+			"RogueSmoke/Generation",
 			"RogueSmoke/Spawning",
 			"RogueSmoke/Variant_Horror",
 			"RogueSmoke/Variant_Horror/UI",

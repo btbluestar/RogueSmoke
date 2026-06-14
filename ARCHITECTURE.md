@@ -1,6 +1,6 @@
 # Architecture
 
-> Working title: **[ProjectName]** — a co-op roguelike built in Unreal Engine 5 with
+> **RogueSmoke** — a co-op roguelike built in Unreal Engine 5 with
 > [UnrealEngine-Angelscript](https://angelscript.hazelight.se/) (Hazelight fork).
 > This document describes *what* the systems are and *why* they are shaped this way.
 > For *how* to write the code, see `CODING_STANDARDS.md`.
@@ -79,10 +79,12 @@ this state machine and is the single source of truth for "where are we in the ru
 
 ### 4.2 Player character & abilities
 - A base **Character** (movement, health hooks) subclassed per playable hero.
-- Abilities modeled as data-driven **Ability** objects (cooldown, cost, effect). Activation flows
-  client intent → `Server` RPC → server validates & applies → results replicate back.
-- Consider Unreal's Gameplay Ability System (GAS) only if scope justifies it; for a first
-  vertical slice, a lightweight custom ability component is usually faster to iterate in script.
+- Abilities are **GAS** GameplayAbilities (cooldown/cost/effect/replication via the system).
+  Activation flows client intent → `Server` RPC → server activates the granted ability → results
+  replicate back.
+- The project uses **Unreal's Gameplay Ability System**, copying Lyra's patterns, via the engine
+  fork's **AngelscriptGAS** plugin (so abilities/granting stay in AngelScript). The ASC lives on the
+  PlayerState; player stats are GAS AttributeSets; upgrades are GameplayEffects. See **D-0013**.
 
 ### 4.3 Items, loot & inventory
 - Items defined as **DataAssets** (stats, rarity, tags, visuals). Never hardcode item stats.
@@ -116,7 +118,8 @@ Scripts live under `Project/Script/` (auto-loaded by the plugin). Suggested top-
 ```
 Script/
   Core/         RunManager, GameMode, GameState, GameInstance subsystems
-  Player/       Character, controllers, ability component, input
+  Player/       Character, controllers, input
+  AbilitySystem/ GAS abilities, AbilitySet/InputConfig (Attributes/PlayerState/HeroBase are C++)
   Abilities/    Ability definitions and effects
   Items/        Item data, inventory, modifier system
   Enemies/      Enemy pawns, AI, spawning
@@ -129,10 +132,13 @@ Script/
 Blueprints subclass the relevant script classes for asset assignment (mesh, particles, etc.),
 prefixed `BP_`. Keep logic in script; keep content in Blueprints/DataAssets.
 
-## 7. Open decisions (resolve early)
+## 7. Open decisions
 
-1. **Networking topology** — listen server (assumed) vs dedicated server.
-2. **Ability framework** — custom component (faster) vs GAS (heavier, more capable).
-3. **Meta-progression scope** — shared per-session vs per-player persistent unlocks.
-4. **Max party size** — affects spawn budgets, scaling curves, and UI layout.
-5. **Late join / drop-in** — supported, or run-locked once started?
+Decisions are tracked authoritatively in **`DECISIONS.md`** — check there before re-litigating.
+Of this section's original list: topology → **listen server** (D-0004) and ability framework →
+**GAS via AngelscriptGAS** (D-0013) are decided. Still open (see `DECISIONS.md` §"Still open"):
+
+1. **Meta-progression scope** — shared per-session vs per-player persistent unlocks.
+2. **Max party size** — affects spawn budgets, scaling curves, and UI layout.
+3. **Late join / drop-in** — supported, or run-locked once started?
+4. **Solo support / friendly fire / theme** — and the concrete enemy-count target.

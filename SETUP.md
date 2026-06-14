@@ -19,6 +19,8 @@ Follow Epic's guide to link your accounts: https://www.unrealengine.com/en-US/ue
 
 ## 2. Build the AngelScript engine fork
 
+- **This machine:** already built at `F:\UEAS` (includes the `Angelscript`, `AngelscriptEnhancedInput`,
+  and `AngelscriptGAS` plugins). The steps below are for a fresh machine.
 - Clone the Hazelight fork: https://github.com/Hazelight/UnrealEngine-Angelscript
 - **Confirm it has a stable UE 5.7 branch** before committing (D-0001). If 5.7 isn't ready,
   decide explicitly whether to wait or pin an earlier version.
@@ -34,8 +36,9 @@ Follow Epic's guide to link your accounts: https://www.unrealengine.com/en-US/ue
 
 ## 4. Open the project
 
-- Project root: `C:\Users\btblu\Documents\RogueSmoke` (contains `RogueSmoke.uproject`).
-- Open `RogueSmoke.uproject` with the **custom** editor you built (not a launcher engine).
+- AngelScript engine fork: `F:\UEAS` (editor: `F:\UEAS\Engine\Binaries\Win64\UnrealEditor.exe`).
+- Project root: `C:\Users\btblu\Documents\RogueSmoke\RogueSmoke` (contains `RogueSmoke.uproject`).
+- Open `RogueSmoke.uproject` with that **custom** editor (not a launcher engine).
 - The plugin auto-creates a `Script/` folder. From the editor: **Tools -> Open Angelscript
   workspace** to open `Script/` in VS Code.
 

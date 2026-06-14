@@ -23,8 +23,8 @@ This is **not** an AngelScript-only project. Do not refactor away the C++/Mass l
   handles both Mass agents (fodder) and Actor elites.
 
 ## Build & run
-<!-- TODO: fill in real paths once the engine build is in place. Full guide in SETUP.md. -->
-- Open `RogueSmoke.uproject` with the **custom** editor you built (not a launcher engine).
+- **AngelScript engine fork:** `F:\UEAS` (editor: `F:\UEAS\Engine\Binaries\Win64\UnrealEditor.exe`).
+- Open `RogueSmoke.uproject` (in `RogueSmoke/RogueSmoke/`) with that **custom** editor — not a launcher engine.
 - AngelScript: hot-reloads on save (non-structural changes reload live in PIE).
   Editor **Tools -> Open Angelscript workspace** opens `Script/` in VS Code.
 - C++: rebuild in Visual Studio, relaunch editor.
@@ -40,6 +40,19 @@ This is **not** an AngelScript-only project. Do not refactor away the C++/Mass l
   random, no iteration-order or wall-clock dependence.
 - **No Unreal Interfaces** (UInterface/IInterface) in AngelScript — use base classes/components/tags.
 - Don't commit with broken script or C++ compilation.
+
+## Subagents & parallelism (superpowers)
+**There is ONE editor.** The build, `run_code_test`, and all PIE/MCP tools drive a single
+stateful Unreal instance — so anything that touches it MUST be serialized on the main session.
+- **Parallelize (safe, no shared state):** read-only codebase/doc research (`Explore`), and
+  *authoring* independent `.as`/`.cpp` files whose only verification is a later central compile.
+- **Never parallelize (shared editor = agents fight):** `ue-cpp build` (bounces the editor),
+  `as-helper run_code_test` (spawns its own editor-cmd; concurrent runs contend), and any
+  `unreal-test-mcp` PIE/actor/python call. One driver at a time.
+- **No git worktrees for editor work:** each worktree would need its own multi-GB engine build +
+  editor; the isolation isn't worth it. Branch in-place instead.
+- Pattern: fan out research/authoring to agents → funnel **all** build/test/PIE verification back
+  through this session, sequentially.
 
 ## Project documentation map
 - `Rogue_Smoke_GDD.md` — design intent (the "why" of the game).
