@@ -20,6 +20,15 @@ class UStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class APawn;
 
+UENUM(BlueprintType)
+enum class EEngageState : uint8
+{
+	// Holds at a ring standoff, no telegraph/attack — until the combat director grants a token.
+	Background,
+	// Holds a token: runs the full approach→telegraph→attack loop.
+	Engaged
+};
+
 UCLASS()
 class ROGUESMOKE_API AAttackingElite : public AEliteEnemyBase
 {
@@ -119,6 +128,48 @@ public:
 	UFUNCTION(BlueprintPure, Category="Enemy")
 	bool IsDashing() const { return bDashing; }
 
+	/** Combat-director scheduling. Background = circle/hold; Engaged = token-holder, full attack loop. */
+	UFUNCTION(BlueprintCallable, Category="Combat|Director")
+	void SetEngageState(EEngageState NewState);
+
+	UFUNCTION(BlueprintPure, Category="Combat|Director")
+	EEngageState GetEngageState() const { return EngageState; }
+
+	/** Seconds since the last engage-state change (Engaged timeout clock AND Background cooldown clock). */
+	UFUNCTION(BlueprintPure, Category="Combat|Director")
+	float GetTimeInEngageState() const { return TimeInEngageState; }
+
+	/** True once this elite has committed an attack during its current Engaged stint (release signal). */
+	UFUNCTION(BlueprintPure, Category="Combat|Director")
+	bool HasAttackedThisEngagement() const { return bAttackedThisEngagement; }
+
+	/** Token-gated? False for fodder (AFodderEnemy) so the director ignores them. */
+	UFUNCTION(BlueprintPure, Category="Combat|Director")
+	bool GetUsesAttackToken() const { return bUsesAttackToken; }
+
+	/** Alive per its HealthComponent (no health component = treat as alive). */
+	UFUNCTION(BlueprintPure, Category="Combat|Director")
+	bool IsAlive() const;
+
+	/** Ring standoff a Background token-user holds at (further than AttackRange). */
+	UFUNCTION(BlueprintPure, Category="Combat|Director")
+	float GetRingStandoff() const { return AttackRange * RingStandoffMult; }
+
+	/**
+	 * Background token-users hold at AttackRange * this (the combat circle radius). Kept > 1 so the ring
+	 * sits OUTSIDE attack range (they circle, never hit, until promoted). A promoted elite then closes
+	 * from the ring and attacks within ~1s when the player isn't fleeing; the director's token timeout is
+	 * the backstop for the kite case (a chaser that can never reach holds its token until it times out).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Combat|Director")
+	float RingStandoffMult = 1.6f;
+
+	/** Token-gated by the combat director. Set false on an AAttackingElite subclass to let it
+	 *  attack freely (skip the ring-standoff/token loop). AFodderEnemy is NOT a subclass of
+	 *  AAttackingElite — it is already exempt by not having this loop at all. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Combat|Director")
+	bool bUsesAttackToken = true;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -143,6 +194,10 @@ protected:
 
 	UPROPERTY()
 	UMaterialInstanceDynamic* TelegraphFillMID = nullptr;
+
+	EEngageState EngageState = EEngageState::Background;
+	float TimeInEngageState = 0.f;
+	bool bAttackedThisEngagement = false;
 
 	TWeakObjectPtr<APawn> Target;
 	float AttackCooldown = 0.f;
@@ -174,7 +229,7 @@ protected:
 
 	void AcquireTarget();
 	bool IsTargetInAttackRange() const;
-	void ApproachTarget(float DeltaSeconds);
+	void ApproachTarget(float DeltaSeconds, float StopRange);
 	void FaceTarget();
 	/** Current Health of a pawn via its ASC (GAS); returns 1 when unknown (treat as alive). */
 	float GetPawnHealth(APawn* P) const;

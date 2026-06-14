@@ -167,6 +167,25 @@ class ARaidObjective : AActor
     UPROPERTY(EditAnywhere, Category = "Raid|Director")
     TArray<TSubclassOf<AEliteEnemyBase>> InjectRoster;
 
+    // --- Combat director (attack tokens): only N elites attack each player at once. ---
+    UPROPERTY(EditAnywhere, Category = "Raid|Combat Director")
+    bool bEnableCombatDirector = true;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Combat Director")
+    int AttackTokensPerPlayer = 3;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Combat Director")
+    float TokenTimeoutSeconds = 6.0;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Combat Director")
+    float TokenCooldownSeconds = 2.5;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Combat Director")
+    float TokenEngagementRange = 1100.0;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Combat Director")
+    float CombatDirectorInterval = 0.25;
+
     UPROPERTY(EditAnywhere, Category = "Debug")
     bool bShowDebug = true;
 
@@ -187,6 +206,7 @@ class ARaidObjective : AActor
     private bool bHasGenTerrain = false;
     private float Elapsed = 0.0;
     private float WaveTimer = 0.0;
+    private float CombatDirectorTimer = 0.0;
     private int WaveIndex = 0;
     private bool bSpikeBossSpawned = false;
 
@@ -250,6 +270,17 @@ class ARaidObjective : AActor
             return;
 
         Elapsed += DeltaSeconds;
+
+        if (bEnableCombatDirector)
+        {
+            CombatDirectorTimer += DeltaSeconds;
+            if (CombatDirectorTimer >= CombatDirectorInterval)
+            {
+                CombatDirectorTimer = 0.0;
+                RaidCombatDirector::Tick(AttackTokensPerPlayer, TokenTimeoutSeconds,
+                                         TokenCooldownSeconds, TokenEngagementRange);
+            }
+        }
 
         if (Phase == ERaidPhase::InProgress)
         {

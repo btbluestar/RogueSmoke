@@ -1932,6 +1932,96 @@ class ARaidPlayerController : APlayerController
         Print(f"[RaidLoopSmoke] RESULT 0/{Total} — timed out waiting for the loop", 15.0);
     }
 
+    // --- Combat-director smoke: spawn many token-using elites around the hero; assert only the per-player
+    // budget are Engaged at once, and that tokens rotate over time. Boot RaidArena with
+    // -ExecCmds="CombatDirectorSmoke". ---
+    private int CDSpawned = 0;
+    private int CDMaxEngaged = 0;
+    private int CDSamples = 0;
+    private bool CDDone = false;
+    private TArray<AAttackingElite> CDEverEngaged;   // distinct elites that held a token across the window
+
+    UFUNCTION(Exec)
+    void CombatDirectorSmoke()
+    {
+        AHeroCharacter Hero = GetHero();
+        if (Hero == nullptr)
+        {
+            System::SetTimer(this, n"CombatDirectorSmoke", 0.5, false);   // retry until possessed
+            return;
+        }
+        FVector C = Hero.GetActorLocation();
+        // Mix two archetypes (Carapace melee + Spitter ranged) so the director's variety + spread
+        // scoring is actually exercised, not just the cap.
+        for (int i = 0; i < 8; i++)
+        {
+            float A = (2.0 * 3.14159265 * float(i)) / 8.0;
+            FVector P = C + FVector(Math::Cos(A), Math::Sin(A), 0.0) * 250.0;
+            AAttackingElite E = nullptr;
+            if (i % 2 == 0)
+                E = Cast<AAttackingElite>(SpawnActor(ACarapace, P, FRotator()));
+            else
+                E = Cast<AAttackingElite>(SpawnActor(ASpitter, P, FRotator()));
+            if (E != nullptr)
+                CDSpawned += 1;
+        }
+        Print(f"[CombatDirectorSmoke] spawned {CDSpawned} elites", 6.0);
+        CDSamples = 0;
+        CDMaxEngaged = 0;
+        CDDone = false;
+        CDEverEngaged.Empty();
+        System::SetTimer(this, n"CombatDirectorSample", 0.6, true);   // repeating sampler
+    }
+
+    UFUNCTION()
+    void CombatDirectorSample()
+    {
+        if (CDDone)
+            return;
+
+        ARaidObjective Obj = FindRaidObjective();
+        int Budget = (Obj != nullptr) ? Obj.AttackTokensPerPlayer : 3;
+
+        TArray<AAttackingElite> Elites;
+        GetAllActorsOfClass(Elites);
+        TArray<AAttackingElite> NowEngaged;
+        for (AAttackingElite E : Elites)
+        {
+            if (E == nullptr || !E.GetUsesAttackToken() || !E.IsAlive())
+                continue;
+            if (E.GetEngageState() == EEngageState::Engaged)
+                NowEngaged.Add(E);
+        }
+        if (NowEngaged.Num() > CDMaxEngaged)
+            CDMaxEngaged = NowEngaged.Num();
+        // Accumulate the DISTINCT set of elites that have ever held a token (rotation evidence — robust
+        // to the solo headless hero being wiped mid-test, which drops the live engaged count to 0).
+        for (AAttackingElite E : NowEngaged)
+        {
+            bool bSeen = false;
+            for (AAttackingElite F : CDEverEngaged)
+                if (E == F) { bSeen = true; break; }
+            if (!bSeen)
+                CDEverEngaged.Add(E);
+        }
+
+        CDSamples += 1;
+        if (CDSamples >= 10)
+        {
+            CDDone = true;   // stop sampling (guard; the repeating timer will no-op now)
+
+            int Pass = 0;
+            int Total = 2;
+            // (1) Cap: never more than the budget Engaged at once.
+            if (CDMaxEngaged > 0 && CDMaxEngaged <= Budget) Pass += 1;
+            else Print(f"[CombatDirectorSmoke] FAIL cap (max {CDMaxEngaged} > budget {Budget})", 8.0);
+            // (2) Rotation: more distinct elites cycled through tokens than the cap allows at once.
+            if (CDEverEngaged.Num() > Budget) Pass += 1;
+            else Print(f"[CombatDirectorSmoke] FAIL no rotation (only {CDEverEngaged.Num()} distinct engaged)", 8.0);
+            Print(f"[CombatDirectorSmoke] RESULT {Pass}/{Total}", 15.0);
+        }
+    }
+
     private ARaidObjective FindRaidObjective()
     {
         TArray<ARaidObjective> Objectives;
