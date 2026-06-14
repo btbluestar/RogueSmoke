@@ -174,6 +174,7 @@ class ARaidObjective : AActor
     private float Elapsed = 0.0;
     private float WaveTimer = 0.0;
     private int WaveIndex = 0;
+    private bool bSpikeBossSpawned = false;
 
     UFUNCTION(BlueprintOverride)
     void BeginPlay()
@@ -249,7 +250,7 @@ class ARaidObjective : AActor
 
         int TeamLevel = GetTeamLevel();
         int NumPlayers = GetNumPlayers();
-        FWavePlan Plan = RaidDirector::ComputeWavePlan(TeamLevel, WaveIndex, NumPlayers, MakeTunables());
+        FWavePlan Plan = RaidDirector::ComputeWavePlan(TeamLevel, WaveIndex, NumPlayers, MakeTunables(), Elapsed);
 
         WaveTimer += DeltaSeconds;
         if (WaveTimer < Plan.Interval)
@@ -279,6 +280,17 @@ class ARaidObjective : AActor
                     Injected.SetCountsAsObjectiveTarget(false);   // pressure, not a clear-gate
                     Print(f"[Director] wave {WaveIndex}: injected elite (L{TeamLevel})", 3.0);
                 }
+            }
+        }
+
+        if (Plan.bSpawnMiniBoss && BossClass.Get() != nullptr && !bSpikeBossSpawned)
+        {
+            bSpikeBossSpawned = true;
+            AEliteEnemyBase SpikeBoss = Director.SpawnElite(BossClass, Center + FVector(0.0, 0.0, 40.0), FRotator());
+            if (SpikeBoss != nullptr)
+            {
+                SpikeBoss.SetCountsAsObjectiveTarget(false);   // pressure spike, not a clear-gate
+                Print("[Director] mini-boss spike", 4.0);
             }
         }
         WaveIndex += 1;
@@ -393,28 +405,67 @@ class ARaidObjective : AActor
         if (Elapsed < StartGraceSeconds)
             return;
 
-        // Place the elites that gate the clear, once, after the grace window (so they register before we
-        // first test "cleared").
+        // Place gating elites once after grace (both modes spawn them — in HoldAndChannel they are
+        // pressure, not a clear-gate).
         if (!bSpawnedInitialElites)
             SpawnInitialElites();
 
+        if (Mode == EObjectiveMode::HoldAndChannel)
+        {
+            UpdateChannel();
+            return;
+        }
+
+        // Legacy ClearElites gate.
         UCombatSubsystem Combat = UCombatSubsystem::Get();
         if (Combat == nullptr)
             return;
-
         int Remaining = Combat.GetEliteCount();
         if (Remaining > 0)
             bSeenElites = true;
-
         if (bSeenElites && Remaining == 0)
             SetPhase(ERaidPhase::ExtractionReady);
+    }
+
+    // Hold-and-channel: accumulate progress while >= 1 living hero stands in the channel radius.
+    private void UpdateChannel()
+    {
+        const float RadiusSq = ChannelRadius * ChannelRadius;
+        bool bAnyChanneling = false;
+
+        TArray<AHeroCharacter> Heroes;
+        GetAllActorsOfClass(Heroes);
+        for (AHeroCharacter H : Heroes)
+        {
+            if (H == nullptr || H.IsIncapacitated())
+                continue;
+            if ((H.GetActorLocation() - ChannelCenter).SizeSquared() <= RadiusSq)
+            {
+                bAnyChanneling = true;
+                break;
+            }
+        }
+
+        if (bAnyChanneling)
+            ChannelProgress = Math::Min(ChannelProgress + GetWorld().GetDeltaSeconds(), ChannelSeconds);
+
+        if (ChannelProgress >= ChannelSeconds)
+            SetPhase(ERaidPhase::ExtractionReady);
+    }
+
+    // Test/exec hook: jump the channel bar to full so the smoke can drive the loop headlessly.
+    UFUNCTION(BlueprintCallable, Category = "Raid|Channel")
+    void DebugFillChannel()
+    {
+        if (HasAuthority())
+            ChannelProgress = ChannelSeconds;
     }
 
     // Once the arena is clear, any living hero standing inside the extraction zone calls it in.
     private void UpdateExtractionReady()
     {
         const float RadiusSq = ExtractZoneRadius * ExtractZoneRadius;
-        const FVector Center = GetActorLocation();
+        const FVector Center = ExtractionCenter;
 
         TArray<AHeroCharacter> Heroes;
         GetAllActorsOfClass(Heroes);
@@ -514,7 +565,7 @@ class ARaidObjective : AActor
         // Spawn the final wave through the spawn seam (pooled elites now, Mass fodder later).
         USpawnDirector Director = USpawnDirector::Get();
         if (Director != nullptr)
-            Director.SpawnEliteWave(DefendWaveEliteClass, GetActorLocation(), DefendWaveRadius, DefendWaveCount);
+            Director.SpawnEliteWave(DefendWaveEliteClass, ExtractionCenter, DefendWaveRadius, DefendWaveCount);
     }
 
     void OnPhaseChanged(ERaidPhase NewPhase)
