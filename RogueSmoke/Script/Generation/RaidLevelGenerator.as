@@ -55,6 +55,31 @@ struct FRaidGenConfig
 
     UPROPERTY()
     float EscapeMargin = 150.0;          // wall must exceed (highest standable + VertCeiling) by this
+
+    // --- Plan A: terrain floor ---
+    UPROPERTY()
+    int TerrainGridDim = 20;             // tiles per side
+
+    UPROPERTY()
+    float TerrainTileSize = 250.0;       // uu per tile
+
+    UPROPERTY()
+    float TerrainStepUU = 25.0;          // uu per height level (quantization)
+
+    UPROPERTY()
+    int TerrainLevels = 8;               // max rim height = (Levels-1)*StepUU ~= 175uu
+
+    UPROPERTY()
+    int ZonePlaneLevel = 2;              // flattened play-plane height level
+
+    UPROPERTY()
+    float ZoneFlattenRadius = 1900.0;    // flatten disc radius around a site (> SiteRadius)
+
+    UPROPERTY()
+    float ZoneFlattenInnerFrac = 0.6;    // fully flat within this fraction of the radius
+
+    UPROPERTY()
+    int MaxZoneSlopeLevels = 1;          // validator: max neighbour delta inside a zone
 }
 
 namespace RaidGen
@@ -74,6 +99,10 @@ namespace RaidGen
         L.Seed = Seed;
         L.HalfExtent = Cfg.HalfExtent;
 
+        // Terrain floor: deterministic heightfield, flattened under the main play area.
+        L.Terrain = RaidTerrain::Generate(Seed, Cfg.TerrainGridDim, Cfg.TerrainTileSize,
+                                          Cfg.TerrainStepUU, Cfg.TerrainLevels);
+
         FRandomStream Rng(Seed + kArenaSalt);
 
         float In = Cfg.HalfExtent - Cfg.BoundaryMargin;
@@ -88,6 +117,11 @@ namespace RaidGen
         FVector SiteCenter = FVector(Rng.RandRange(-300.0, 300.0), Rng.RandRange(-300.0, 300.0), 0.0);
         L.MainSites.Add(BuildSkatepark(SiteCenter, Cfg, Rng));
 
+        // Flatten the terrain under the site, then sit ground nodes/cover on the (flattened) surface.
+        RaidTerrain::FlattenDisc(L.Terrain, SiteCenter.X, SiteCenter.Y, Cfg.ZonePlaneLevel,
+                                 Cfg.ZoneFlattenRadius, Cfg.ZoneFlattenInnerFrac);
+        SitNodesOnTerrain(L, Cfg);
+
         return L;
     }
 
@@ -99,6 +133,29 @@ namespace RaidGen
         if (Edge == 1) return FVector(0.0,  In, 0.0);
         if (Edge == 2) return FVector(-In, 0.0, 0.0);
         return FVector(0.0, -In, 0.0);
+    }
+
+    // Place node/cover/anchor heights onto the terrain surface. HighGround platforms keep their
+    // authored height but are lifted by the ground beneath them. Pure; mutates L in place.
+    void SitNodesOnTerrain(FRaidLayout& L, const FRaidGenConfig& Cfg)
+    {
+        L.Drop.Center.Z = RaidTerrain::WorldHeightAt(L.Terrain, L.Drop.Center.X, L.Drop.Center.Y);
+        L.Extraction.Center.Z = RaidTerrain::WorldHeightAt(L.Terrain, L.Extraction.Center.X, L.Extraction.Center.Y);
+        for (int si = 0; si < L.MainSites.Num(); si++)
+        {
+            FVector c = L.MainSites[si].Center;
+            L.MainSites[si].Center.Z = RaidTerrain::WorldHeightAt(L.Terrain, c.X, c.Y);
+            for (int ni = 0; ni < L.MainSites[si].Nodes.Num(); ni++)
+            {
+                FVector p = L.MainSites[si].Nodes[ni].Location;
+                float ground = RaidTerrain::WorldHeightAt(L.Terrain, p.X, p.Y);
+                if (L.MainSites[si].Nodes[ni].Slot == ERaidSlotType::HighGround)
+                    L.MainSites[si].Nodes[ni].Location.Z = p.Z + ground;   // platform above local ground
+                else
+                    L.MainSites[si].Nodes[ni].Location.Z = ground;
+            }
+            // Cover keeps its XY; its base rides the surface (Radius unchanged).
+        }
     }
 
     FRaidNode MakeNode(ERaidSlotType Slot, FVector Loc, float Cap)
@@ -261,6 +318,10 @@ namespace RaidGen
     {
         FRaidLayout L;
         L.HalfExtent = Cfg.HalfExtent;
+        L.Terrain = RaidTerrain::Generate(0, Cfg.TerrainGridDim, Cfg.TerrainTileSize,
+                                          Cfg.TerrainStepUU, Cfg.TerrainLevels);
+        RaidTerrain::FlattenDisc(L.Terrain, 0.0, 0.0, Cfg.ZonePlaneLevel,
+                                 Cfg.ZoneFlattenRadius, Cfg.ZoneFlattenInnerFrac);
         float In = Cfg.HalfExtent - Cfg.BoundaryMargin;
 
         L.Drop = MakeAnchorSite(ERaidSiteType::Drop, ERaidSlotType::Entrance, FVector(-In, 0.0, 0.0));
@@ -292,6 +353,7 @@ namespace RaidGen
             S.Cover.Add(C);
         }
         L.MainSites.Add(S);
+        SitNodesOnTerrain(L, Cfg);
         return L;
     }
 }
