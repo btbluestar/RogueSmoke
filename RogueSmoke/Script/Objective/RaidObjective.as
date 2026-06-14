@@ -25,6 +25,14 @@ enum ERaidPhase
     Failed             // party wiped -> LOSS
 }
 
+// How the objective is cleared. ClearElites = legacy (kill the ring). HoldAndChannel = Plan 3
+// (stand in the channel radius until the bar fills). Default keeps every existing map unchanged.
+enum EObjectiveMode
+{
+    ClearElites,
+    HoldAndChannel
+}
+
 class ARaidObjective : AActor
 {
     default bReplicates = true;
@@ -39,6 +47,31 @@ class ARaidObjective : AActor
     // (remote clients also keep AHeroCharacter::Server_CallExtraction). GDD §3.1 "call extraction".
     UPROPERTY(EditAnywhere, Category = "Raid")
     float ExtractZoneRadius = 450.0;
+
+    // --- Plan 3: hold-and-channel mode + generated placement (opt-in; default = legacy ClearElites) ---
+    UPROPERTY(EditAnywhere, Category = "Raid|Mode")
+    EObjectiveMode Mode = EObjectiveMode::ClearElites;
+
+    // When true, BeginPlay positions the channel/extraction from the generated layout (GameState seed).
+    UPROPERTY(EditAnywhere, Category = "Raid|Mode")
+    bool bUseGeneratedLayout = false;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Channel")
+    float ChannelSeconds = 20.0;
+
+    UPROPERTY(EditAnywhere, Category = "Raid|Channel")
+    float ChannelRadius = 600.0;
+
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Raid|Channel")
+    float ChannelProgress = 0.0;
+
+    // Channel point (== objective site) and the SEPARATE extraction point. Replicated so clients can
+    // draw the rings. In ClearElites mode these stay at the actor location for back-compat.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Raid|Mode")
+    FVector ChannelCenter = FVector::ZeroVector;
+
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Raid|Mode")
+    FVector ExtractionCenter = FVector::ZeroVector;
 
     // The final defend wave spawned when extraction is called (D-0010). Leave the class
     // unset to skip spawning (e.g. while testing the timer alone).
@@ -163,6 +196,20 @@ class ARaidObjective : AActor
         {
             InjectRoster.Add(ASpitter);
             InjectRoster.Add(ALunger);
+        }
+
+        // Plan 3: anchor the channel at the generated objective node and extraction at the separate
+        // Extraction node. Move the actor to the channel point so the legacy GetActorLocation()-based
+        // helpers (elite ring, fodder centers) follow it; extraction uses ExtractionCenter instead.
+        ChannelCenter = GetActorLocation();
+        ExtractionCenter = GetActorLocation();
+        if (bUseGeneratedLayout)
+        {
+            FRaidLayout L = RaidArena::GetLayout(GetMasterSeed());
+            if (L.MainSites.Num() > 0)
+                ChannelCenter = RaidArena::NodeLocation(L.MainSites[0], ERaidSlotType::CombatCore);
+            ExtractionCenter = L.Extraction.Center;
+            SetActorLocation(ChannelCenter);
         }
     }
 
