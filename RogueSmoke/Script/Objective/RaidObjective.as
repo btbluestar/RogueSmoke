@@ -182,6 +182,9 @@ class ARaidObjective : AActor
 
     private bool bSeenElites = false;
     private bool bSpawnedInitialElites = false;
+    // Cached generated terrain so enemy spawns sit on the surface (not the Z=0 floor plane).
+    private FRaidTerrain GenTerrain;
+    private bool bHasGenTerrain = false;
     private float Elapsed = 0.0;
     private float WaveTimer = 0.0;
     private int WaveIndex = 0;
@@ -221,6 +224,8 @@ class ARaidObjective : AActor
             // needn't carry the enum value (editor-python can't set AS EnumProperties).
             Mode = EObjectiveMode::HoldAndChannel;
             FRaidLayout L = RaidArena::GetLayout(GetMasterSeed());
+            GenTerrain = L.Terrain;
+            bHasGenTerrain = L.Terrain.Heights.Num() > 0;   // snap enemy spawns onto this surface
             for (int i = 0; i < L.MainSites.Num(); i++)
             {
                 ChannelCenters.Add(RaidArena::NodeLocation(L.MainSites[i], ERaidSlotType::CombatCore));
@@ -378,14 +383,25 @@ class ARaidObjective : AActor
             Dir = FVector(1.0, 0.0, 0.0);
         Dir = Dir.GetSafeNormal();
 
-        // Ring sits FodderSpawnDistance out, a touch above the floor so the bodies read.
-        return Base + Dir * FodderSpawnDistance + FVector(0.0, 0.0, -40.0);
+        // Ring sits FodderSpawnDistance out, snapped onto the terrain surface so bodies aren't buried.
+        FVector Ring = Base + Dir * FodderSpawnDistance;
+        Ring.Z = GroundZAt(Ring.X, Ring.Y) + 10.0;
+        return Ring;
     }
 
     private int GetMasterSeed() const
     {
         ARaidGameState GameState = Cast<ARaidGameState>(Gameplay::GetGameState());
         return GameState != nullptr ? GameState.MasterSeed : 1;
+    }
+
+    // Terrain surface Z under an XY (so enemies don't spawn buried). Legacy (no generated terrain)
+    // keeps the objective's own Z, preserving the flat-floor maps unchanged.
+    private float GroundZAt(float X, float Y) const
+    {
+        if (bHasGenTerrain)
+            return RaidTerrain::WorldHeightAt(GenTerrain, X, Y);
+        return GetActorLocation().Z;
     }
 
     // Spawn the gating elites once: an optional boss at the center plus a seeded mix from EliteRoster on a
@@ -404,7 +420,8 @@ class ARaidObjective : AActor
 
         if (BossClass.Get() != nullptr)
         {
-            AEliteEnemyBase Boss = Director.SpawnElite(BossClass, Center, FRotator());
+            FVector BossPos = FVector(Center.X, Center.Y, GroundZAt(Center.X, Center.Y) + 40.0);
+            AEliteEnemyBase Boss = Director.SpawnElite(BossClass, BossPos, FRotator());
             if (Boss != nullptr)
                 Boss.SetCountsAsObjectiveTarget(true);
             bBoss = true;
@@ -420,7 +437,9 @@ class ARaidObjective : AActor
                     continue;
                 float Angle = (2.0 * 3.14159265 * i) / InitialEliteCount;
                 FVector Offset = FVector(Math::Cos(Angle), Math::Sin(Angle), 0.0) * EliteSpawnRadius;
-                AEliteEnemyBase Ring = Director.SpawnElite(Cls, Center + Offset, FRotator());
+                FVector RingPos = Center + Offset;
+                RingPos.Z = GroundZAt(RingPos.X, RingPos.Y) + 40.0;
+                AEliteEnemyBase Ring = Director.SpawnElite(Cls, RingPos, FRotator());
                 if (Ring != nullptr)
                     Ring.SetCountsAsObjectiveTarget(true);
                 Spawned += 1;
