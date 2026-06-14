@@ -8,7 +8,7 @@
 struct FRaidGenConfig
 {
     UPROPERTY()
-    float HalfExtent = 2500.0;           // ~50x50m playable footprint (4-player baseline)
+    float HalfExtent = 3000.0;           // ~60x60m playable footprint (room for 2-3 zones)
 
     UPROPERTY()
     float BoundaryMargin = 250.0;        // keep nodes this far inside the bounds (escape-proof heuristic)
@@ -58,7 +58,7 @@ struct FRaidGenConfig
 
     // --- Plan A: terrain floor ---
     UPROPERTY()
-    int TerrainGridDim = 20;             // tiles per side
+    int TerrainGridDim = 24;             // tiles per side (24*250=6000 covers the 3000 half-extent)
 
     UPROPERTY()
     float TerrainTileSize = 250.0;       // uu per tile
@@ -92,10 +92,10 @@ struct FRaidGenConfig
     float ZoneMinSeparation = 2000.0;    // min distance between zone centers (= 2*SiteRadius; 3 zones still fit)
 
     UPROPERTY()
-    float ZoneAnchorMargin = 1200.0;     // keep anchors inside (margin+SiteRadius < HalfExtent-BoundaryMargin)
+    float ZoneAnchorMargin = 1600.0;     // anchor box half-width (margin+SiteRadius < HalfExtent-BoundaryMargin)
 
     UPROPERTY()
-    float ZoneDropClearance = 1500.0;    // keep zones this far from drop/extraction
+    float ZoneDropClearance = 2000.0;    // zone CENTER this far from drop/extraction (~1000 footprint edge clear)
 }
 
 namespace RaidGen
