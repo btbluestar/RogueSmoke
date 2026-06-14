@@ -175,6 +175,8 @@ namespace RaidGen
         return (A - B).Size() < 0.01;
     }
 
+    // Positional/structural equality — compares slot + positions (epsilon); intentionally ignores
+    // IntensityCap and Cover.Radius. Sufficient for the determinism test, not full field equality.
     bool SitesEqual(const FRaidSite& A, const FRaidSite& B)
     {
         if (A.Type != B.Type || A.Objective != B.Objective || A.Archetype != B.Archetype)
@@ -224,9 +226,12 @@ namespace RaidGen
                 return L;
             }
         }
+        // Never silently certify an invalid layout: validate the fallback too. For the default Cfg
+        // this always passes; a pathological Cfg surfaces as bValid=false rather than a false promise.
         FRaidLayout Safe = BuildSafeFallback(Cfg);
         Safe.Seed = Seed;
-        Safe.bValid = true;
+        FRaidValidationResult SafeRes = RaidValidate::Validate(Safe, Cfg);
+        Safe.bValid = SafeRes.bOk;
         return Safe;
     }
 

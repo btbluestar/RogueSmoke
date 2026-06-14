@@ -118,6 +118,9 @@ namespace RaidValidate
         Check(R, bHoldOk, "one-hold-anchor");
         Check(R, bOffsetOk, "hold-anchor-offset");
         Check(R, bHighGroundOk, "min-high-ground");
+        // The Drop/Extraction anchors must also stay inside the bounds margin (not just main sites).
+        if (!InBounds(L.Drop.Center, Limit)) bBoundsOk = false;
+        if (!InBounds(L.Extraction.Center, Limit)) bBoundsOk = false;
         Check(R, bBoundsOk, "in-bounds");
         Check(R, bCoverCountOk, "cover-count");
         Check(R, bCoverSepOk, "cover-separation");
