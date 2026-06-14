@@ -357,6 +357,11 @@ class ARaidObjective : AActor
     {
         FVector Base = GetActorLocation();
 
+        // Multi-site: the swarm's pressure concentrates on the active channel site (decision 9).
+        if (Mode == EObjectiveMode::HoldAndChannel && ActiveSiteIndex >= 0
+            && ActiveSiteIndex < ChannelCenters.Num())
+            Base = ChannelCenters[ActiveSiteIndex];
+
         TArray<AHeroCharacter> Heroes;
         GetAllActorsOfClass(Heroes);
         if (Heroes.Num() > 0)
