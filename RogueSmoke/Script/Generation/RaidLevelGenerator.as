@@ -208,4 +208,64 @@ namespace RaidGen
         }
         return true;
     }
+
+    // Roll until valid (deterministic salt advance), else fall back to a known-good layout so a run
+    // never softlocks (design spec §9). Same (Seed, Cfg) -> identical result, including the reroll.
+    FRaidLayout GenerateValidated(int Seed, const FRaidGenConfig& Cfg, int MaxRetries = 8)
+    {
+        for (int i = 0; i <= MaxRetries; i++)
+        {
+            FRaidLayout L = Generate(Seed + i * 7919, Cfg);   // 7919 prime: deterministic re-roll salt
+            FRaidValidationResult Res = RaidValidate::Validate(L, Cfg);
+            if (Res.bOk)
+            {
+                L.Seed = Seed;        // keep the caller's seed as the layout's identity
+                L.bValid = true;
+                return L;
+            }
+        }
+        FRaidLayout Safe = BuildSafeFallback(Cfg);
+        Safe.Seed = Seed;
+        Safe.bValid = true;
+        return Safe;
+    }
+
+    // A hand-built layout guaranteed to pass Validate for the default config — the never-softlock net.
+    FRaidLayout BuildSafeFallback(const FRaidGenConfig& Cfg)
+    {
+        FRaidLayout L;
+        L.HalfExtent = Cfg.HalfExtent;
+        float In = Cfg.HalfExtent - Cfg.BoundaryMargin;
+
+        L.Drop = MakeAnchorSite(ERaidSiteType::Drop, ERaidSlotType::Entrance, FVector(-In, 0.0, 0.0));
+        L.Extraction = MakeAnchorSite(ERaidSiteType::Extraction, ERaidSlotType::Exit, FVector(In, 0.0, 0.0));
+
+        FRaidSite S;
+        S.Type = ERaidSiteType::MainObjective;
+        S.Objective = ERaidObjectiveType::HoldAndChannel;
+        S.Archetype = ERaidArchetype::Skatepark;
+        S.Center = FVector::ZeroVector;
+        S.Nodes.Add(MakeNode(ERaidSlotType::CombatCore, FVector::ZeroVector, 0.8));
+        S.Nodes.Add(MakeNode(ERaidSlotType::HoldAnchor, FVector(Cfg.HoldAnchorMinOffset + 100.0, 0.0, 0.0), 1.0));
+        for (int i = 0; i < Cfg.HighGroundCount; i++)
+        {
+            float A = (2.0 * PI * float(i)) / float(Cfg.HighGroundCount);
+            FVector P = FVector(Math::Cos(A), Math::Sin(A), 0.0) * (Cfg.SiteRadius * 0.7);
+            P.Z = 400.0;
+            S.Nodes.Add(MakeNode(ERaidSlotType::HighGround, P, 0.5));
+        }
+        S.Nodes.Add(MakeNode(ERaidSlotType::Entrance, FVector(-Cfg.SiteRadius, 0.0, 0.0), 0.2));
+        S.Nodes.Add(MakeNode(ERaidSlotType::Exit,     FVector( Cfg.SiteRadius, 0.0, 0.0), 0.2));
+        // A ring of exactly CoverMin cover, spaced well above CoverMinSeparation.
+        for (int i = 0; i < Cfg.CoverMin; i++)
+        {
+            float A = (2.0 * PI * float(i)) / float(Cfg.CoverMin);
+            FRaidCover C;
+            C.Location = FVector(Math::Cos(A), Math::Sin(A), 0.0) * (Cfg.SiteRadius * 0.55);
+            C.Radius = Cfg.CoverRadius;
+            S.Cover.Add(C);
+        }
+        L.MainSites.Add(S);
+        return L;
+    }
 }
