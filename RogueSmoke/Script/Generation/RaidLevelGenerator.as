@@ -23,7 +23,7 @@ struct FRaidGenConfig
     int MinHighGround = 2;               // validator floor
 
     UPROPERTY()
-    float SiteRadius = 1600.0;           // Skatepark footprint radius
+    float SiteRadius = 1000.0;           // per-zone footprint radius (shrunk so 2-3 zones fit)
 
     UPROPERTY()
     float HoldAnchorMinOffset = 600.0;   // HoldAnchor offset from the core (offset power position)
@@ -73,13 +73,29 @@ struct FRaidGenConfig
     int ZonePlaneLevel = 2;              // flattened play-plane height level
 
     UPROPERTY()
-    float ZoneFlattenRadius = 1900.0;    // flatten disc radius around a site (> SiteRadius)
+    float ZoneFlattenRadius = 1300.0;    // flatten disc radius around a site (> SiteRadius)
 
     UPROPERTY()
     float ZoneFlattenInnerFrac = 0.6;    // fully flat within this fraction of the radius
 
     UPROPERTY()
     int MaxZoneSlopeLevels = 1;          // validator: max neighbour delta inside a zone
+
+    // --- Plan B: multi-site placement ---
+    UPROPERTY()
+    int ZoneCountMin = 2;                // fewest objective zones per raid
+
+    UPROPERTY()
+    int ZoneCountMax = 3;                // most objective zones per raid
+
+    UPROPERTY()
+    float ZoneMinSeparation = 2200.0;    // min distance between zone centers (>= 2*SiteRadius)
+
+    UPROPERTY()
+    float ZoneAnchorMargin = 1400.0;     // keep anchors this far inside the footprint half-extent
+
+    UPROPERTY()
+    float ZoneDropClearance = 1500.0;    // keep zones this far from drop/extraction
 }
 
 namespace RaidGen
