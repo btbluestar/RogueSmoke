@@ -2088,6 +2088,13 @@ class ARaidPlayerController : APlayerController
                 Obj.DefendWaveCount = 0;
             }
             Obj.DebugFillChannel();                  // force the bar full; next tick opens extraction
+
+            // Plan C: prove the generated objective is genuinely multi-site (2+ zones).
+            if (Obj != nullptr && Obj.ChannelCenters.Num() >= 2)
+                Print(f"[GenLoopSmoke] multisite OK ({Obj.ChannelCenters.Num()} zones)", 5.0);
+            else
+                Print("[GenLoopSmoke] FAIL multisite (<2 zones)", 8.0);
+
             GenLoopRetry();
             return;
         }
