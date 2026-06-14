@@ -27,6 +27,19 @@
   that reaches the edge exactly at impact), a body warning pulse, and per-archetype swell
   (`TelegraphSwell`); replicated to clients. Ground-target zones (boss artillery) ring via
   `UCombatSubsystem::ShowTelegraphZone`. Niagara polish comes later; debug draw stays as dev overlay.
+- **Combat director** — `RaidCombatDirector` (AngelScript): decides *which* enemies may attack so the
+  horde never all hits at once (D-0025). Stateless server-only pass over the pooled elites; grants a
+  bounded number of attack tokens per player. Distinct from the **Wave director** (which decides *how
+  many* spawn).
+- **Attack token** — permission to run the full attack loop. A holder is **Engaged**; the rest are
+  **Background**. `AttackTokensPerPlayer` (3) caps simultaneous attackers per living hero; released on
+  attack / death / lost-target / timeout, re-eligible after a cooldown.
+- **Engaged / Background** — the two `EEngageState` values on `AAttackingElite`. **Engaged** =
+  approach→telegraph→attack (holds a token); **Background** = circle and hold at a ring standoff
+  (`AttackRange * RingStandoffMult`), never telegraphing, until promoted. Boss + fodder are exempt
+  (`bUsesAttackToken = false`).
+- **Combat circle** — the ring of Background enemies waiting their turn around a player; the
+  readability+fairness pattern (DOOM / Arkham / L4D-Director lineage) the combat director creates.
 
 ## Enemy roster (bio-horde, D-0017)
 
@@ -135,8 +148,28 @@
   Twin Salvo → Carpet Bombing). `RequiredHeroClass` keeps it out of the wrong hero's hand.
 - **Wave director** — the pure function (`RaidDirector::ComputeWavePlan`) scaling fodder-wave
   pressure with team level and squad size: size, tempo, deterministic elite injections.
-  Injected elites never gate the arena clear.
+  Injected elites never gate the arena clear. Pairs with the **Combat director** (which decides
+  *which* of the spawned enemies may attack); on a multi-site arena it focuses pressure on the
+  active site (D-0024).
 - **Meta-progression** — persistence *between* runs (scope still open).
+
+## Generation (procedural, deterministic — D-0007 / D-0024)
+
+- **Layout** — `FRaidLayout`: the generated arena description (sites, nodes, cover) the stamper
+  builds and the validator checks. Produced by `RaidLevelGenerator` from the master seed.
+- **Terrain** — `FRaidTerrain`: an integer-hash two-octave heightfield (box-blurred) that *is* the
+  floor (not a flat slab). `WorldHeightAt` samples it; `FlattenDisc` levels pads; `MaxSlopeInDisc`
+  checks walkability. Integer hash, never float RNG, so host/clients match.
+- **Zone / site** — one objective location on the terrain. `RaidPartition` Poisson-places **2–3**
+  zone anchors per raid (min separation, bounds margin) — the **multi-site** arena.
+- **Channel gate** — the per-zone objective: hold-and-channel each site's pad; `RaidObjective` tracks
+  per-zone `ChannelCenters` / `ChannelProgresses` and an active-site index, climax mini-boss at the
+  last site.
+- **Layout validation** — `RaidLayoutValidator`: a pure-geometric battery (slope-walkable,
+  jump-reachability vs the hero reach envelope, escape-proof bounds, zone count/separation/drop
+  clearance). A failing roll **deterministically rerolls** to a safe fallback.
+- **Stamping** — `URaidStampSubsystem` (C++ seam): builds the collidable greybox/terrain geometry via
+  ISM from the layout; the client re-stamps from `OnRep_MasterSeed` (only the seed crosses the wire).
 
 ## Technical / architecture
 

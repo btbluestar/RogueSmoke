@@ -494,6 +494,73 @@ Format per entry: ID, date, status, the decision, the reasoning, and consequence
 - **Verification:** MoveSmoke check 4 (spend/restore atomic, battery now 4/4 — SmokeTest gate
   updated); live probe: slide spends 3→2, regen returns to 3.
 
+### D-0024 — Procedural raid generation: deterministic layout → validate → stamp, on generated terrain, multi-site
+
+- **Status:** Decided — specs `docs/superpowers/specs/2026-06-14-procedural-raid-generation-design.md`
+  and `docs/superpowers/specs/2026-06-14-multi-site-terrain-generation-design.md`; plans
+  `2026-06-14-multi-site-terrain-gen-{A-terrain,B-partition,C-runtime}.md`. Implements the D-0007
+  determinism pillar as concrete generation; supersedes the single flat arena.
+- **Decision:**
+  1. **Pipeline = generate layout → validate → stamp geometry**, all seeded off
+     `URunManager::GetStream()` (D-0007/D-0011). `RaidLevelGenerator` lays out the arena;
+     `RaidLayoutValidator` runs a pure-geometric battery (slope-walkable, jump-reachability against
+     the hero reach envelope, escape-proof bounds, zone count/separation/drop-clearance); invalid
+     rolls **deterministically reroll** to a safe fallback. `URaidStampSubsystem` stamps collidable
+     greybox via ISM (the seam stays C++).
+  2. **The floor is generated terrain, not a flat slab.** `FRaidTerrain` is an integer-hash
+     two-octave heightfield (box-blurred) — `WorldHeightAt`, `FlattenDisc` (clamp pads flat),
+     `MaxSlopeInDisc`; nodes/zones sit on the surface (`GroundZAt`), enemy + objective spawns snap to
+     terrain Z. Determinism uses an **integer hash**, never float RNG, so host/clients match (floats
+     aren't bit-identical, D-0007).
+  3. **Multi-site:** `RaidPartition` Poisson-places 2–3 objective zone anchors (min separation,
+     bounds margin); `RaidObjective` runs a per-zone channel gate (per-zone `ChannelCenters` /
+     `ChannelProgresses`, active-site index) and spawns the climax mini-boss at the **last** site.
+     The wave director focuses pressure on the **active** site.
+  4. **Determinism is replicated, not streamed:** the client stamps the same arena from
+     `OnRep_MasterSeed`; only the seed crosses the wire.
+- **Why:** "procedural, but deterministic" + "feels like the arena was just dropped at a location"
+  (the user's terrain requirement). Validation-before-use keeps every seed playable (no escape gaps,
+  every pad reachable with the D-0015/D-0021 jump envelope).
+- **Verification (headless, in `Tools/SmokeTest.ps1`):** `GenSmoke` (determinism + slope +
+  jump-reachability + 2–3 zones/separation), `StampSmoke` (greybox stamping), `GenLoopSmoke`
+  (generated multi-site loop drives Victory). PIE line-traces confirm the terrain is physically
+  walkable (the gap headless can't test).
+- **Consequences / deferred:** **PCG/theme/void-gate art stays deferred** — the user wants level
+  *generation* deepened (modules / grammar / DataAsset-driven rooms) before any graphics pass (see
+  memory `procgen-deepen-before-graphics`). Enemies currently path on a flat plane and don't conform
+  to terrain Z while moving (logged follow-up; navmesh only later for flank/boss-reposition — see
+  `enemies-on-terrain-architecture`). Cross-links D-0007 (determinism), D-0011 (seed owner),
+  D-0017 (roster spawned per zone).
+
+### D-0025 — Combat director: attack tokens (the "combat circle")
+
+- **Status:** Decided — spec `docs/superpowers/specs/2026-06-14-combat-director-design.md`, plan
+  `docs/superpowers/plans/2026-06-14-combat-director.md`.
+- **Decision:** A small set of enemies attack at once; the rest circle and wait. `AAttackingElite`
+  gains an `EEngageState { Background, Engaged }`: **Background** holds at a ring standoff
+  (`AttackRange * RingStandoffMult`, ~1.6×) and never telegraphs/attacks; **Engaged** runs the full
+  approach→telegraph→attack loop. `RaidCombatDirector` (a **stateless** AngelScript namespace, all
+  per-enemy state lives on the elite) runs a server-only pass on `RaidObjective` (throttled ~0.25 s,
+  gated by `bEnableCombatDirector`): **release** finished tokens (attacked / dead / lost target /
+  timed out at `TokenTimeoutSeconds` 6 s) then **promote** the best eligible Background elites to fill
+  `AttackTokensPerPlayer` (3) slots **per living hero**. `PickBest` scores nearer-is-better minus
+  penalties for same-archetype and same-side already-engaged (variety + surround). Re-eligibility has
+  a `TokenCooldownSeconds` (2.5 s) and an `EngagementRange` (1100). **Boss and fodder are exempt**
+  (`bUsesAttackToken = false`; `AFodderEnemy` isn't an `AAttackingElite` at all) — the boss is always
+  the threat.
+- **Why:** the user's direction — *"all enemies should never be able to attack at once; a few chosen
+  enemies with complex AI interact with the player and the rest are dumber until eliminated or chosen."*
+  This is the DOOM 2016 token-pool / Arkham ~2–3-attacker / Left 4 Dead AI Director / TLOU combat-
+  coordinator pattern: the illusion of a big horde while bounding how many can hurt you. Chosen over
+  Mass (D-0003 keeps Mass for fodder only) — elites are pooled Actors with a custom tick + director,
+  Behavior Trees deferred (architecture "C").
+- **Consequences / deferred:** caps simultaneous attackers without thinning the horde. Future: split
+  melee/ranged token pools, per-zone director instances (pairs with D-0024 active-site focus), an
+  intensity curve, and BT-driven "Engaged" behavior. See memory `combat-director-attack-tokens`.
+- **Verification:** `CombatDirectorSmoke` (token cap honored + rotation: distinct elites ever engaged
+  > budget) RESULT 2/2; full `SmokeTest.ps1` suite 15/15 (incl. `RaidLoopVictory`/`Defeat` — gating
+  attacks didn't break the clear→extract loop).
+
 ---
 
 ## Still open
