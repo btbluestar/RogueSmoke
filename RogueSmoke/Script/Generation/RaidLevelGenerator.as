@@ -67,7 +67,7 @@ struct FRaidGenConfig
     float TerrainStepUU = 25.0;          // uu per height level (quantization)
 
     UPROPERTY()
-    int TerrainLevels = 8;               // max rim height = (Levels-1)*StepUU ~= 175uu
+    int TerrainLevels = 14;              // max rim height = (Levels-1)*StepUU ~= 325uu (visible wild rim)
 
     UPROPERTY()
     int ZonePlaneLevel = 2;              // flattened play-plane height level
