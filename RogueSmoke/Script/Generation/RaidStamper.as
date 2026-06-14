@@ -24,6 +24,7 @@ namespace RaidArena
     // without lighting). Palette aligned to red=danger / green=go / blue=player / yellow=exit and
     // floor-quiet/objects-shout; see docs research brief. One StampBoxesColored batch per type.
     const FLinearColor kFloorColor   = FLinearColor(0.604, 0.627, 0.651, 1.0);  // neutral gray — quiet base
+    const FLinearColor kTerrainColor = FLinearColor(0.480, 0.330, 0.165, 1.0);  // brown — generated ground
     const FLinearColor kWallColor    = FLinearColor(0.200, 0.216, 0.239, 1.0);  // dark — out-of-bounds blocker
     const FLinearColor kCoverColor   = FLinearColor(0.153, 0.761, 0.761, 1.0);  // cyan — tactical cover
     const FLinearColor kPlatformColor= FLinearColor(0.949, 0.639, 0.235, 1.0);  // amber — high ground / verticality
@@ -42,11 +43,22 @@ namespace RaidArena
         float Ex = Cfg.HalfExtent;
         float Th = 50.0;
 
-        // Floor — one thin slab over the footprint.
+        // Terrain floor — one brown column per tile, top at the tile height (stepped greybox terrain).
         {
+            const FRaidTerrain T = L.Terrain;
             TArray<FVector> C; TArray<FVector> S;
-            C.Add(FVector(0.0, 0.0, -10.0)); S.Add(FVector(Span, Span, 20.0));
-            Total += Stamp.StampBoxesColored(C, S, kFloorColor);
+            float colThick = 300.0;   // column thickness for solid collision under the surface
+            for (int j = 0; j < T.GridDim; j++)
+            {
+                for (int i = 0; i < T.GridDim; i++)
+                {
+                    FVector center = RaidTerrain::TileCenter(T, i, j);
+                    float h = float(T.Heights[j * T.GridDim + i]) * T.StepUU;
+                    C.Add(FVector(center.X, center.Y, h - colThick * 0.5));   // top at h
+                    S.Add(FVector(T.TileSize, T.TileSize, colThick));
+                }
+            }
+            Total += Stamp.StampBoxesColored(C, S, kTerrainColor);
         }
 
         // Four boundary walls (escape-proof height).
@@ -82,8 +94,12 @@ namespace RaidArena
 
         // Landmark marker pillars so the key nodes are legible at a glance (these aren't blockers;
         // they label where the Maw / hold / drop / extraction sit on the generated layout).
-        Total += StampMarker(Stamp, SlotLocation(L, ERaidSlotType::CombatCore), kMawColor,    600.0);
-        Total += StampMarker(Stamp, SlotLocation(L, ERaidSlotType::HoldAnchor), kHoldColor,    500.0);
+        // Mark every zone's Maw + hold pad (2-3 zones) so the multi-site layout is legible.
+        for (FRaidSite MS : L.MainSites)
+        {
+            Total += StampMarker(Stamp, NodeLocation(MS, ERaidSlotType::CombatCore), kMawColor,  600.0);
+            Total += StampMarker(Stamp, NodeLocation(MS, ERaidSlotType::HoldAnchor), kHoldColor, 500.0);
+        }
         Total += StampMarker(Stamp, L.Drop.Center,                              kDropColor,    400.0);
         Total += StampMarker(Stamp, L.Extraction.Center,                        kExtractColor, 700.0);
         return Total;

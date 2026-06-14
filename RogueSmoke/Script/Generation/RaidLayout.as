@@ -83,6 +83,25 @@ struct FRaidSite
     TArray<FRaidCover> Cover;
 }
 
+// A quantized height-tile grid (design spec §5/§8). PURE DATA. Heights are integer "levels" *
+// StepUU, so two identical seeds yield byte-identical terrain on every machine (no float interp).
+// Grid is GridDim x GridDim tiles, each TileSize uu, centered on the footprint origin.
+struct FRaidTerrain
+{
+    UPROPERTY()
+    int GridDim = 20;          // tiles per side (GridDim*GridDim tiles total)
+
+    UPROPERTY()
+    float TileSize = 250.0;    // uu per tile edge
+
+    UPROPERTY()
+    float StepUU = 25.0;       // uu per height level (quantization step)
+
+    // Row-major heights in LEVELS (multiply by StepUU for uu). Size == GridDim*GridDim.
+    UPROPERTY()
+    TArray<int> Heights;
+}
+
 struct FRaidLayout
 {
     UPROPERTY()
@@ -95,6 +114,9 @@ struct FRaidLayout
     // Half-extent of the square playable footprint (uu). Fixed for MVP (dial #7 = a later plan).
     UPROPERTY()
     float HalfExtent = 2500.0;
+
+    UPROPERTY()
+    FRaidTerrain Terrain;
 
     UPROPERTY()
     FRaidSite Drop;

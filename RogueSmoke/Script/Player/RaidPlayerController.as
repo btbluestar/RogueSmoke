@@ -849,15 +849,75 @@ class ARaidPlayerController : APlayerController
         if (RS.bOk) Pass += 1;
         else Print(f"[GenSmoke] FAIL 5: fallback invalid ({RS.PassCount}/{RS.Total} {RS.FirstFail})", 12.0);
 
-        // 6. An unreachable platform is rejected (jump-reachability active).
+        // 6. An unreachable platform is rejected (jump-reachability active). Base on a VALIDATED
+        // layout so the injected platform is the only failure (multi-site raw rolls may be out of bounds).
         Total += 1;
-        FRaidLayout BadReach = RaidGen::Generate(12345, Cfg);
+        FRaidLayout BadReach = RaidGen::GenerateValidated(12345, Cfg);
         for (int i = 0; i < BadReach.MainSites[0].Nodes.Num(); i++)
             if (BadReach.MainSites[0].Nodes[i].Slot == ERaidSlotType::HighGround)
             { BadReach.MainSites[0].Nodes[i].Location.Z = 5000.0; break; }
         FRaidValidationResult RR = RaidValidate::Validate(BadReach, Cfg);
         if (!RR.bOk && RR.FirstFail == "jump-reachability") Pass += 1;
         else Print(f"[GenSmoke] FAIL 6: unreachable platform not caught ({RR.FirstFail})", 12.0);
+
+        // --- Plan A: terrain assertions ---
+        FRaidGenConfig TCfg;
+        FRaidLayout TL = RaidGen::GenerateValidated(20260614, TCfg);
+
+        // (7) Terrain present: a full grid of heights.
+        Total += 1;
+        if (TL.Terrain.Heights.Num() == TCfg.TerrainGridDim * TCfg.TerrainGridDim)
+            Pass += 1;
+        else
+            Print("[GenSmoke] FAIL terrain-present", 6.0);
+
+        // (8) Determinism: same seed -> byte-identical terrain heights.
+        FRaidLayout TL2 = RaidGen::GenerateValidated(20260614, TCfg);
+        bool bSame = (TL.Terrain.Heights.Num() == TL2.Terrain.Heights.Num());
+        if (bSame)
+        {
+            for (int ti = 0; ti < TL.Terrain.Heights.Num(); ti++)
+                if (TL.Terrain.Heights[ti] != TL2.Terrain.Heights[ti]) { bSame = false; break; }
+        }
+        Total += 1;
+        if (bSame) Pass += 1; else Print("[GenSmoke] FAIL terrain-determinism", 6.0);
+
+        // (9) Slope-walkable: the flattened play disc obeys the cap.
+        int slope = RaidTerrain::MaxSlopeInDisc(TL.Terrain, TL.MainSites[0].Center.X,
+                                                TL.MainSites[0].Center.Y, TCfg.SiteRadius);
+        Total += 1;
+        if (slope <= TCfg.MaxZoneSlopeLevels) Pass += 1;
+        else Print(f"[GenSmoke] FAIL slope-walkable ({slope})", 6.0);
+
+        // --- Plan B: multi-site assertions ---
+        // (1) Zone count in range.
+        Total += 1;
+        if (TL.MainSites.Num() >= TCfg.ZoneCountMin && TL.MainSites.Num() <= TCfg.ZoneCountMax)
+            Pass += 1;
+        else
+            Print(f"[GenSmoke] FAIL zone-count ({TL.MainSites.Num()})", 6.0);
+
+        // (2) Zone centers min-separated.
+        bool bSep = true;
+        for (int za = 0; za < TL.MainSites.Num(); za++)
+            for (int zb = za + 1; zb < TL.MainSites.Num(); zb++)
+            {
+                FVector Da = TL.MainSites[za].Center;
+                FVector Db = TL.MainSites[zb].Center;
+                if (FVector(Da.X - Db.X, Da.Y - Db.Y, 0.0).Size() < TCfg.ZoneMinSeparation - 0.5)
+                    bSep = false;
+            }
+        Total += 1;
+        if (bSep) Pass += 1; else Print("[GenSmoke] FAIL zone-separation", 6.0);
+
+        // (3) Determinism: same seed -> same zone count + centers.
+        FRaidLayout TL3 = RaidGen::GenerateValidated(20260614, TCfg);
+        bool bMS = (TL3.MainSites.Num() == TL.MainSites.Num());
+        if (bMS)
+            for (int zc = 0; zc < TL.MainSites.Num(); zc++)
+                if ((TL.MainSites[zc].Center - TL3.MainSites[zc].Center).Size() > 0.01) { bMS = false; break; }
+        Total += 1;
+        if (bMS) Pass += 1; else Print("[GenSmoke] FAIL multisite-determinism", 6.0);
 
         Print(f"[GenSmoke] RESULT {Pass}/{Total}", 15.0);
     }
@@ -2028,6 +2088,13 @@ class ARaidPlayerController : APlayerController
                 Obj.DefendWaveCount = 0;
             }
             Obj.DebugFillChannel();                  // force the bar full; next tick opens extraction
+
+            // Plan C: prove the generated objective is genuinely multi-site (2+ zones).
+            if (Obj != nullptr && Obj.ChannelCenters.Num() >= 2)
+                Print(f"[GenLoopSmoke] multisite OK ({Obj.ChannelCenters.Num()} zones)", 5.0);
+            else
+                Print("[GenLoopSmoke] FAIL multisite (<2 zones)", 8.0);
+
             GenLoopRetry();
             return;
         }

@@ -8,7 +8,7 @@
 struct FRaidGenConfig
 {
     UPROPERTY()
-    float HalfExtent = 2500.0;           // ~50x50m playable footprint (4-player baseline)
+    float HalfExtent = 3000.0;           // ~60x60m playable footprint (room for 2-3 zones)
 
     UPROPERTY()
     float BoundaryMargin = 250.0;        // keep nodes this far inside the bounds (escape-proof heuristic)
@@ -23,7 +23,7 @@ struct FRaidGenConfig
     int MinHighGround = 2;               // validator floor
 
     UPROPERTY()
-    float SiteRadius = 1600.0;           // Skatepark footprint radius
+    float SiteRadius = 1000.0;           // per-zone footprint radius (shrunk so 2-3 zones fit)
 
     UPROPERTY()
     float HoldAnchorMinOffset = 600.0;   // HoldAnchor offset from the core (offset power position)
@@ -55,6 +55,47 @@ struct FRaidGenConfig
 
     UPROPERTY()
     float EscapeMargin = 150.0;          // wall must exceed (highest standable + VertCeiling) by this
+
+    // --- Plan A: terrain floor ---
+    UPROPERTY()
+    int TerrainGridDim = 24;             // tiles per side (24*250=6000 covers the 3000 half-extent)
+
+    UPROPERTY()
+    float TerrainTileSize = 250.0;       // uu per tile
+
+    UPROPERTY()
+    float TerrainStepUU = 25.0;          // uu per height level (quantization)
+
+    UPROPERTY()
+    int TerrainLevels = 14;              // max rim height = (Levels-1)*StepUU ~= 325uu (visible wild rim)
+
+    UPROPERTY()
+    int ZonePlaneLevel = 2;              // flattened play-plane height level
+
+    UPROPERTY()
+    float ZoneFlattenRadius = 1300.0;    // flatten disc radius around a site (> SiteRadius)
+
+    UPROPERTY()
+    float ZoneFlattenInnerFrac = 0.6;    // fully flat within this fraction of the radius
+
+    UPROPERTY()
+    int MaxZoneSlopeLevels = 1;          // validator: max neighbour delta inside a zone
+
+    // --- Plan B: multi-site placement ---
+    UPROPERTY()
+    int ZoneCountMin = 2;                // fewest objective zones per raid
+
+    UPROPERTY()
+    int ZoneCountMax = 3;                // most objective zones per raid
+
+    UPROPERTY()
+    float ZoneMinSeparation = 2000.0;    // min distance between zone centers (= 2*SiteRadius; 3 zones still fit)
+
+    UPROPERTY()
+    float ZoneAnchorMargin = 1600.0;     // anchor box half-width (margin+SiteRadius < HalfExtent-BoundaryMargin)
+
+    UPROPERTY()
+    float ZoneDropClearance = 2000.0;    // zone CENTER this far from drop/extraction (~1000 footprint edge clear)
 }
 
 namespace RaidGen
@@ -74,6 +115,10 @@ namespace RaidGen
         L.Seed = Seed;
         L.HalfExtent = Cfg.HalfExtent;
 
+        // Terrain floor: deterministic heightfield, flattened under the main play area.
+        L.Terrain = RaidTerrain::Generate(Seed, Cfg.TerrainGridDim, Cfg.TerrainTileSize,
+                                          Cfg.TerrainStepUU, Cfg.TerrainLevels);
+
         FRandomStream Rng(Seed + kArenaSalt);
 
         float In = Cfg.HalfExtent - Cfg.BoundaryMargin;
@@ -84,9 +129,25 @@ namespace RaidGen
         L.Drop = MakeAnchorSite(ERaidSiteType::Drop, ERaidSlotType::Entrance, EdgeMidpoint(DropEdge, In));
         L.Extraction = MakeAnchorSite(ERaidSiteType::Extraction, ERaidSlotType::Exit, EdgeMidpoint(ExtEdge, In));
 
-        // One Skatepark main site near center, bounded jitter.
-        FVector SiteCenter = FVector(Rng.RandRange(-300.0, 300.0), Rng.RandRange(-300.0, 300.0), 0.0);
-        L.MainSites.Add(BuildSkatepark(SiteCenter, Cfg, Rng));
+        // 2-3 objective zones, placed by reserve-then-populate Poisson (drop+extraction reserved).
+        TArray<FVector> Reserved;
+        Reserved.Add(L.Drop.Center);
+        Reserved.Add(L.Extraction.Center);
+        int ZoneCount = Rng.RandRange(Cfg.ZoneCountMin, Cfg.ZoneCountMax);
+        TArray<FVector> Anchors = RaidPartition::PlaceZoneAnchors(
+            Rng, Cfg.ZoneAnchorMargin, ZoneCount, Cfg.ZoneMinSeparation, Reserved, Cfg.ZoneDropClearance);
+
+        for (int z = 0; z < Anchors.Num(); z++)
+        {
+            FVector SiteCenter = Anchors[z];
+            L.MainSites.Add(BuildSkatepark(SiteCenter, Cfg, Rng));
+            // Flatten this zone's play disc.
+            RaidTerrain::FlattenDisc(L.Terrain, SiteCenter.X, SiteCenter.Y, Cfg.ZonePlaneLevel,
+                                     Cfg.ZoneFlattenRadius, Cfg.ZoneFlattenInnerFrac);
+        }
+
+        // Sit all nodes/cover/anchors on the (per-zone flattened) surface.
+        SitNodesOnTerrain(L, Cfg);
 
         return L;
     }
@@ -99,6 +160,29 @@ namespace RaidGen
         if (Edge == 1) return FVector(0.0,  In, 0.0);
         if (Edge == 2) return FVector(-In, 0.0, 0.0);
         return FVector(0.0, -In, 0.0);
+    }
+
+    // Place node/cover/anchor heights onto the terrain surface. HighGround platforms keep their
+    // authored height but are lifted by the ground beneath them. Pure; mutates L in place.
+    void SitNodesOnTerrain(FRaidLayout& L, const FRaidGenConfig& Cfg)
+    {
+        L.Drop.Center.Z = RaidTerrain::WorldHeightAt(L.Terrain, L.Drop.Center.X, L.Drop.Center.Y);
+        L.Extraction.Center.Z = RaidTerrain::WorldHeightAt(L.Terrain, L.Extraction.Center.X, L.Extraction.Center.Y);
+        for (int si = 0; si < L.MainSites.Num(); si++)
+        {
+            FVector c = L.MainSites[si].Center;
+            L.MainSites[si].Center.Z = RaidTerrain::WorldHeightAt(L.Terrain, c.X, c.Y);
+            for (int ni = 0; ni < L.MainSites[si].Nodes.Num(); ni++)
+            {
+                FVector p = L.MainSites[si].Nodes[ni].Location;
+                float ground = RaidTerrain::WorldHeightAt(L.Terrain, p.X, p.Y);
+                if (L.MainSites[si].Nodes[ni].Slot == ERaidSlotType::HighGround)
+                    L.MainSites[si].Nodes[ni].Location.Z = p.Z + ground;   // platform above local ground
+                else
+                    L.MainSites[si].Nodes[ni].Location.Z = ground;
+            }
+            // Cover keeps its XY; its base rides the surface (Radius unchanged).
+        }
     }
 
     FRaidNode MakeNode(ERaidSlotType Slot, FVector Loc, float Cap)
@@ -261,37 +345,51 @@ namespace RaidGen
     {
         FRaidLayout L;
         L.HalfExtent = Cfg.HalfExtent;
+        L.Terrain = RaidTerrain::Generate(0, Cfg.TerrainGridDim, Cfg.TerrainTileSize,
+                                          Cfg.TerrainStepUU, Cfg.TerrainLevels);
         float In = Cfg.HalfExtent - Cfg.BoundaryMargin;
 
         L.Drop = MakeAnchorSite(ERaidSiteType::Drop, ERaidSlotType::Entrance, FVector(-In, 0.0, 0.0));
         L.Extraction = MakeAnchorSite(ERaidSiteType::Extraction, ERaidSlotType::Exit, FVector(In, 0.0, 0.0));
 
+        // Two well-separated fallback zones (passes zone-count>=2 and zone-separation).
+        float Off = Cfg.ZoneMinSeparation * 0.5 + 50.0;
+        L.MainSites.Add(BuildFallbackZone(FVector(0.0,  Off, 0.0), Cfg));
+        L.MainSites.Add(BuildFallbackZone(FVector(0.0, -Off, 0.0), Cfg));
+        // Flatten both fallback discs.
+        RaidTerrain::FlattenDisc(L.Terrain, 0.0,  Off, Cfg.ZonePlaneLevel, Cfg.ZoneFlattenRadius, Cfg.ZoneFlattenInnerFrac);
+        RaidTerrain::FlattenDisc(L.Terrain, 0.0, -Off, Cfg.ZonePlaneLevel, Cfg.ZoneFlattenRadius, Cfg.ZoneFlattenInnerFrac);
+        SitNodesOnTerrain(L, Cfg);
+        return L;
+    }
+
+    // A deterministic, guaranteed-valid Skatepark zone centered at 'Center' for the safe fallback.
+    FRaidSite BuildFallbackZone(FVector Center, const FRaidGenConfig& Cfg)
+    {
         FRaidSite S;
         S.Type = ERaidSiteType::MainObjective;
         S.Objective = ERaidObjectiveType::HoldAndChannel;
         S.Archetype = ERaidArchetype::Skatepark;
-        S.Center = FVector::ZeroVector;
-        S.Nodes.Add(MakeNode(ERaidSlotType::CombatCore, FVector::ZeroVector, 0.8));
-        S.Nodes.Add(MakeNode(ERaidSlotType::HoldAnchor, FVector(Cfg.HoldAnchorMinOffset + 100.0, 0.0, 0.0), 1.0));
+        S.Center = Center;
+        S.Nodes.Add(MakeNode(ERaidSlotType::CombatCore, Center, 0.8));
+        S.Nodes.Add(MakeNode(ERaidSlotType::HoldAnchor, Center + FVector(Cfg.HoldAnchorMinOffset + 100.0, 0.0, 0.0), 1.0));
         for (int i = 0; i < Cfg.HighGroundCount; i++)
         {
             float A = (2.0 * PI * float(i)) / float(Cfg.HighGroundCount);
-            FVector P = FVector(Math::Cos(A), Math::Sin(A), 0.0) * (Cfg.SiteRadius * 0.7);
+            FVector P = Center + FVector(Math::Cos(A), Math::Sin(A), 0.0) * (Cfg.SiteRadius * 0.7);
             P.Z = (Cfg.HighGroundMinZ + Cfg.HighGroundMaxZ) * 0.5;
             S.Nodes.Add(MakeNode(ERaidSlotType::HighGround, P, 0.5));
         }
-        S.Nodes.Add(MakeNode(ERaidSlotType::Entrance, FVector(-Cfg.SiteRadius, 0.0, 0.0), 0.2));
-        S.Nodes.Add(MakeNode(ERaidSlotType::Exit,     FVector( Cfg.SiteRadius, 0.0, 0.0), 0.2));
-        // A ring of exactly CoverMin cover, spaced well above CoverMinSeparation.
+        S.Nodes.Add(MakeNode(ERaidSlotType::Entrance, Center + FVector(-Cfg.SiteRadius, 0.0, 0.0), 0.2));
+        S.Nodes.Add(MakeNode(ERaidSlotType::Exit,     Center + FVector( Cfg.SiteRadius, 0.0, 0.0), 0.2));
         for (int i = 0; i < Cfg.CoverMin; i++)
         {
             float A = (2.0 * PI * float(i)) / float(Cfg.CoverMin);
             FRaidCover C;
-            C.Location = FVector(Math::Cos(A), Math::Sin(A), 0.0) * (Cfg.SiteRadius * 0.55);
+            C.Location = Center + FVector(Math::Cos(A), Math::Sin(A), 0.0) * (Cfg.SiteRadius * 0.55);
             C.Radius = Cfg.CoverRadius;
             S.Cover.Add(C);
         }
-        L.MainSites.Add(S);
-        return L;
+        return S;
     }
 }

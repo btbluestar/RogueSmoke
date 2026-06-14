@@ -73,6 +73,17 @@ class ARaidObjective : AActor
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Raid|Mode")
     FVector ExtractionCenter = FVector::ZeroVector;
 
+    // --- Plan C: multi-site channels. ChannelCenter/ChannelProgress above mirror the ACTIVE site
+    // (HUD back-compat); these hold every zone. Parallel arrays (same length = zone count). ---
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Raid|Channel")
+    TArray<FVector> ChannelCenters;
+
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Raid|Channel")
+    TArray<float> ChannelProgresses;
+
+    // Index into ChannelCenters of the site currently being channeled (for director focus). -1 = none yet.
+    private int ActiveSiteIndex = -1;
+
     // The final defend wave spawned when extraction is called (D-0010). Leave the class
     // unset to skip spawning (e.g. while testing the timer alone).
     UPROPERTY(EditAnywhere, Category = "Raid|Defend Wave")
@@ -171,6 +182,9 @@ class ARaidObjective : AActor
 
     private bool bSeenElites = false;
     private bool bSpawnedInitialElites = false;
+    // Cached generated terrain so enemy spawns sit on the surface (not the Z=0 floor plane).
+    private FRaidTerrain GenTerrain;
+    private bool bHasGenTerrain = false;
     private float Elapsed = 0.0;
     private float WaveTimer = 0.0;
     private int WaveIndex = 0;
@@ -210,10 +224,19 @@ class ARaidObjective : AActor
             // needn't carry the enum value (editor-python can't set AS EnumProperties).
             Mode = EObjectiveMode::HoldAndChannel;
             FRaidLayout L = RaidArena::GetLayout(GetMasterSeed());
-            if (L.MainSites.Num() > 0)
-                ChannelCenter = RaidArena::NodeLocation(L.MainSites[0], ERaidSlotType::CombatCore);
+            GenTerrain = L.Terrain;
+            bHasGenTerrain = L.Terrain.Heights.Num() > 0;   // snap enemy spawns onto this surface
+            for (int i = 0; i < L.MainSites.Num(); i++)
+            {
+                ChannelCenters.Add(RaidArena::NodeLocation(L.MainSites[i], ERaidSlotType::CombatCore));
+                ChannelProgresses.Add(0.0);
+            }
             ExtractionCenter = L.Extraction.Center;
-            SetActorLocation(ChannelCenter);
+            if (ChannelCenters.Num() > 0)
+            {
+                ChannelCenter = ChannelCenters[0];   // active-site mirror starts on zone 0
+                SetActorLocation(ChannelCenter);
+            }
         }
     }
 
@@ -339,6 +362,11 @@ class ARaidObjective : AActor
     {
         FVector Base = GetActorLocation();
 
+        // Multi-site: the swarm's pressure concentrates on the active channel site (decision 9).
+        if (Mode == EObjectiveMode::HoldAndChannel && ActiveSiteIndex >= 0
+            && ActiveSiteIndex < ChannelCenters.Num())
+            Base = ChannelCenters[ActiveSiteIndex];
+
         TArray<AHeroCharacter> Heroes;
         GetAllActorsOfClass(Heroes);
         if (Heroes.Num() > 0)
@@ -355,14 +383,25 @@ class ARaidObjective : AActor
             Dir = FVector(1.0, 0.0, 0.0);
         Dir = Dir.GetSafeNormal();
 
-        // Ring sits FodderSpawnDistance out, a touch above the floor so the bodies read.
-        return Base + Dir * FodderSpawnDistance + FVector(0.0, 0.0, -40.0);
+        // Ring sits FodderSpawnDistance out, snapped onto the terrain surface so bodies aren't buried.
+        FVector Ring = Base + Dir * FodderSpawnDistance;
+        Ring.Z = GroundZAt(Ring.X, Ring.Y) + 10.0;
+        return Ring;
     }
 
     private int GetMasterSeed() const
     {
         ARaidGameState GameState = Cast<ARaidGameState>(Gameplay::GetGameState());
         return GameState != nullptr ? GameState.MasterSeed : 1;
+    }
+
+    // Terrain surface Z under an XY (so enemies don't spawn buried). Legacy (no generated terrain)
+    // keeps the objective's own Z, preserving the flat-floor maps unchanged.
+    private float GroundZAt(float X, float Y) const
+    {
+        if (bHasGenTerrain)
+            return RaidTerrain::WorldHeightAt(GenTerrain, X, Y);
+        return GetActorLocation().Z;
     }
 
     // Spawn the gating elites once: an optional boss at the center plus a seeded mix from EliteRoster on a
@@ -381,7 +420,8 @@ class ARaidObjective : AActor
 
         if (BossClass.Get() != nullptr)
         {
-            AEliteEnemyBase Boss = Director.SpawnElite(BossClass, Center, FRotator());
+            FVector BossPos = FVector(Center.X, Center.Y, GroundZAt(Center.X, Center.Y) + 40.0);
+            AEliteEnemyBase Boss = Director.SpawnElite(BossClass, BossPos, FRotator());
             if (Boss != nullptr)
                 Boss.SetCountsAsObjectiveTarget(true);
             bBoss = true;
@@ -397,7 +437,9 @@ class ARaidObjective : AActor
                     continue;
                 float Angle = (2.0 * 3.14159265 * i) / InitialEliteCount;
                 FVector Offset = FVector(Math::Cos(Angle), Math::Sin(Angle), 0.0) * EliteSpawnRadius;
-                AEliteEnemyBase Ring = Director.SpawnElite(Cls, Center + Offset, FRotator());
+                FVector RingPos = Center + Offset;
+                RingPos.Z = GroundZAt(RingPos.X, RingPos.Y) + 40.0;
+                AEliteEnemyBase Ring = Director.SpawnElite(Cls, RingPos, FRotator());
                 if (Ring != nullptr)
                     Ring.SetCountsAsObjectiveTarget(true);
                 Spawned += 1;
@@ -436,38 +478,106 @@ class ARaidObjective : AActor
             SetPhase(ERaidPhase::ExtractionReady);
     }
 
-    // Hold-and-channel: accumulate progress while >= 1 living hero stands in the channel radius.
+    // Hold-and-channel: every zone channels independently while >= 1 living hero stands in its radius.
+    // Extraction opens only when ALL zones are full; the last zone to fill spawns the mini-boss.
     private void UpdateChannel()
     {
         const float RadiusSq = ChannelRadius * ChannelRadius;
-        bool bAnyChanneling = false;
+        const float Dt = GetWorld().GetDeltaSeconds();
 
         TArray<AHeroCharacter> Heroes;
         GetAllActorsOfClass(Heroes);
-        for (AHeroCharacter H : Heroes)
+
+        // Single-point fallback (no generated zones): legacy behavior on ChannelCenter/ChannelProgress.
+        if (ChannelCenters.Num() == 0)
         {
-            if (H == nullptr || H.IsIncapacitated())
-                continue;
-            if ((H.GetActorLocation() - ChannelCenter).SizeSquared() <= RadiusSq)
+            for (AHeroCharacter H : Heroes)
             {
-                bAnyChanneling = true;
-                break;
+                if (H == nullptr || H.IsIncapacitated())
+                    continue;
+                if ((H.GetActorLocation() - ChannelCenter).SizeSquared() <= RadiusSq)
+                {
+                    ChannelProgress = Math::Min(ChannelProgress + Dt, ChannelSeconds);
+                    break;
+                }
             }
+            if (ChannelProgress >= ChannelSeconds)
+                SetPhase(ERaidPhase::ExtractionReady);
+            return;
         }
 
-        if (bAnyChanneling)
-            ChannelProgress = Math::Min(ChannelProgress + GetWorld().GetDeltaSeconds(), ChannelSeconds);
+        int Active = -1;
+        int CompleteCount = 0;
+        for (int s = 0; s < ChannelCenters.Num(); s++)
+        {
+            bool bOccupied = false;
+            for (AHeroCharacter H : Heroes)
+            {
+                if (H == nullptr || H.IsIncapacitated())
+                    continue;
+                if ((H.GetActorLocation() - ChannelCenters[s]).SizeSquared() <= RadiusSq)
+                { bOccupied = true; break; }
+            }
+            if (bOccupied)
+            {
+                ChannelProgresses[s] = Math::Min(ChannelProgresses[s] + Dt, ChannelSeconds);
+                if (Active < 0)
+                    Active = s;   // lowest-index occupied site is the director's focus
+            }
+            if (ChannelProgresses[s] >= ChannelSeconds)
+                CompleteCount += 1;
+        }
 
-        if (ChannelProgress >= ChannelSeconds)
+        // Mirror the active (or last-active) site into ChannelCenter/ChannelProgress for the HUD.
+        if (Active >= 0)
+            ActiveSiteIndex = Active;
+        if (ActiveSiteIndex >= 0)
+        {
+            ChannelCenter = ChannelCenters[ActiveSiteIndex];
+            ChannelProgress = ChannelProgresses[ActiveSiteIndex];
+        }
+
+        // All zones full -> climax mini-boss at the last-completed site, then open extraction.
+        if (CompleteCount >= ChannelCenters.Num())
+        {
+            SpawnClimaxMiniBoss();
             SetPhase(ERaidPhase::ExtractionReady);
+        }
+    }
+
+    // Spawn the mini-boss at the active (last-completed) site and suppress the director's timed spike.
+    private void SpawnClimaxMiniBoss()
+    {
+        if (bSpikeBossSpawned)
+            return;
+        bSpikeBossSpawned = true;     // also stops RaidDirector's timed mini-boss from double-spawning
+        if (BossClass.Get() == nullptr)
+            return;
+        int Idx = ActiveSiteIndex >= 0 ? ActiveSiteIndex : 0;
+        FVector Where = (Idx < ChannelCenters.Num()) ? ChannelCenters[Idx] : GetActorLocation();
+        USpawnDirector Director = USpawnDirector::Get();
+        if (Director != nullptr)
+        {
+            AEliteEnemyBase Boss = Director.SpawnElite(BossClass, Where + FVector(0.0, 0.0, 40.0), FRotator());
+            if (Boss != nullptr)
+            {
+                Boss.SetCountsAsObjectiveTarget(false);   // a spike, not a re-gate (extraction already opens)
+                Print("[Raid] climax mini-boss at last objective", 4.0);
+            }
+        }
     }
 
     // Test/exec hook: jump the channel bar to full so the smoke can drive the loop headlessly.
     UFUNCTION(BlueprintCallable, Category = "Raid|Channel")
     void DebugFillChannel()
     {
-        if (HasAuthority())
-            ChannelProgress = ChannelSeconds;
+        if (!HasAuthority())
+            return;
+        ChannelProgress = ChannelSeconds;
+        for (int s = 0; s < ChannelProgresses.Num(); s++)
+            ChannelProgresses[s] = ChannelSeconds;
+        if (ActiveSiteIndex < 0 && ChannelCenters.Num() > 0)
+            ActiveSiteIndex = ChannelCenters.Num() - 1;   // attribute the climax to the last zone
     }
 
     // Once the arena is clear, any living hero standing inside the extraction zone calls it in.
