@@ -125,6 +125,35 @@ namespace RaidValidate
         Check(R, bCoverCountOk, "cover-count");
         Check(R, bCoverSepOk, "cover-separation");
 
+        // --- Plan 2 ballistic checks (design spec §9 #1, #2; #6 partial) ---
+        FReachEnvelope Env = RaidReach::Default();
+        float MaxStandableZ = 0.0;
+        bool bReachOk = true;
+        for (FRaidSite S : L.MainSites)
+        {
+            FVector CenterFlat = S.Center;
+            CenterFlat.Z = 0.0;
+            for (FRaidNode Node : S.Nodes)
+            {
+                if (Node.Slot != ERaidSlotType::HighGround)
+                    continue;
+                if (Node.Location.Z > MaxStandableZ)
+                    MaxStandableZ = Node.Location.Z;
+                // Vertically reachable by double-jump from the ground below.
+                if (Node.Location.Z > Env.VertCeiling - Cfg.JumpReachMargin)
+                    bReachOk = false;
+                // Horizontally reachable across the floor (slide-hop + double-jump).
+                FVector Flat = Node.Location;
+                Flat.Z = 0.0;
+                if ((Flat - CenterFlat).Size() > Env.HorizDoubleJump)
+                    bReachOk = false;
+            }
+        }
+        Check(R, bReachOk, "jump-reachability");
+
+        // Escape-proof: the boundary wall must out-reach the highest standable point.
+        Check(R, Cfg.WallHeight >= MaxStandableZ + Env.VertCeiling + Cfg.EscapeMargin, "escape-proof");
+
         R.bOk = (R.PassCount == R.Total);
         return R;
     }
