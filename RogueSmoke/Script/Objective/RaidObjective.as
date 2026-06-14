@@ -552,8 +552,13 @@ class ARaidObjective : AActor
     UFUNCTION(BlueprintCallable, Category = "Raid|Channel")
     void DebugFillChannel()
     {
-        if (HasAuthority())
-            ChannelProgress = ChannelSeconds;
+        if (!HasAuthority())
+            return;
+        ChannelProgress = ChannelSeconds;
+        for (int s = 0; s < ChannelProgresses.Num(); s++)
+            ChannelProgresses[s] = ChannelSeconds;
+        if (ActiveSiteIndex < 0 && ChannelCenters.Num() > 0)
+            ActiveSiteIndex = ChannelCenters.Num() - 1;   // attribute the climax to the last zone
     }
 
     // Once the arena is clear, any living hero standing inside the extraction zone calls it in.
