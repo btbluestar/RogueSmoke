@@ -859,6 +859,35 @@ class ARaidPlayerController : APlayerController
         if (!RR.bOk && RR.FirstFail == "jump-reachability") Pass += 1;
         else Print(f"[GenSmoke] FAIL 6: unreachable platform not caught ({RR.FirstFail})", 12.0);
 
+        // --- Plan A: terrain assertions ---
+        FRaidGenConfig TCfg;
+        FRaidLayout TL = RaidGen::GenerateValidated(20260614, TCfg);
+
+        // (7) Terrain present: a full grid of heights.
+        Total += 1;
+        if (TL.Terrain.Heights.Num() == TCfg.TerrainGridDim * TCfg.TerrainGridDim)
+            Pass += 1;
+        else
+            Print("[GenSmoke] FAIL terrain-present", 6.0);
+
+        // (8) Determinism: same seed -> byte-identical terrain heights.
+        FRaidLayout TL2 = RaidGen::GenerateValidated(20260614, TCfg);
+        bool bSame = (TL.Terrain.Heights.Num() == TL2.Terrain.Heights.Num());
+        if (bSame)
+        {
+            for (int ti = 0; ti < TL.Terrain.Heights.Num(); ti++)
+                if (TL.Terrain.Heights[ti] != TL2.Terrain.Heights[ti]) { bSame = false; break; }
+        }
+        Total += 1;
+        if (bSame) Pass += 1; else Print("[GenSmoke] FAIL terrain-determinism", 6.0);
+
+        // (9) Slope-walkable: the flattened play disc obeys the cap.
+        int slope = RaidTerrain::MaxSlopeInDisc(TL.Terrain, TL.MainSites[0].Center.X,
+                                                TL.MainSites[0].Center.Y, TCfg.SiteRadius);
+        Total += 1;
+        if (slope <= TCfg.MaxZoneSlopeLevels) Pass += 1;
+        else Print(f"[GenSmoke] FAIL slope-walkable ({slope})", 6.0);
+
         Print(f"[GenSmoke] RESULT {Pass}/{Total}", 15.0);
     }
 
