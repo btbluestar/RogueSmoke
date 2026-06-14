@@ -862,6 +862,31 @@ class ARaidPlayerController : APlayerController
         Print(f"[GenSmoke] RESULT {Pass}/{Total}", 15.0);
     }
 
+    // Headless gate for procgen STAMPING (procgen Plan 2). Builds the arena from a fixed seed twice
+    // and asserts the geometry stamped + the stamp is deterministic/idempotent. Needs a world (the
+    // URaidStampSubsystem), so it runs in-game, not under run_code_test. SmokeTest greps RESULT.
+    UFUNCTION(Exec)
+    void StampSmoke()
+    {
+        int N1 = RaidArena::BuildFromSeed(12345);
+        int N2 = RaidArena::BuildFromSeed(12345);   // re-stamp: ClearStamps + rebuild
+
+        int Pass = 0;
+        int Total = 0;
+
+        // 1. Expected geometry stamped: floor(1) + walls(4) + platforms(3) + cover(>=6) >= 8.
+        Total += 1;
+        if (N1 >= 8) Pass += 1;
+        else Print(f"[StampSmoke] FAIL 1: too few boxes stamped ({N1})", 12.0);
+
+        // 2. Deterministic + ClearStamps works (re-stamp yields the same count, not double).
+        Total += 1;
+        if (N1 == N2) Pass += 1;
+        else Print(f"[StampSmoke] FAIL 2: re-stamp count drifted ({N1} -> {N2})", 12.0);
+
+        Print(f"[StampSmoke] RESULT {Pass}/{Total}", 15.0);
+    }
+
     private float FlatSpeed(UCharacterMovementComponent Move) const
     {
         FVector Vel = Move.Velocity;

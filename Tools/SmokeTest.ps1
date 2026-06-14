@@ -35,6 +35,8 @@ $Cases = @(
     @{ Name = "RaidArena";          Map = "/Game/Levels/RaidArena";                       Expect = @("[Raid] spawned 4 ring elites + boss", "[MoveSmoke] RESULT 4/4"); Exec = "MoveSmoke"; Window = 45 }
     # Procedural raid generation foundation (Plan 1): deterministic layout + validation, pure-logic.
     @{ Name = "ProcGenFoundation";  Map = "/Game/Levels/RaidArena";                       Expect = "[GenSmoke] RESULT 6/6"; Exec = "GenSmoke"; Window = 25 }
+    # Procgen stamping (Plan 2): builds collidable greybox geometry from the seed via the ISM seam.
+    @{ Name = "StampArena";         Map = "/Game/Levels/RaidArena";                       Expect = "[StampSmoke] RESULT 2/2"; Exec = "StampSmoke"; Window = 25 }
     @{ Name = "Enemy_Crawler";      Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Crawler";     Expect = "CRAWLER (fodder): spawned 8" }
     @{ Name = "Enemy_Carapace";     Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Carapace";    Expect = "CARAPACE: spawned 2" }
     @{ Name = "Enemy_Spitter";      Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Spitter";     Expect = "SPITTER: spawned 2" }
