@@ -1951,11 +1951,17 @@ class ARaidPlayerController : APlayerController
             return;
         }
         FVector C = Hero.GetActorLocation();
+        // Mix two archetypes (Carapace melee + Spitter ranged) so the director's variety + spread
+        // scoring is actually exercised, not just the cap.
         for (int i = 0; i < 8; i++)
         {
             float A = (2.0 * 3.14159265 * float(i)) / 8.0;
             FVector P = C + FVector(Math::Cos(A), Math::Sin(A), 0.0) * 250.0;
-            ACarapace E = Cast<ACarapace>(SpawnActor(ACarapace, P, FRotator()));
+            AAttackingElite E = nullptr;
+            if (i % 2 == 0)
+                E = Cast<AAttackingElite>(SpawnActor(ACarapace, P, FRotator()));
+            else
+                E = Cast<AAttackingElite>(SpawnActor(ASpitter, P, FRotator()));
             if (E != nullptr)
                 CDSpawned += 1;
         }

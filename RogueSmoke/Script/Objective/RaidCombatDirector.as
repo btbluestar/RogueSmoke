@@ -33,6 +33,9 @@ namespace RaidCombatDirector
         }
 
         // 2) PROMOTE: per living player, fill free token slots with the best eligible Background elites.
+        // Note: if an Engaged elite re-targets a different player mid-engagement (AcquireTarget runs every
+        // tick), it is NOT released — it's simply re-counted against the new player's budget here, so a
+        // player may transiently sit at budget+1 until an existing attacker releases. Self-correcting.
         for (AHeroCharacter H : Heroes)
         {
             if (H == nullptr || H.IsIncapacitated())

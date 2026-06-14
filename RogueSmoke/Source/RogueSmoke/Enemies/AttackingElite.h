@@ -155,7 +155,12 @@ public:
 	UFUNCTION(BlueprintPure, Category="Combat|Director")
 	float GetRingStandoff() const { return AttackRange * RingStandoffMult; }
 
-	/** Background token-users hold at AttackRange * this (the combat circle radius). */
+	/**
+	 * Background token-users hold at AttackRange * this (the combat circle radius). Kept > 1 so the ring
+	 * sits OUTSIDE attack range (they circle, never hit, until promoted). A promoted elite then closes
+	 * from the ring and attacks within ~1s when the player isn't fleeing; the director's token timeout is
+	 * the backstop for the kite case (a chaser that can never reach holds its token until it times out).
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Combat|Director")
 	float RingStandoffMult = 1.6f;
 
