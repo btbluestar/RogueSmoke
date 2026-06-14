@@ -73,6 +73,17 @@ class ARaidObjective : AActor
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Raid|Mode")
     FVector ExtractionCenter = FVector::ZeroVector;
 
+    // --- Plan C: multi-site channels. ChannelCenter/ChannelProgress above mirror the ACTIVE site
+    // (HUD back-compat); these hold every zone. Parallel arrays (same length = zone count). ---
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Raid|Channel")
+    TArray<FVector> ChannelCenters;
+
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Raid|Channel")
+    TArray<float> ChannelProgresses;
+
+    // Index into ChannelCenters of the site currently being channeled (for director focus). -1 = none yet.
+    private int ActiveSiteIndex = -1;
+
     // The final defend wave spawned when extraction is called (D-0010). Leave the class
     // unset to skip spawning (e.g. while testing the timer alone).
     UPROPERTY(EditAnywhere, Category = "Raid|Defend Wave")
