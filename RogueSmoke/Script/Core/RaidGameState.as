@@ -20,8 +20,12 @@ class ARaidGameState : AGameStateBase
 {
     // The master seed for the whole run (D-0007). Server rolls it once; everyone else
     // reads this replicated copy so generation reproduces identically across machines.
-    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Run")
+    UPROPERTY(Replicated, ReplicatedUsing = OnRep_MasterSeed, BlueprintReadOnly, Category = "Run")
     int MasterSeed = 0;
+
+    // Plan 3: set true by the GameMode when this raid uses a generated arena, so clients stamp on OnRep.
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Run")
+    bool bGeneratedArena = false;
 
     UPROPERTY(Replicated, ReplicatedUsing = OnRep_Phase, BlueprintReadOnly, Category = "Run")
     ERunPhase Phase = ERunPhase::None;
@@ -90,5 +94,14 @@ class ARaidGameState : AGameStateBase
     UFUNCTION()
     void OnRep_Phase()
     {
+    }
+
+    // Clients re-stamp the generated arena locally once the seed arrives (server stamped in
+    // GameMode::BeginPlay). Deterministic from the replicated seed — no geometry is replicated.
+    UFUNCTION()
+    void OnRep_MasterSeed()
+    {
+        if (bGeneratedArena && MasterSeed != 0)
+            RaidArena::BuildFromSeed(MasterSeed);
     }
 }
