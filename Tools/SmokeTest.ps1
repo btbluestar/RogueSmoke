@@ -50,7 +50,7 @@ $Cases = @(
     # Behavior evolutions + wave director (D-0020). Separate boot: UpgradeSmoke pre-sets every
     # evolution flag, so EvoSmoke needs a clean ASC.
     @{ Name = "UpgradesEvo";        Map = "/Game/Levels/DebuggingLevels/DL_Upgrades";
-       Expect = @("[EvoSmoke] RESULT 7/7", "[DirectorSmoke] RESULT 6/6")
+       Expect = @("[EvoSmoke] RESULT 7/7", "[DirectorSmoke] RESULT 9/9")
        Exec = "EvoSmoke, DirectorReport"; Window = 75 }
     # Full raid-loop bridges (D-0009/D-0010). Each outcome ends the run, so they boot separately:
     # victory = clear -> extraction -> defend wave -> survive -> Victory; defeat = party-wipe -> Defeat.

@@ -1779,7 +1779,19 @@ class ARaidPlayerController : APlayerController
                  && X.FodderCount >= RaidDirector::ComputeWavePlan(7, 9, 1, T).FodderCount;
         Passed += DirCheck("determinism + player scaling", bDet);
 
-        Print(f"[DirectorSmoke] RESULT {Passed}/6", 12.0);
+        // Plan 3: time-spine — fodder rises with elapsed time; spikes + mini-boss fire on schedule.
+        FDirectorTunables SpineT;
+        FWavePlan SpineEarly = RaidDirector::ComputeWavePlan(1, 0, 1, SpineT, 0.0);
+        FWavePlan SpineLate  = RaidDirector::ComputeWavePlan(1, 0, 1, SpineT, 400.0);
+        Passed += DirCheck("spine rises with time", SpineLate.FodderCount > SpineEarly.FodderCount);
+
+        Passed += DirCheck("elite spike at 180s",
+            RaidDirector::ComputeWavePlan(1, 5, 1, SpineT, 180.0).SpikeTier == 1);
+
+        Passed += DirCheck("mini-boss at 480s",
+            RaidDirector::ComputeWavePlan(1, 9, 1, SpineT, 480.0).bSpawnMiniBoss);
+
+        Print(f"[DirectorSmoke] RESULT {Passed}/9", 12.0);
     }
 
     private int DirCheck(FString Name, bool bPass)
