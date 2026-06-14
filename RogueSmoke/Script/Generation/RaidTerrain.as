@@ -120,4 +120,78 @@ namespace RaidTerrain
         float y = -span * 0.5 + (float(j) + 0.5) * T.TileSize;
         return FVector(x, y, 0.0);
     }
+
+    // Flatten terrain toward targetLevel inside worldRadius of (cx,cy): full flatten within innerFrac,
+    // blended to natural out to the radius. Integer weights -> deterministic. Mutates T.Heights.
+    void FlattenDisc(FRaidTerrain& T, float cx, float cy, int targetLevel, float worldRadius, float innerFrac)
+    {
+        float inner = worldRadius * innerFrac;
+        for (int j = 0; j < T.GridDim; j++)
+        {
+            for (int i = 0; i < T.GridDim; i++)
+            {
+                FVector c = TileCenter(T, i, j);
+                float d = Math::Sqrt((c.X - cx) * (c.X - cx) + (c.Y - cy) * (c.Y - cy));
+                if (d > worldRadius)
+                    continue;
+                int cur = T.Heights[j * T.GridDim + i];
+                // weight 100 (full target) at/under inner -> 0 (natural) at the radius edge.
+                int w = 100;
+                if (d > inner && worldRadius > inner)
+                    w = int(100.0 * (1.0 - (d - inner) / (worldRadius - inner)));
+                int blended = (targetLevel * w + cur * (100 - w)) / 100;
+                T.Heights[j * T.GridDim + i] = blended;
+            }
+        }
+        // Slope-clamp inside the disc: limit neighbor height delta to 1 level per tile.
+        for (int pass = 0; pass < 4; pass++)
+        {
+            for (int j = 0; j < T.GridDim; j++)
+            {
+                for (int i = 0; i < T.GridDim; i++)
+                {
+                    FVector c = TileCenter(T, i, j);
+                    float d = Math::Sqrt((c.X - cx) * (c.X - cx) + (c.Y - cy) * (c.Y - cy));
+                    if (d > worldRadius)
+                        continue;
+                    int h = T.Heights[j * T.GridDim + i];
+                    if (i + 1 < T.GridDim)
+                    {
+                        int r = T.Heights[j * T.GridDim + (i + 1)];
+                        if (Math::Abs(h - r) > 1)
+                            T.Heights[j * T.GridDim + (i + 1)] = (h > r) ? h - 1 : h + 1;
+                    }
+                    if (j + 1 < T.GridDim)
+                    {
+                        int dn = T.Heights[(j + 1) * T.GridDim + i];
+                        if (Math::Abs(h - dn) > 1)
+                            T.Heights[(j + 1) * T.GridDim + i] = (h > dn) ? h - 1 : h + 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // Largest 4-neighbour height delta (in LEVELS) among tiles whose center is within worldRadius of
+    // (cx,cy). The validator's slope-walkable measurement.
+    int MaxSlopeInDisc(const FRaidTerrain& T, float cx, float cy, float worldRadius)
+    {
+        int maxDelta = 0;
+        for (int j = 0; j < T.GridDim; j++)
+        {
+            for (int i = 0; i < T.GridDim; i++)
+            {
+                FVector c = TileCenter(T, i, j);
+                float d = Math::Sqrt((c.X - cx) * (c.X - cx) + (c.Y - cy) * (c.Y - cy));
+                if (d > worldRadius)
+                    continue;
+                int h = T.Heights[j * T.GridDim + i];
+                if (i + 1 < T.GridDim)
+                    maxDelta = Math::Max(maxDelta, Math::Abs(h - T.Heights[j * T.GridDim + (i + 1)]));
+                if (j + 1 < T.GridDim)
+                    maxDelta = Math::Max(maxDelta, Math::Abs(h - T.Heights[(j + 1) * T.GridDim + i]));
+            }
+        }
+        return maxDelta;
+    }
 }
