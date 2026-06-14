@@ -221,10 +221,17 @@ class ARaidObjective : AActor
             // needn't carry the enum value (editor-python can't set AS EnumProperties).
             Mode = EObjectiveMode::HoldAndChannel;
             FRaidLayout L = RaidArena::GetLayout(GetMasterSeed());
-            if (L.MainSites.Num() > 0)
-                ChannelCenter = RaidArena::NodeLocation(L.MainSites[0], ERaidSlotType::CombatCore);
+            for (int i = 0; i < L.MainSites.Num(); i++)
+            {
+                ChannelCenters.Add(RaidArena::NodeLocation(L.MainSites[i], ERaidSlotType::CombatCore));
+                ChannelProgresses.Add(0.0);
+            }
             ExtractionCenter = L.Extraction.Center;
-            SetActorLocation(ChannelCenter);
+            if (ChannelCenters.Num() > 0)
+            {
+                ChannelCenter = ChannelCenters[0];   // active-site mirror starts on zone 0
+                SetActorLocation(ChannelCenter);
+            }
         }
     }
 
