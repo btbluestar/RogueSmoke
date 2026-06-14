@@ -1,8 +1,8 @@
 // RaidLayoutValidator.as
-// Pure-geometric validation battery (design spec §9). The subset that needs NO world — counts,
-// distances, bounds, blue-noise separation, offset-power-position. Navmesh connectivity + jump-
-// reachability + escape-proof trajectory checks need stamped geometry and live in Plan 2.
-// Server runs this; failure drives the deterministic reroll in RaidGen::GenerateValidated.
+// Geometric + ballistic validation battery (design spec §9). World-free: counts, distances, bounds,
+// blue-noise separation, offset-power-position, plus the ballistic jump-reachability + escape-proof
+// checks (Plan 2, derived from the hero reach envelope). Only navmesh ground-connectivity is still
+// deferred (until enemies pathfind). Server runs this; failure drives RaidGen::GenerateValidated's reroll.
 
 struct FRaidValidationResult
 {
