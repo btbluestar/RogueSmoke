@@ -89,10 +89,10 @@ struct FRaidGenConfig
     int ZoneCountMax = 3;                // most objective zones per raid
 
     UPROPERTY()
-    float ZoneMinSeparation = 2200.0;    // min distance between zone centers (>= 2*SiteRadius)
+    float ZoneMinSeparation = 2000.0;    // min distance between zone centers (= 2*SiteRadius; 3 zones still fit)
 
     UPROPERTY()
-    float ZoneAnchorMargin = 1400.0;     // keep anchors this far inside the footprint half-extent
+    float ZoneAnchorMargin = 1200.0;     // keep anchors inside (margin+SiteRadius < HalfExtent-BoundaryMargin)
 
     UPROPERTY()
     float ZoneDropClearance = 1500.0;    // keep zones this far from drop/extraction

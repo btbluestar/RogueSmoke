@@ -849,9 +849,10 @@ class ARaidPlayerController : APlayerController
         if (RS.bOk) Pass += 1;
         else Print(f"[GenSmoke] FAIL 5: fallback invalid ({RS.PassCount}/{RS.Total} {RS.FirstFail})", 12.0);
 
-        // 6. An unreachable platform is rejected (jump-reachability active).
+        // 6. An unreachable platform is rejected (jump-reachability active). Base on a VALIDATED
+        // layout so the injected platform is the only failure (multi-site raw rolls may be out of bounds).
         Total += 1;
-        FRaidLayout BadReach = RaidGen::Generate(12345, Cfg);
+        FRaidLayout BadReach = RaidGen::GenerateValidated(12345, Cfg);
         for (int i = 0; i < BadReach.MainSites[0].Nodes.Num(); i++)
             if (BadReach.MainSites[0].Nodes[i].Slot == ERaidSlotType::HighGround)
             { BadReach.MainSites[0].Nodes[i].Location.Z = 5000.0; break; }
