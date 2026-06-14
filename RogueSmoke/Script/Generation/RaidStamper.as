@@ -59,4 +59,22 @@ namespace RaidArena
 
         return Stamp.StampBoxes(Centers, Sizes);
     }
+
+    // Deterministic layout for a seed (pure; cheap). Consumers read Drop/MainSites/Extraction.
+    FRaidLayout GetLayout(int Seed)
+    {
+        FRaidGenConfig Cfg;
+        return RaidGen::GenerateValidated(Seed, Cfg);
+    }
+
+    // World location of the first node of a slot in a site (falls back to the site center).
+    FVector NodeLocation(const FRaidSite& Site, ERaidSlotType Slot)
+    {
+        for (FRaidNode N : Site.Nodes)
+        {
+            if (N.Slot == Slot)
+                return N.Location;
+        }
+        return Site.Center;
+    }
 }
