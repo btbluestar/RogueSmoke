@@ -34,7 +34,7 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $Cases = @(
     @{ Name = "RaidArena";          Map = "/Game/Levels/RaidArena";                       Expect = @("[Raid] spawned 4 ring elites + boss", "[MoveSmoke] RESULT 4/4"); Exec = "MoveSmoke"; Window = 45 }
     # Procedural raid generation foundation (Plan 1): deterministic layout + validation, pure-logic.
-    @{ Name = "ProcGenFoundation";  Map = "/Game/Levels/RaidArena";                       Expect = "[GenSmoke] RESULT 5/5"; Exec = "GenSmoke"; Window = 25 }
+    @{ Name = "ProcGenFoundation";  Map = "/Game/Levels/RaidArena";                       Expect = "[GenSmoke] RESULT 6/6"; Exec = "GenSmoke"; Window = 25 }
     @{ Name = "Enemy_Crawler";      Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Crawler";     Expect = "CRAWLER (fodder): spawned 8" }
     @{ Name = "Enemy_Carapace";     Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Carapace";    Expect = "CARAPACE: spawned 2" }
     @{ Name = "Enemy_Spitter";      Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Spitter";     Expect = "SPITTER: spawned 2" }

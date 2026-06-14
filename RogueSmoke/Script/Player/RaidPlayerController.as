@@ -849,6 +849,16 @@ class ARaidPlayerController : APlayerController
         if (RS.bOk) Pass += 1;
         else Print(f"[GenSmoke] FAIL 5: fallback invalid ({RS.PassCount}/{RS.Total} {RS.FirstFail})", 12.0);
 
+        // 6. An unreachable platform is rejected (jump-reachability active).
+        Total += 1;
+        FRaidLayout BadReach = RaidGen::Generate(12345, Cfg);
+        for (int i = 0; i < BadReach.MainSites[0].Nodes.Num(); i++)
+            if (BadReach.MainSites[0].Nodes[i].Slot == ERaidSlotType::HighGround)
+            { BadReach.MainSites[0].Nodes[i].Location.Z = 5000.0; break; }
+        FRaidValidationResult RR = RaidValidate::Validate(BadReach, Cfg);
+        if (!RR.bOk && RR.FirstFail == "jump-reachability") Pass += 1;
+        else Print(f"[GenSmoke] FAIL 6: unreachable platform not caught ({RR.FirstFail})", 12.0);
+
         Print(f"[GenSmoke] RESULT {Pass}/{Total}", 15.0);
     }
 
