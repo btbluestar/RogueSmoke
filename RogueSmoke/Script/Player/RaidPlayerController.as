@@ -2074,6 +2074,73 @@ class ARaidPlayerController : APlayerController
         Print("[GenLoopSmoke] RESULT 0/4 — timed out waiting for the loop", 15.0);
     }
 
+    // --- Visual verification: capture the stamped generated arena from several camera vantages
+    // (procgen Plan 3). Boot L_GenRaid WITH rendering (no -nullrhi) and run `GenShots`; PNGs land in
+    // Saved/Screenshots. Top-down + two angled views over the stamped greybox arena. ---
+    private TArray<ACameraActor> GenShotCams;
+    private int GenShotIdx = 0;
+
+    UFUNCTION(Exec)
+    void GenShots()
+    {
+        GenShotCams.Empty();
+        // Prefer placed debug cameras (from the L_GenDebug sublevel); fall back to spawned defaults.
+        TArray<ACameraActor> Placed;
+        GetAllActorsOfClass(Placed);
+        if (Placed.Num() > 0)
+        {
+            for (ACameraActor C : Placed)
+                if (C != nullptr) GenShotCams.Add(C);
+            Print(f"[GenShots] using {GenShotCams.Num()} placed debug cameras", 6.0);
+        }
+        else
+        {
+            FVector Tgt = FVector(0.0, 0.0, 200.0);
+            AddShotCam(FVector(0.0, 0.0, 5500.0), Tgt);
+            AddShotCam(FVector(-4000.0, -4000.0, 2800.0), Tgt);
+            AddShotCam(FVector(4200.0, -1200.0, 1500.0), Tgt);
+            Print(f"[GenShots] spawned {GenShotCams.Num()} default cameras", 6.0);
+        }
+        // Render lit if the debug sublevel's lights are present; else unlit so the greybox still shows
+        // (a headless -game boot may not stream the always-loaded sublevel in before we shoot).
+        TArray<ADirectionalLight> Lights;
+        GetAllActorsOfClass(Lights);
+        if (Lights.Num() == 0)
+            System::ExecuteConsoleCommand("viewmode unlit");
+        GenShotIdx = 0;
+        GenShotStep();
+    }
+
+    private void AddShotCam(FVector Loc, FVector Tgt)
+    {
+        ACameraActor Cam = Cast<ACameraActor>(SpawnActor(ACameraActor, Loc, FRotator()));
+        if (Cam == nullptr)
+            return;
+        Cam.SetActorRotation((Tgt - Loc).Rotation());
+        GenShotCams.Add(Cam);
+    }
+
+    UFUNCTION()
+    void GenShotStep()
+    {
+        if (GenShotIdx >= GenShotCams.Num())
+        {
+            Print("[GenShots] done", 8.0);
+            return;
+        }
+        SetViewTargetWithBlend(GenShotCams[GenShotIdx], 0.0);
+        System::SetTimer(this, n"GenShotShoot", 0.8, false);
+    }
+
+    UFUNCTION()
+    void GenShotShoot()
+    {
+        System::ExecuteConsoleCommand("HighResShot 1600x900");
+        Print(f"[GenShots] shot {GenShotIdx}", 4.0);
+        GenShotIdx += 1;
+        System::SetTimer(this, n"GenShotStep", 1.5, false);
+    }
+
     // --- End-of-run results (CommonUI: pushed onto the Menu layer). Triggered by the HUD's
     // banner->panel timer, or instantly via the RaidResults console command. ---
     private UResultsScreenWidget ResultsScreen;
