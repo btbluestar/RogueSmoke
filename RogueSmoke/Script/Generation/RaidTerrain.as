@@ -22,4 +22,48 @@ namespace RaidTerrain
         int m = h & 0x7FFFFFFF;   // mask sign bit -> non-negative
         return m % levels;
     }
+
+    // Raw two-octave level for a tile: a low-frequency "rolling" component (lattice at 1/4 res) plus
+    // a fine detail component, summed and kept in [0, levels). Integer-only.
+    int RawLevel(int seed, int i, int j, int levels)
+    {
+        int coarse = LatticeLevel(seed, i / 4, j / 4, levels);          // big shapes
+        int fine   = LatticeLevel(seed ^ 0x5A17, i, j, levels);          // per-tile detail
+        // Weight coarse heavier (smoother terrain): (3*coarse + fine) / 4.
+        int v = (coarse * 3 + fine) / 4;
+        if (v < 0) v = 0;
+        if (v >= levels) v = levels - 1;
+        return v;
+    }
+
+    // One integer box-blur pass over a GridDim x GridDim level array (3x3 average, clamped edges).
+    // Smooths single-tile spikes into walkable terrain. Pure integer -> deterministic.
+    TArray<int> BlurOnce(const TArray<int>& In, int dim)
+    {
+        TArray<int> Out;
+        for (int idx = 0; idx < In.Num(); idx++)
+            Out.Add(0);
+        for (int j = 0; j < dim; j++)
+        {
+            for (int i = 0; i < dim; i++)
+            {
+                int sum = 0;
+                int cnt = 0;
+                for (int dj = -1; dj <= 1; dj++)
+                {
+                    for (int di = -1; di <= 1; di++)
+                    {
+                        int ni = i + di;
+                        int nj = j + dj;
+                        if (ni < 0 || nj < 0 || ni >= dim || nj >= dim)
+                            continue;
+                        sum += In[nj * dim + ni];
+                        cnt += 1;
+                    }
+                }
+                Out[j * dim + i] = sum / cnt;   // integer average
+            }
+        }
+        return Out;
+    }
 }
