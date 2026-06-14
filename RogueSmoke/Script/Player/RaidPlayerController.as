@@ -1939,7 +1939,7 @@ class ARaidPlayerController : APlayerController
     private int CDMaxEngaged = 0;
     private int CDSamples = 0;
     private bool CDDone = false;
-    private TArray<AAttackingElite> CDFirstEngaged;
+    private TArray<AAttackingElite> CDEverEngaged;   // distinct elites that held a token across the window
 
     UFUNCTION(Exec)
     void CombatDirectorSmoke()
@@ -1961,8 +1961,10 @@ class ARaidPlayerController : APlayerController
         }
         Print(f"[CombatDirectorSmoke] spawned {CDSpawned} elites", 6.0);
         CDSamples = 0;
+        CDMaxEngaged = 0;
         CDDone = false;
-        System::SetTimer(this, n"CombatDirectorSample", 0.8, true);   // repeating sampler
+        CDEverEngaged.Empty();
+        System::SetTimer(this, n"CombatDirectorSample", 0.6, true);   // repeating sampler
     }
 
     UFUNCTION()
@@ -1986,30 +1988,30 @@ class ARaidPlayerController : APlayerController
         }
         if (NowEngaged.Num() > CDMaxEngaged)
             CDMaxEngaged = NowEngaged.Num();
-        if (CDFirstEngaged.Num() == 0 && NowEngaged.Num() > 0)
-            CDFirstEngaged = NowEngaged;
+        // Accumulate the DISTINCT set of elites that have ever held a token (rotation evidence — robust
+        // to the solo headless hero being wiped mid-test, which drops the live engaged count to 0).
+        for (AAttackingElite E : NowEngaged)
+        {
+            bool bSeen = false;
+            for (AAttackingElite F : CDEverEngaged)
+                if (E == F) { bSeen = true; break; }
+            if (!bSeen)
+                CDEverEngaged.Add(E);
+        }
 
         CDSamples += 1;
-        if (CDSamples >= 8)
+        if (CDSamples >= 10)
         {
             CDDone = true;   // stop sampling (guard; the repeating timer will no-op now)
 
-            // Rotation: at least one currently-Engaged elite differs from the first set we saw.
-            bool bRotated = false;
-            for (AAttackingElite E : NowEngaged)
-            {
-                bool bWasFirst = false;
-                for (AAttackingElite F : CDFirstEngaged)
-                    if (E == F) { bWasFirst = true; break; }
-                if (!bWasFirst) { bRotated = true; break; }
-            }
-
             int Pass = 0;
             int Total = 2;
+            // (1) Cap: never more than the budget Engaged at once.
             if (CDMaxEngaged > 0 && CDMaxEngaged <= Budget) Pass += 1;
             else Print(f"[CombatDirectorSmoke] FAIL cap (max {CDMaxEngaged} > budget {Budget})", 8.0);
-            if (bRotated) Pass += 1;
-            else Print("[CombatDirectorSmoke] FAIL no rotation", 8.0);
+            // (2) Rotation: more distinct elites cycled through tokens than the cap allows at once.
+            if (CDEverEngaged.Num() > Budget) Pass += 1;
+            else Print(f"[CombatDirectorSmoke] FAIL no rotation (only {CDEverEngaged.Num()} distinct engaged)", 8.0);
             Print(f"[CombatDirectorSmoke] RESULT {Pass}/{Total}", 15.0);
         }
     }
