@@ -47,23 +47,23 @@ class ULobbyHeroTile : UUserWidget
         Frame = RogueUITheme::MakePanel(this, FLinearColor(0.16, 0.18, 0.21), 3.0);
         SizeBox.AddChild(Frame);
 
-        UBorder Face = RogueUITheme::MakePanel(this, RogueUITheme::PanelDark, 12.0);
+        UBorder Face = RogueUITheme::MakePanel(this, RogueUITheme::PanelDark(), 12.0);
         Frame.AddChild(Face);
 
         UVerticalBox Column = Cast<UVerticalBox>(ConstructWidget(UVerticalBox::StaticClass()));
         Face.AddChild(Column);
 
-        NameText = RogueUITheme::MakeText(this, "", RogueUITheme::TextPrimary, 1.3);
+        NameText = RogueUITheme::MakeText(this, "", RogueUITheme::TextPrimary(), 1.3);
         UVerticalBoxSlot NameSlot = Column.AddChildToVerticalBox(NameText);
         NameSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
         NameSlot.SetPadding(FMargin(0.0, 8.0, 0.0, 6.0));
 
-        RoleText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim, 1.0);
+        RoleText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 1.0);
         UVerticalBoxSlot RoleSlot = Column.AddChildToVerticalBox(RoleText);
         RoleSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
         RoleSlot.SetPadding(FMargin(0.0, 0.0, 0.0, 10.0));
 
-        BlurbText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim, 0.95, true);
+        BlurbText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 0.95, true);
         UVerticalBoxSlot BlurbSlot = Column.AddChildToVerticalBox(BlurbText);
         BlurbSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Fill);
 
@@ -73,7 +73,7 @@ class ULobbyHeroTile : UUserWidget
         FillSize.SizeRule = ESlateSizeRule::Fill;
         SpacerSlot.SetSize(FillSize);
 
-        ClaimText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim, 1.0);
+        ClaimText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 1.0);
         UVerticalBoxSlot ClaimSlot = Column.AddChildToVerticalBox(ClaimText);
         ClaimSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
     }

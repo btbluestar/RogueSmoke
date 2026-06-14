@@ -1,6 +1,6 @@
 # Coding Standards
 
-> AngelScript conventions for **[ProjectName]** (UE5 + UnrealEngine-Angelscript).
+> AngelScript conventions for **RogueSmoke** (UE5 + UnrealEngine-Angelscript).
 > This is the *how*. For *what/why*, see `ARCHITECTURE.md`.
 > Source of truth for the language: https://angelscript.hazelight.se/
 

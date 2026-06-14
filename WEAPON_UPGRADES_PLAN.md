@@ -1,5 +1,10 @@
 # Weapon Upgrades Plan — pierce / chain / fire rate / elemental (2026-06-10)
 
+> ✅ **Executed.** The weapon track shipped: pierce/chain/burn/poison live as `URogueCombatSet`
+> attributes proc'd in `UCombatSubsystem` (see GLOSSARY "Weapon upgrade"); D-0019/20 then built
+> stacks, milestones, and behavior evolutions on top. Historical plan — kept for the genre
+> research; don't implement from it.
+
 > User ask: "more weapon focused upgrades, like piercing, chain shot, fire rate etc. maybe even
 > effects like fire/poison." Research how other games do gun upgrades, plan, then execute
 > (including authoring the GEs).

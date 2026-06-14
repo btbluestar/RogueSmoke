@@ -69,14 +69,20 @@ faithful. AngelScript `Print()` lines land in the log as `LogBlueprintUserMessag
   `Tools\BootLevel.ps1 -Map /Game/Levels/DebuggingLevels/DL_Upgrades -Exec "UpgradeSmoke" -Grep "Upgrade"`
   (Run **script files**, not inline `Start-Process` one-liners — the machine's antivirus
   AMSI-blocks inline launchers.)
-- **Full regression gate:** `Tools\SmokeTest.ps1` — boots every debug level, PASS/FAIL table,
-  exit 1 on failure. **Run this before claiming a change works and before any commit.**
+- **Full regression gate:** `Tools\SmokeTest.ps1` — 9 boot cases (RaidArena, 6× `DL_Enemy_*`,
+  `DL_Upgrades` twice: once for `UpgradeSmoke`+`UpgradeFlowSmoke`, once for `EvoSmoke`+
+  `DirectorReport` — separate boots because UpgradeSmoke applies every pool GE and would
+  pre-set the evolution flags). PASS/FAIL table, exit 1 on failure. **Run this before claiming
+  a change works and before any commit.**
 - **Levels:** `DL_Combat` (sandbox; taunt→cluster→barrage combo), `DL_Enemy_<Archetype>` ×6
   (one enemy each via `AEnemyTestStand`), `DL_Upgrades` (firing range — `AUpgradeTestRange` spawns
   `ATargetDummy` formations: SOLO for damage/DoT, LINE for pierce, CLUSTER for chain).
 - **Console execs** (type in `~` or pass via `-ExecCmds`; all retry-poll ~30 s so they survive
   firing before the hero spawns): `ListUpgrades`, `GrantUpgrade <partial>`, `GrantAllUpgrades`,
-  `UpgradeSmoke`, `WeaponSmoke`, `TelegraphSmoke`, `RaidGiveXP <n>`, `RaidKillOneElite`,
+  `UpgradeSmoke`, `UpgradeFlowSmoke` (D-0019 caps/milestones/duo-gates/reroll/hero-gate battery),
+  `EvoSmoke` (D-0020 behavior-evolution battery — run WITHOUT UpgradeSmoke in the same session),
+  `DirectorReport` (D-0020 wave-director plan table + checks),
+  `RaidXPReport` (XP-curve table), `WeaponSmoke`, `TelegraphSmoke`, `RaidGiveXP <n>`, `RaidKillOneElite`,
   `RaidKillElites`, `RaidGoToChest`, `RaidDebugCam`, `RaidRestart`, `RaidWin`/`RaidLose`,
   `RaidResults`, `RaidPause`. Grep `[XP]`, `[Upgrades]`, `[Chest]`, `[Telegraph]`.
 
@@ -120,6 +126,13 @@ Treat every gameplay change as a networked change.
   (use `unreal.log` + `-abslog`).
 - Verify `BP_*` parent classes before trusting a Blueprint — a misparented `BP_RaidGamemode`
   once silently killed GAS and run state.
+- **CommonUI never applies a fallback root's input config** in practice: the one-shot apply in
+  `FActivatableTreeRoot::ApplyLeafmostNodeConfig` is eaten by an editor-builds-only
+  focus-path guard (slate focus dangles at map boot and right after a click destroys its
+  button) and is never retried → stuck cursor / no mouse capture. Fix in place: the C++ shim
+  `RogueUI::ApplyDesiredInputConfig` (HUD host `OnActivated` + `RogueUILayout.ReapplyTopmostConfig`
+  on every screen close). Diagnose router state with `CommonUI.DumpActivatableTree` /
+  `CommonUI.DumpInputConfig` + `LogUIActionRouter VeryVerbose`.
 - Headless paused-tick timers elapse much faster than wall-clock (clamped per-frame dt at high
   FPS) — "30 s" watchdogs fire in ~5 s headlessly; correct in real play.
 - PowerShell 5.1: no `&&`/`||`, and embedded double quotes in native-command args (e.g.
@@ -136,27 +149,62 @@ Treat every gameplay change as a networked change.
   signature **taunt → Clustered → barrage** synergy.
 - **Third-person shooting** (D-0014): camera→muzzle convergence, focus-aim, hitscan through the
   seam; weapon-upgrade track (pierce / chain / fire rate / burn / poison DoTs).
-- **Movement** (D-0015): sprint / slide / jump via `URogueLocomotionComponent`.
+- **Movement & feel** (D-0015 + D-0021): sprint / slide / **slide-hop** / double-jump via
+  `URogueLocomotionComponent` — Deadlock-lean physics (gravity 1.8, instant accel, slide =
+  fastest ground state with Apex anti-bhop arming). `UCameraFeelComponent` (lag off, landing
+  dip, sprint/slide FOV, cosmetic spring-recovered fire kick). Live tuning: **`MoveTune`** exec
+  (`MoveTune dump` to bake); **`MoveSmoke`** (slide rules + stamina, 4 checks) gates SmokeTest.
+  **Stamina pips** (D-0023): 3 pips on `URogueMovementSet` (GAS) — slide/slide-hop cost 1,
+  sprint free, timed regen, HUD pip row; upgrade-ready via plain GEs.
+- **Animation** (D-0022, **Lyra stack**): heroes run Lyra's `ABP_Mannequin_Base` (distance
+  matching, turn-in-place/RootYawOffset) + **linked anim layers** (`ABP_RifleAnimLayers`;
+  pistol/shotgun/unarmed sets imported for later weapons), re-parented onto AngelScript
+  `URogueHeroAnimInstance` via **CoreRedirects** — mesh is Lyra's `SKM_Manny`. Slide = GASP
+  slide set as dynamic montages off the locomotion edge. The v1 `ABP_Hero` stack is unhooked,
+  on disk until parity sign-off (guide retired). Surface-aware **footsteps** via the ported
+  ContextEffects system (C++ `Feedback/ContextEffects/`).
+- **Shooting feedback** (D-0021 + D-0022): Lyra `SK_Rifle` in hand (animated bolt/mag ABP),
+  Lyra fire/reload montages on character AND gun, **full-auto fixed** (BP Tick stub +
+  `bFullAuto=False` were eating it), pooled HUD damage numbers (shooter-only), kill confirm +
+  hitmarker kill-pop, fire-stop tail; FireFX slots now LIVE with Lyra assets (layered
+  MetaSound fire, muzzle flash, tracer, concrete impacts, tail wave). Heat→spread has an
+  optional Lyra-shaped curve (`HeatToSpreadCurve`).
 - **Enemy roster** (D-0017, bio-horde): Crawler fodder + Carapace / Spitter / Bloater / Lunger
   elites (`AAttackingElite` base, per-archetype AS attack overrides) + **Brood-mother** mini-boss.
   Full telegraph language: ground danger rings, body pulse, per-archetype swell — replicated.
 - **Run loop** (D-0009/0010/0011): single-raid runs, escalating fodder waves, extraction defend
   timer, results screen, run timer.
-- **In-raid upgrade loop** (D-0018, newest): every kill feeds a **shared team XP pool**
-  (per-archetype `XPValue`); a level-up **pauses the raid for all players** for a 3-card pick with
-  level-weighted rarity (every 5th level boosts moderate, every 10th boosts rare); the
-  Brood-mother drops an **upgrade chest** — stand next to it for a squad **synergy-upgrade** pick
-  (only source of synergy cards). Resume on all-picked or 30 s watchdog.
+- **In-raid upgrade loop** (D-0018 + D-0019): every kill feeds a **shared team XP pool**
+  (per-archetype `XPValue`); a level-up **pauses the raid for all players** — each player gets
+  their **own independently-rolled 3-card hand** (seeded per offer + player), filtered by stack
+  caps (`MaxStacks`), self-prereqs (milestone modifier cards) and squad duo-prereqs (synergy
+  cards); short hands pad from a **UtilityPool** (squad heal / filler). Rarity uses
+  floors+caps by team level (r2 from 3, r3 from 6); XP curve front-loaded (base 50, growth 35).
+  One **squad reroll** per raid; the 30 s watchdog **auto-picks** card 0 for AFK players; picks
+  validate server-side against the offered hand. The Brood-mother drops an **upgrade chest** —
+  stand next to it for a squad **synergy-upgrade** pick (only source of synergy cards; offers
+  only squad-eligible cards). Pool: 35 cards incl. 5 synergy + 4 **behavior evolutions**
+  (chest: Searing Arcs / Toxic Burst / Critical Mass / Iron Bulwark), hero-gated **ability
+  tracks** (Taunt → Event Horizon vortex; Barrage → Twin Salvo → Carpet Bombing), milestones
+  + 2 utility (D-0020). A **wave director** scales fodder pressure with team level + squad
+  size (deterministic elite injections from level 4; injected elites never gate the clear).
 - **UI suite** (D-0016, CommonUI): main menu (`L_MainMenu`), hero-select lobby with ready/start,
   HUD (health, run clock, `LVL n x/y XP`), upgrade card screen, escape menu, results.
 - **Multiplayer:** LAN/direct-IP listen server (D-0012, NULL subsystem).
 
 **Known thin spots / open threads:**
-- Only **one synergy card exists** (Chain Detonation) — every chest offers just it.
+- Behavior evolutions exist (D-0020) but have **no bespoke VFX** — arcs/bursts/vortex/carpet
+  ride debug-draw + telegraph rings until the Niagara cue pass.
+- **Jump air time dropped ~40%** with gravity 1.8 (D-0021) — enemy telegraph windows (Lunger,
+  Bloater) need a dodge-feel check; flagged for a balance pass, not retuned in the feel work.
 - Burn/poison DoTs have **no victim tint** (DoT state is server-only; needs a replicated flag).
-- XP curve, rarity weights, and per-archetype `XPValue`s are first-pass numbers awaiting a
-  balance pass; enemy art is placeholder shapes; no boss healthbar.
+- XP curve (50 + 35/level), rarity floors+caps, and per-archetype `XPValue`s are first-pass
+  numbers awaiting a real-play balance pass; enemy art is placeholder shapes; no boss healthbar.
 - Meta-progression scope, late-join policy, and max party size are still open decisions.
+- **Lyra-stack proxy gaps** (D-0022, replication pass pending): remote players' slide montages
+  don't play on other clients; `GameplayTag_IsFiring` stance bool doesn't reach sim proxies.
+  User feel checkpoints A/B (`docs/superpowers/plans/2026-06-12-lyra-checkpoint-*.md`) are
+  queued; **v1 anim stack retirement awaits that sign-off**.
 
 ## 6. Where to look things up
 
@@ -167,7 +215,7 @@ Treat every gameplay change as a networked change.
 | Authoritative technical reference (read before touching combat/abilities/Mass) | `Rogue_Smoke_MVP_Architecture.md` |
 | System overview + authority model | `ARCHITECTURE.md` |
 | AngelScript conventions + replication patterns | `CODING_STANDARDS.md` |
-| Has this been decided already? (D-0001 … D-0018) | `DECISIONS.md` — **check before re-litigating** |
+| Has this been decided already? (D-0001 … D-0023) | `DECISIONS.md` — **check before re-litigating** |
 | What does this term mean exactly? | `GLOSSARY.md` — one name per concept; use these exact terms |
 | Engine build / project bring-up | `SETUP.md` |
 | Determinism + multiplayer + headless testing detail | `TESTING.md` |

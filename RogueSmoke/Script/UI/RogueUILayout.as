@@ -82,4 +82,29 @@ class URogueUILayout : UUserWidget
             return GameMenuStack;
         return MenuStack;
     }
+
+    // Re-apply the input config of whatever is topmost-active right now. Needed when a screen
+    // CLOSES: CommonUI's own fallback re-apply is silently dropped by an editor-builds-only
+    // focus guard (slate focus dangles on the just-destroyed button at that exact frame) and is
+    // never retried — see RogueUI::ApplyDesiredInputConfig. Screens OPENING apply normally.
+    void ReapplyTopmostConfig()
+    {
+        RogueUI::ApplyDesiredInputConfig(GetTopmostActiveWidget());
+    }
+
+    // Topmost layer first; skips a still-displayed widget that has already deactivated (a
+    // closing screen sits in its stack until the pop transition finishes).
+    private UCommonActivatableWidget GetTopmostActiveWidget() const
+    {
+        UCommonActivatableWidget Candidate = MenuStack != nullptr ? MenuStack.GetActiveWidget() : nullptr;
+        if (Candidate != nullptr && Candidate.IsActivated())
+            return Candidate;
+        Candidate = GameMenuStack != nullptr ? GameMenuStack.GetActiveWidget() : nullptr;
+        if (Candidate != nullptr && Candidate.IsActivated())
+            return Candidate;
+        Candidate = GameStack != nullptr ? GameStack.GetActiveWidget() : nullptr;
+        if (Candidate != nullptr && Candidate.IsActivated())
+            return Candidate;
+        return nullptr;
+    }
 }

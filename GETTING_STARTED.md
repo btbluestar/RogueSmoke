@@ -4,8 +4,14 @@
 > (D-0008). For the one-time engine/toolchain install, see **`SETUP.md`** — this guide
 > assumes that's done and focuses on *this* project's code.
 >
-> Do the steps **in order**. Each rules out a class of "is it me or the engine" bugs.
-> Status of every piece is tracked in **`MVP_PROGRESS.md`**.
+> ⚠️ **Historical (D-0008 era) — the bring-up below is complete.** Several systems it
+> references were replaced since: abilities run on **GAS** (D-0013), the camera is
+> third-person shooter (D-0014), UI is **CommonUI** (D-0016), the enemy roster is the
+> bio-horde (D-0017), and the upgrade flow is the level/chest loop (D-0018–20);
+> `UStatsComponent` no longer exists (stats are GAS attributes) and `WBP_UpgradeSelect` needs no
+> layout. **To play the game today:** open `/Game/Levels/RaidArena` and press Play — see
+> `HANDOFF_gameplay_loop.md` for the walkthrough. AI agents: read **`startup.md`** instead.
+> The fresh-clone/toolchain steps (§0–§2) are still accurate.
 
 ---
 

@@ -20,7 +20,9 @@ class UUpgradeCardWidget : UUserWidget
     private UImage IconImage;
     private UTextBlock NameText;
     private UTextBlock RarityText;
+    private UTextBlock StackText;
     private UTextBlock ValueText;
+    private UTextBlock PrereqText;
     private UTextBlock DescText;
     private UTextBlock HotkeyText;
     private bool bBuilt = false;
@@ -58,7 +60,7 @@ class UUpgradeCardWidget : UUserWidget
         Frame = RogueUITheme::MakePanel(this, RogueUITheme::RarityColor(1), 4.0);
         SizeBox.AddChild(Frame);
 
-        UBorder Face = RogueUITheme::MakePanel(this, RogueUITheme::PanelDark, 14.0);
+        UBorder Face = RogueUITheme::MakePanel(this, RogueUITheme::PanelDark(), 14.0);
         Frame.AddChild(Face);
 
         UVerticalBox Column = Cast<UVerticalBox>(ConstructWidget(UVerticalBox::StaticClass()));
@@ -71,24 +73,36 @@ class UUpgradeCardWidget : UUserWidget
         IconSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
         IconSlot.SetPadding(FMargin(0.0, 6.0, 0.0, 14.0));
 
-        NameText = RogueUITheme::MakeText(this, "", RogueUITheme::TextPrimary, 1.35);
+        NameText = RogueUITheme::MakeText(this, "", RogueUITheme::TextPrimary(), 1.35);
         UVerticalBoxSlot NameSlot = Column.AddChildToVerticalBox(NameText);
         NameSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
         NameSlot.SetPadding(FMargin(0.0, 0.0, 0.0, 8.0));
 
-        RarityText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim, 0.9);
+        RarityText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 0.9);
         UVerticalBoxSlot RaritySlot = Column.AddChildToVerticalBox(RarityText);
         RaritySlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
         RaritySlot.SetPadding(FMargin(0.0, 0.0, 0.0, 12.0));
 
+        // "Lv 2 -> 3" line: repeat picks read as deepening a track, not duplicates (Loop v2).
+        StackText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 0.95);
+        UVerticalBoxSlot StackSlot = Column.AddChildToVerticalBox(StackText);
+        StackSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
+        StackSlot.SetPadding(FMargin(0.0, 0.0, 0.0, 8.0));
+
         // The "value": the short concrete stat line, accent-colored — numbers ON the card
         // (the RoR2 icons-only approach is the known anti-pattern).
-        ValueText = RogueUITheme::MakeText(this, "", RogueUITheme::Accent, 1.15);
+        ValueText = RogueUITheme::MakeText(this, "", RogueUITheme::Accent(), 1.15);
         UVerticalBoxSlot ValueSlot = Column.AddChildToVerticalBox(ValueText);
         ValueSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
         ValueSlot.SetPadding(FMargin(0.0, 0.0, 0.0, 12.0));
 
-        DescText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim, 1.0, true);
+        // Duo/prereq line ("Requires: Incendiary Rounds + Heavy Caliber"): synergy legibility.
+        PrereqText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 0.85, true);
+        UVerticalBoxSlot PrereqSlot = Column.AddChildToVerticalBox(PrereqText);
+        PrereqSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
+        PrereqSlot.SetPadding(FMargin(0.0, 0.0, 0.0, 8.0));
+
+        DescText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 1.0, true);
         UVerticalBoxSlot DescSlot = Column.AddChildToVerticalBox(DescText);
         DescSlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Fill);
 
@@ -99,14 +113,14 @@ class UUpgradeCardWidget : UUserWidget
         FillSize.SizeRule = ESlateSizeRule::Fill;
         SpacerSlot.SetSize(FillSize);
 
-        HotkeyText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim, 1.0);
+        HotkeyText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 1.0);
         UVerticalBoxSlot HotkeySlot = Column.AddChildToVerticalBox(HotkeyText);
         HotkeySlot.SetHorizontalAlignment(EHorizontalAlignment::HAlign_Center);
     }
 
-    // Fill the card from a definition. Index is this card's slot in the offer (drives the
-    // hotkey hint and the pick routed back to the screen).
-    void Populate(URogueUpgradeDef Def, int Index, UUpgradeSelectWidget Screen)
+    // Fill the card from a definition. CurrentStacks = copies already owned (drives the
+    // "Lv n -> n+1" line). Index is this card's slot in the offer (drives the hotkey hint).
+    void Populate(URogueUpgradeDef Def, int CurrentStacks, int Index, UUpgradeSelectWidget Screen)
     {
         OwnerScreen = Screen;
         OfferIndex = Index;
@@ -128,10 +142,38 @@ class UUpgradeCardWidget : UUserWidget
         }
 
         NameText.SetText(Def.DisplayName);
-        RarityText.SetText(FText::FromString(RogueUITheme::RarityName(Def.Rarity)));
+        FString RarityLabel = Def.bSynergyUpgrade
+            ? "SYNERGY" : RogueUITheme::RarityName(Def.Rarity);
+        RarityText.SetText(FText::FromString(RarityLabel));
         RarityText.SetColorAndOpacity(FSlateColor(Rarity));
+
+        // Stack line: only when the card is repeatable and this isn't the first copy.
+        if (CurrentStacks > 0)
+        {
+            FString CapPart = Def.MaxStacks > 0 ? f"/{Def.MaxStacks}" : "";
+            StackText.SetText(FText::FromString(f"Lv {CurrentStacks} -> {CurrentStacks + 1}{CapPart}"));
+        }
+        else
+        {
+            StackText.SetText(FText());
+        }
+
         ValueText.SetText(Def.ValueText);
         DescText.SetText(Def.Description);
+
+        // Duo framing: name what unlocked this card (Hades duo-boon legibility).
+        if (Def.PrereqA != nullptr && !Def.bPrereqSelf)
+        {
+            FString Req = f"Requires: {Def.PrereqA.DisplayName.ToString()}";
+            if (Def.PrereqB != nullptr)
+                Req += f" + {Def.PrereqB.DisplayName.ToString()}";
+            PrereqText.SetText(FText::FromString(Req));
+        }
+        else
+        {
+            PrereqText.SetText(FText());
+        }
+
         HotkeyText.SetText(FText::FromString(f"[ {Index + 1} ]"));
     }
 

@@ -248,6 +248,77 @@ void UCombatSubsystem::ApplyRadialDamageToPlayers(FVector Center, float Radius, 
 	}
 }
 
+int32 UCombatSubsystem::ApplyDotInSphere(FVector Center, float Radius, ERogueDotType Type,
+                                         float DamagePerSecond, float Duration, AActor* DamageInstigator)
+{
+	if (!IsServer() || Radius <= 0.f || DamagePerSecond <= 0.f || Duration <= 0.f)
+	{
+		return 0;
+	}
+
+	// Snapshot for the same reason ApplyRadialDamage does: registry mutation safety.
+	const TArray<TWeakObjectPtr<AEliteEnemyBase>> Snapshot = Elites;
+	const float RadiusSq = Radius * Radius;
+	int32 Applied = 0;
+	for (const TWeakObjectPtr<AEliteEnemyBase>& Ptr : Snapshot)
+	{
+		AEliteEnemyBase* Elite = Ptr.Get();
+		if (Elite == nullptr || Elite->Health == nullptr || Elite->Health->IsDead())
+		{
+			continue;   // the bursting corpse itself is dead -> skipped
+		}
+		if (FVector::DistSquared(Elite->GetActorLocation(), Center) <= RadiusSq)
+		{
+			Elite->Health->ApplyDot(Type, DamagePerSecond, Duration, DamageInstigator);
+			++Applied;
+		}
+	}
+	return Applied;
+}
+
+void UCombatSubsystem::GrantShieldToSquad(float Amount)
+{
+	UWorld* World = GetWorld();
+	if (!IsServer() || World == nullptr || Amount <= 0.f)
+	{
+		return;
+	}
+
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		APlayerController* PC = It->Get();
+		APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+		if (Pawn == nullptr)
+		{
+			continue;
+		}
+		UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Pawn);
+		if (ASC == nullptr)
+		{
+			continue;
+		}
+
+		// Clamp in C++ so an evolution can never overfill past MaxShield, mirroring the
+		// transient-GE pattern of ApplyDamageToPlayer (no direct attribute pokes).
+		const float Shield = ASC->GetNumericAttribute(URogueHealthSet::GetShieldAttribute());
+		const float MaxShield = ASC->GetNumericAttribute(URogueHealthSet::GetMaxShieldAttribute());
+		const float Delta = FMath::Min(Amount, FMath::Max(0.f, MaxShield - Shield));
+		if (Delta <= 0.f)
+		{
+			continue;
+		}
+
+		UGameplayEffect* ShieldGE = NewObject<UGameplayEffect>(GetTransientPackage());
+		ShieldGE->DurationPolicy = EGameplayEffectDurationType::Instant;
+		FGameplayModifierInfo Mod;
+		Mod.Attribute = URogueHealthSet::GetShieldAttribute();
+		Mod.ModifierOp = EGameplayModOp::Additive;
+		Mod.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(Delta));
+		ShieldGE->Modifiers.Add(Mod);
+		ASC->ApplyGameplayEffectToSelf(ShieldGE, 1.0f, ASC->MakeEffectContext());
+	}
+}
+
 void UCombatSubsystem::ShowTelegraphZone(FVector Center, float Radius, float DurationSeconds)
 {
 	if (!IsServer() || Radius <= 0.f)
@@ -354,10 +425,13 @@ void UCombatSubsystem::ProcOnHitEffects(AEliteEnemyBase* Victim, const FWeaponSh
 		                         Params.PoisonDuration, DamageInstigator);
 	}
 
-	// Chain arcs (RoR2-ukulele shape): nearest ChainCount other live enemies within ChainRadius of
-	// the victim take a damage fraction. Plain damage only — chains never pierce, chain, or proc,
-	// so the cascade is bounded. Fodder shares the registry, so chains reward dense swarms.
-	if (Params.ChainCount <= 0 || Params.ChainDamageFraction <= 0.f)
+	// Chain arcs (RoR2-ukulele shape): nearest arcs within ChainRadius of the victim take a
+	// damage fraction. The Overwhelm evolution adds arcs when the victim is Clustered — the
+	// taunt->gun loop. Arcs never re-chain or re-pierce; Searing Arcs may add a Burn DoT to
+	// arc targets (still no recursive procs), so the cascade stays bounded.
+	const int32 EffectiveChainCount = Params.ChainCount +
+		(Victim->IsClustered() ? FMath::Max(0, Params.ClusterChainBonusArcs) : 0);
+	if (EffectiveChainCount <= 0 || Params.ChainDamageFraction <= 0.f)
 	{
 		return;
 	}
@@ -385,12 +459,21 @@ void UCombatSubsystem::ProcOnHitEffects(AEliteEnemyBase* Victim, const FWeaponSh
 		       FVector::DistSquared(B.GetActorLocation(), Origin);
 	});
 
-	const int32 Arcs = FMath::Min(Params.ChainCount, Candidates.Num());
+	const int32 Arcs = FMath::Min(EffectiveChainCount, Candidates.Num());
 	const float ChainDamage = Params.Damage * Params.ChainDamageFraction;
 	for (int32 i = 0; i < Arcs; ++i)
 	{
 		Result.DamageDealt += Candidates[i]->Health->ApplyDamage(ChainDamage, DamageInstigator);
 		Result.ExtraEnemiesHit++;
+
+		// Searing Arcs: the arc ignites its target (magnitude derives from the arc's damage,
+		// same Gunfire-Reborn model as the on-hit procs above).
+		if (Params.ChainIgniteFraction > 0.f && Params.BurnDuration > 0.f && !Candidates[i]->Health->IsDead())
+		{
+			Candidates[i]->Health->ApplyDot(ERogueDotType::Burn,
+			                                ChainDamage * Params.ChainIgniteFraction / Params.BurnDuration,
+			                                Params.BurnDuration, DamageInstigator);
+		}
 
 		// MVP readability: debug arc on the host. The Niagara beam lands with the cue pass (#39).
 		DrawDebugLine(GetWorld(), Origin + FVector(0, 0, 50.f),

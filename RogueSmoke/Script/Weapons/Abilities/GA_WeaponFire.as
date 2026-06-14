@@ -69,8 +69,13 @@ class UGA_WeaponFire : UGA_RogueAbility
         Shot.ChainCount = int(GetCombatAttribute(n"ChainCount"));
         Shot.BurnChance = GetCombatAttribute(n"BurnChance");
         Shot.PoisonChance = GetCombatAttribute(n"PoisonChance");
+        Shot.ChainIgniteFraction = GetCombatAttribute(n"ChainIgniteFraction");
+        Shot.ClusterChainBonusArcs = int(GetCombatAttribute(n"ClusterChainBonusArcs"));
 
         TArray<FVector> Impacts;
+        TArray<bool> ImpactIsEnemy;     // per-pellet: surface-aware impact FX (enemy vs world)
+        TArray<FVector> DamageLocs;
+        TArray<float> DamageAmounts;
         bool bHitEnemy = false;
         for (int i = 0; i < Def.BulletsPerCartridge; i++)
         {
@@ -78,11 +83,22 @@ class UGA_WeaponFire : UGA_RogueAbility
             FVector End = MuzzleLoc + Dir * Def.MaxRange;
             FHitscanResult Result = Combat.FireWeaponShot(MuzzleLoc, End, Shot, Avatar);
             Impacts.Add(Result.ImpactPoint);
+            ImpactIsEnemy.Add(Result.bHitEnemy);
             if (Result.bHitEnemy)
+            {
                 bHitEnemy = true;
+                if (Result.DamageDealt > 0.0)
+                {
+                    DamageLocs.Add(Result.ImpactPoint);
+                    DamageAmounts.Add(Result.DamageDealt);
+                }
+            }
         }
 
         Weapon.NotifyFired();
-        Hero.Multicast_FireFX(MuzzleLoc, Impacts, bHitEnemy);
+        Hero.Multicast_FireFX(MuzzleLoc, Impacts, ImpactIsEnemy, bHitEnemy);
+        // Per-pellet damage numbers to the shooter only (owning client renders them via the HUD).
+        if (DamageLocs.Num() > 0)
+            Hero.Client_DamageNumbers(DamageLocs, DamageAmounts);
     }
 }

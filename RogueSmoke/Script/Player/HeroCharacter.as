@@ -15,7 +15,7 @@ class AHeroCharacter : ARogueHeroBase
     default CameraBoom.TargetArmLength = 350.0;                   // over-the-shoulder distance (GDD §9)
     default CameraBoom.SocketOffset = FVector(0.0, 60.0, 60.0);   // shoulder offset (right + up)
     default CameraBoom.bUsePawnControlRotation = true;            // aim drives the boom
-    default CameraBoom.bEnableCameraLag = true;
+    default CameraBoom.bEnableCameraLag = false;                  // camera bolted to the pawn — lag smoothing eats the spring kick/dip displacements, so the feel layer needs a rigid camera
 
     UPROPERTY(DefaultComponent, Attach = CameraBoom)
     UCameraComponent FollowCamera;
@@ -43,6 +43,10 @@ class AHeroCharacter : ARogueHeroBase
     UPROPERTY(DefaultComponent)
     URogueLocomotionComponent Locomotion;
 
+    // --- Camera juice (owning-client cosmetic): focus zoom, FOV kicks, fire kick, landing dip. ---
+    UPROPERTY(DefaultComponent)
+    URogueCameraFeelComponent CameraFeel;
+
     // --- Shooting (modular weapon system) ---
     // Runtime weapon state (ammo/heat/spread/reload). Logic only; the weapon mesh is content on the BP.
     UPROPERTY(DefaultComponent)
@@ -59,6 +63,26 @@ class AHeroCharacter : ARogueHeroBase
     // Server-only: is the fire input currently held (drives full-auto refire in Tick).
     private bool bWantsToFire = false;
 
+    // Server-only: did a shot actually fire during this trigger hold? Gates the release tail so an
+    // empty-mag press+release can't ring a tail without a bang.
+    private bool bFiredSinceHeld = false;
+
+    // Upper-body feedback montages (assigned on the hero BPs; UpperBody slot in ABP_Hero).
+    UPROPERTY(EditDefaultsOnly, Category = "Animation")
+    UAnimMontage FireMontage;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Animation")
+    UAnimMontage ReloadMontage;
+
+    // Server-only edge detector: WeaponComponent starts reloads internally (auto-reload on empty),
+    // so the hero polls the transition in Tick rather than hooking every call site.
+    private bool bWasReloading = false;
+
+    // Surface-aware footstep/jump effects (Lyra ContextEffects port, D-0022 phase 4): listens for
+    // AnimNotify_RogueContextEffects on the hero's anims; libraries assigned on the hero BPs.
+    UPROPERTY(DefaultComponent)
+    URogueContextEffectComponent ContextEffects;
+
     // Visible weapon mesh, attached to the right hand. Its muzzle socket (WeaponDefinition.MuzzleSocket)
     // is the true bullet origin for third-person convergence (D-0014). Mesh asset comes from the
     // equipped definition; assigned on all machines so clients see the gun too.
@@ -66,20 +90,126 @@ class AHeroCharacter : ARogueHeroBase
     USkeletalMeshComponent WeaponMesh;
     default WeaponMesh.SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+    // Grip orientation offset, applied AFTER the SnapToTarget attach to the weapon_r socket. The
+    // socket's raw rotation doesn't match SK_Rifle's forward axis (Lyra normally applies a
+    // per-weapon attach transform via its equipment system, which we don't); this re-homes that
+    // offset in code so it's version-controlled and weapon-agnostic, instead of rotating each mesh.
+    // Default = the -90 yaw found empirically; tune in-editor (FRotator = Pitch, Yaw, Roll).
+    UPROPERTY(EditDefaultsOnly, Category = "Weapon")
+    FRotator WeaponAttachRotation = FRotator(0.0, -90.0, 0.0);
+
     // --- Focus / light ADS (D-0014). bFocusing gates the authoritative spread (server reads it when
     // firing) and the local camera zoom; the strafe slow lives on the locomotion component so the
     // owning client can predict it. The camera zoom itself is owning-client cosmetic only. ---
     UPROPERTY(Replicated)
     bool bFocusing = false;
 
-    private float FocusAlpha = 0.0;          // owning-client camera blend 0..1
-    const float BaseCameraFOV = 90.0;
-    const float BaseArmLength = 350.0;       // mirrors CameraBoom.TargetArmLength default
-    const float FocusBlendSpeed = 9.0;       // FInterp speed for the zoom blend
+    // --- Idle free-look (anim feel): at true idle the camera orbits without twisting the body
+    // (no more feet shuffling on the spot). The camera-yaw hard lock resumes — with a quick
+    // catch-up turn the strafe blendspace masks — whenever the body must face the camera again:
+    // move input, airborne, firing, focusing, sliding, or the camera swinging past the deadband. ---
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Facing")
+    float IdleFreeLookYawLimit = 100.0;    // deg the camera may swing before dragging the body
+
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Facing")
+    float IdleAlignYawRate = 540.0;        // deg/s catch-up turn speed
+
+    // Lyra linked-layer (D-0022): the per-weapon anim overlay linked onto the base ABP at spawn.
+    // Swapping weapons later = LinkAnimClassLayers with a different layer class; data, not graph work.
+    UPROPERTY(EditDefaultsOnly, Category = "Animation")
+    TSubclassOf<UAnimInstance> WeaponAnimLayer;
+
+    // v1 actor-level idle free-look. OFF under the Lyra stack: RootYawOffset + authored
+    // turn-in-place owns feet-planted idle now. Flip back on only to A/B the v1 ABP.
+    UPROPERTY(EditDefaultsOnly, Category = "Animation")
+    bool bActorLevelFreeLook = false;
+
+    // Slide POSE is owned by the ABP: a Slide state in LocomotionSM (driven by the anim instance's
+    // bIsSliding / GameplayTag_IsDashing bool) plays the MM_Slide_* clips on the LOWER body, so the
+    // UpperBody fire layer composes over it (shoot-while-slide preserved). The slide MOVEMENT is
+    // physics (URogueLocomotionComponent). (Retired: dynamic montages on the FullBody slot — that
+    // slot overrides the whole body, so it blocked aim/fire during the slide; D-0022 montage
+    // approach replaced by the state.)
+
+    // --- Stamina pips (D-0023, Deadlock model). NOTE: sliding and slide-hopping are now FREE — the
+    // pip spends were removed so movement is never gated. The attribute/regen/HUD plumbing stays in
+    // place (dormant) in case stamina is repurposed; nothing currently consumes a pip. Server
+    // owns the GAS attribute (URogueMovementSet); the owning client reads the replicated value. ---
+    UPROPERTY(EditDefaultsOnly, Category = "Stamina")
+    float StaminaRegenSeconds = 2.5;     // one pip per this many seconds
+
+    UPROPERTY(EditDefaultsOnly, Category = "Stamina")
+    float StaminaRegenDelay = 1.0;       // regen pause after any spend
+
+    private float StaminaRegenAccumulator = 0.0;
+    private float StaminaRegenDelayRemaining = 0.0;
+
+    // Owner+server mirror of held-fire intent: bWantsToFire is server-only, but facing must
+    // agree on the predicting owner too or the body snaps on correction.
+    private bool bFireHeldForFacing = false;
 
     // World time of the last confirmed enemy hit on the owning client; the HUD flashes a hitmarker.
     UPROPERTY(BlueprintReadOnly, Category = "Weapon")
     float LastHitConfirmTime = -100.0;
+
+    // World time of the last confirmed killing blow by this hero (owning client); HUD pops the marker.
+    UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+    float LastKillConfirmTime = -100.0;
+
+    // Server-only: this player's replicated kill stat as of the last credit check (kill-confirm seam).
+    private int LastKillStatSeen = 0;
+
+    // Server: the GameMode calls this on every hero when a pooled enemy dies. The C++ death
+    // delegates (FOnDeath / SpawnDirector.OnEnemyKilled) drop the instigator, but
+    // UHealthComponent::ApplyDamage credited the killer's PlayerState.Kills BEFORE broadcasting
+    // OnDeath — so "my kill stat just rose" IS the kill attribution, with no C++ change.
+    void NotifyKillCreditCheck()
+    {
+        if (!HasAuthority())
+            return;
+        ARoguePlayerState PS = Cast<ARoguePlayerState>(PlayerState);
+        if (PS == nullptr)
+            return;
+        if (PS.Kills > LastKillStatSeen)
+            Client_KillConfirm();
+        LastKillStatSeen = PS.Kills;
+    }
+
+    // Cosmetic kill confirmation to the killing player only (research B: third distinct confirm
+    // layer, the loudest of the three).
+    UFUNCTION(Client, Unreliable)
+    void Client_KillConfirm()
+    {
+        LastKillConfirmTime = Gameplay::GetTimeSeconds();
+        URogueWeaponDefinition Def = GetCosmeticWeaponDef();
+        if (Def != nullptr && Def.KillConfirmSound != nullptr)
+            Gameplay::SpawnSound2D(Def.KillConfirmSound);
+    }
+
+    // Floating damage numbers waiting for the HUD to spawn them (owning client only).
+    private TArray<FVector> PendingDamageLocs;
+    private TArray<float> PendingDamageAmounts;
+
+    // Cosmetic, per-hit damage feedback to the shooter only. Unreliable: a lost number is noise.
+    UFUNCTION(Client, Unreliable)
+    void Client_DamageNumbers(TArray<FVector> Locations, TArray<float> Amounts)
+    {
+        int Count = Math::Min(Locations.Num(), Amounts.Num());
+        for (int i = 0; i < Count; i++)
+        {
+            PendingDamageLocs.Add(Locations[i]);
+            PendingDamageAmounts.Add(Amounts[i]);
+        }
+    }
+
+    // The HUD drains the buffer once per frame.
+    void TakePendingDamageNumbers(TArray<FVector>& OutLocs, TArray<float>& OutAmounts)
+    {
+        OutLocs = PendingDamageLocs;
+        OutAmounts = PendingDamageAmounts;
+        PendingDamageLocs.Empty();
+        PendingDamageAmounts.Empty();
+    }
 
     // --- Down/revive (MVP lose condition, D-0010). Logic lives in URogueDownComponent; the
     // replicated life-state lives here on the pawn so teammates see/skip downed allies. ---
@@ -114,9 +244,29 @@ class AHeroCharacter : ARogueHeroBase
     {
         if (IsIncapacitated())
         {
-            bWantsToFire = false;
+            // Route through the stop-edge detector so a held trigger cut by going down still
+            // rings the tail out (server only; on clients the flag is always false — no edge).
+            SetHeldFire(false);
+            SetFireHeldForFacing(false);
             CharacterMovement.StopMovementImmediately();
+            Locomotion.ResetAirState();
         }
+    }
+
+    // Owner + server: the facing logic needs the held-fire intent on both machines.
+    void SetFireHeldForFacing(bool bHeld) { bFireHeldForFacing = bHeld; }
+    bool IsFireHeldForFacing() const { return bFireHeldForFacing; }
+
+    // Server: write the held-fire flag through the stop-edge detector — a held->released
+    // transition rings the gun tail out on all machines (full-auto fatigue fix).
+    private void SetHeldFire(bool bWants)
+    {
+        bool bWas = bWantsToFire;
+        bWantsToFire = bWants;
+        if (bWas && !bWants && HasAuthority() && bFiredSinceHeld)
+            Multicast_FireStopped();
+        if (!bWants)
+            bFiredSinceHeld = false;
     }
 
     // Called by ARogueHeroBase once the ASC is initialized for this pawn (server + clients).
@@ -143,6 +293,13 @@ class AHeroCharacter : ARogueHeroBase
             // component; mirror the attributes into it and keep them live (same pattern as MoveSpeed
             // below, but server-only since that's where weapon timing runs).
             PushWeaponBonuses();
+
+            // Kill-confirm cache: start from the PS's current count so a pre-existing stat
+            // (pawn swap, travel) can't fire a stale confirm on the first death.
+            ARoguePlayerState RPS = Cast<ARoguePlayerState>(PlayerState);
+            if (RPS != nullptr)
+                LastKillStatSeen = RPS.Kills;
+
             ASC.RegisterAttributeChangedCallback(URogueCombatSet, n"FireRateBonus", this, n"OnWeaponBonusChanged");
             ASC.RegisterAttributeChangedCallback(URogueCombatSet, n"ReloadSpeedBonus", this, n"OnWeaponBonusChanged");
             ASC.RegisterAttributeChangedCallback(URogueCombatSet, n"MagazineBonus", this, n"OnWeaponBonusChanged");
@@ -157,15 +314,32 @@ class AHeroCharacter : ARogueHeroBase
         Locomotion.SetBaseSpeed(CurrentMoveSpeed);
         ASC.RegisterAttributeChangedCallback(URogueCombatSet, n"MoveSpeed", this, n"OnMoveSpeedChanged");
 
+        // Camera feel: hand it the camera rig (owning-client cosmetic; ticks from the hero Tick).
+        CameraFeel.Initialize(this, CameraBoom, FollowCamera);
+
         // Down/revive: subscribes (server) to Health hitting 0. Self-gates to authority.
         Down.Initialize(this);
 
         // Visible weapon mesh (all machines): attach to the right hand and set the asset from the class
         // default (available everywhere even though the runtime Weapon.Definition is server-only today).
-        WeaponMesh.AttachToComponent(Mesh, n"hand_r", EAttachmentRule::SnapToTarget,
+        // Lyra mannequin carries an authored grip socket (weapon_r on hand_r); fall back to the
+        // bare hand bone on meshes that lack it.
+        FName GripSocket = Mesh.DoesSocketExist(n"weapon_r") ? n"weapon_r" : n"hand_r";
+        WeaponMesh.AttachToComponent(Mesh, GripSocket, EAttachmentRule::SnapToTarget,
             EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, false);
+        // Re-home the grip offset in code (see WeaponAttachRotation) so the gun points down the
+        // socket's forward instead of ~90 deg off; supersedes any per-mesh band-aid rotation.
+        WeaponMesh.SetRelativeRotation(WeaponAttachRotation);
         if (DefaultWeapon != nullptr && DefaultWeapon.WeaponMesh != nullptr)
+        {
             WeaponMesh.SetSkeletalMeshAsset(DefaultWeapon.WeaponMesh);
+            if (DefaultWeapon.WeaponAnimClass.IsValid())
+                WeaponMesh.SetAnimInstanceClass(DefaultWeapon.WeaponAnimClass);
+        }
+
+        // Lyra linked-layer: overlay the held weapon's anim set onto the base locomotion graph.
+        if (WeaponAnimLayer.IsValid())
+            Mesh.LinkAnimClassLayers(WeaponAnimLayer);
     }
 
     // True bullet origin for third-person convergence: the weapon muzzle socket when the mesh + socket
@@ -183,6 +357,74 @@ class AHeroCharacter : ARogueHeroBase
             + AimYaw.GetForwardVector() * 60.0
             + AimYaw.GetRightVector() * 30.0
             + FVector(0.0, 0.0, 40.0);
+    }
+
+    // The weapon definition for cosmetic use on ANY machine: runtime definition where valid
+    // (server/host), else the class-default DefaultWeapon (same fallback as WeaponMesh).
+    URogueWeaponDefinition GetCosmeticWeaponDef() const
+    {
+        if (Weapon != nullptr && Weapon.Definition != nullptr)
+            return Weapon.Definition;
+        return DefaultWeapon;
+    }
+
+    // --- Stamina pips (D-0023). Reads work on any machine — the attribute replicates from the
+    // PlayerState ASC — which is what lets the owning client predict the slide gate locally. ---
+    float GetStamina() const
+    {
+        UAngelscriptAbilitySystemComponent ASC = GetRogueAbilitySystem();
+        return ASC != nullptr ? ASC.GetAttributeCurrentValue(URogueMovementSet, n"Stamina", 0.0) : 0.0;
+    }
+
+    float GetMaxStamina() const
+    {
+        UAngelscriptAbilitySystemComponent ASC = GetRogueAbilitySystem();
+        return ASC != nullptr ? ASC.GetAttributeCurrentValue(URogueMovementSet, n"MaxStamina", 0.0) : 0.0;
+    }
+
+    bool HasStaminaPip() const { return GetStamina() >= 1.0; }
+
+    // Server only: burn one pip and restart the regen pause. SetAttributeBaseValue fires the
+    // change callbacks and replicates, so the owner's predicted gate catches up on its own.
+    // The C++ set clamps 0..Max; the Math::Max is belt-and-suspenders.
+    void SpendStaminaPip()
+    {
+        if (!HasAuthority())
+            return;
+        UAngelscriptAbilitySystemComponent ASC = GetRogueAbilitySystem();
+        if (ASC == nullptr)
+            return;
+        float Current = ASC.GetAttributeCurrentValue(URogueMovementSet, n"Stamina", 0.0);
+        ASC.SetAttributeBaseValue(URogueMovementSet, n"Stamina", Math::Max(Current - 1.0, 0.0));
+        StaminaRegenDelayRemaining = StaminaRegenDelay;
+        StaminaRegenAccumulator = 0.0;
+    }
+
+    // Server only (called from the authority block in Tick): wait out the post-spend pause,
+    // then accumulate toward the next whole pip — pips return one at a time, never fractional.
+    private void TickStaminaRegen(float DeltaSeconds)
+    {
+        UAngelscriptAbilitySystemComponent ASC = GetRogueAbilitySystem();
+        if (ASC == nullptr)
+            return;
+        float Current = ASC.GetAttributeCurrentValue(URogueMovementSet, n"Stamina", 0.0);
+        float Max = ASC.GetAttributeCurrentValue(URogueMovementSet, n"MaxStamina", 0.0);
+        if (Current >= Max)
+        {
+            StaminaRegenAccumulator = 0.0;
+            return;
+        }
+        if (StaminaRegenDelayRemaining > 0.0)
+        {
+            StaminaRegenDelayRemaining -= DeltaSeconds;
+            return;
+        }
+        StaminaRegenAccumulator += DeltaSeconds;
+        if (StaminaRegenAccumulator >= StaminaRegenSeconds)
+        {
+            StaminaRegenAccumulator -= StaminaRegenSeconds;
+            ASC.SetAttributeBaseValue(URogueMovementSet, n"Stamina", Math::Min(Current + 1.0, Max));
+        }
     }
 
     // Keep locomotion's base speed in sync with the MoveSpeed attribute (e.g. the Swift upgrade).
@@ -228,7 +470,35 @@ class AHeroCharacter : ARogueHeroBase
     // Jump/double-jump is natively client-predicted by ACharacter (saved moves), so no Server_ mirror
     // is needed; JumpMaxCount (set by the locomotion component) gates the second jump.
     UFUNCTION(BlueprintCallable)
-    void DoJump() { if (!IsIncapacitated()) Jump(); }
+    void DoJump()
+    {
+        if (IsIncapacitated())
+            return;
+        // Slide-hop: jumping out of a slide keeps 100% of horizontal velocity (D-0015 rework).
+        if (Locomotion.IsSliding())
+            Locomotion.NotifySlideJump();
+        // Auto-stand like Apex/Deadlock: stock CanJump refuses while crouched, and UnCrouch
+        // is a no-op when already standing. Landing re-entry keys off the held crouch input.
+        UnCrouch();
+        Jump();
+    }
+
+    // Fires on the predicted client and the server; idempotent (sets the second jump's Z).
+    UFUNCTION(BlueprintOverride)
+    void OnJumped()
+    {
+        Locomotion.NotifyJumped(JumpCurrentCount);
+    }
+
+    // Fires on the server and the owning client. Slide re-entry + camera/anim get the fall speed.
+    UFUNCTION(BlueprintOverride)
+    void OnLanded(FHitResult Hit)
+    {
+        float FallSpeed = Math::Abs(CharacterMovement.Velocity.Z);
+        Locomotion.NotifyLanded(FallSpeed);
+        if (IsLocallyControlled())
+            CameraFeel.NotifyLanded(FallSpeed);
+    }
 
     UFUNCTION(BlueprintCallable)
     void DoStopJump() { StopJumping(); }
@@ -253,6 +523,7 @@ class AHeroCharacter : ARogueHeroBase
     {
         if (IsIncapacitated())
             return;
+        // Sliding is free (no stamina gate): crouch-while-sprinting-and-fast always slides.
         Locomotion.RequestCrouchOrSlide();
         Server_CrouchPressed();
     }
@@ -292,49 +563,116 @@ class AHeroCharacter : ARogueHeroBase
         Locomotion.SetFocus(bWants);
     }
 
-    // Owning-client cosmetic: blend the focus camera (FOV zoom + boom pull-in) toward the focus state.
-    private void UpdateFocusCamera(float DeltaSeconds)
-    {
-        float Target = bFocusing ? 1.0 : 0.0;
-        FocusAlpha = Math::FInterpTo(FocusAlpha, Target, DeltaSeconds, FocusBlendSpeed);
-
-        float TargetFOV = 70.0;          // fallbacks for remote clients (Weapon.Definition is server-only)
-        float TargetArm = 220.0;
-        if (Weapon != nullptr && Weapon.Definition != nullptr)
-        {
-            TargetFOV = Weapon.Definition.FocusFOV;
-            TargetArm = Weapon.Definition.FocusArmLength;
-        }
-        FollowCamera.FieldOfView = Math::Lerp(BaseCameraFOV, TargetFOV, FocusAlpha);
-        CameraBoom.TargetArmLength = Math::Lerp(BaseArmLength, TargetArm, FocusAlpha);
-    }
-
     // Server: drive weapon timing and full-auto refire. Overriding Tick is what makes the class tick.
     UFUNCTION(BlueprintOverride)
     void Tick(float DeltaSeconds)
     {
         // Slide physics run wherever movement is simulated (predicted client + authority).
         if (IsLocallyControlled() || HasAuthority())
+        {
             Locomotion.TickLocomotion(DeltaSeconds);
+            TickFacing(DeltaSeconds);
+        }
 
-        // Owning client: blend the focus camera zoom (cosmetic, local only).
+        // Owning client: camera feel (focus zoom + FOV kicks + fire kick + landing dip; cosmetic, local only).
         if (IsLocallyControlled())
-            UpdateFocusCamera(DeltaSeconds);
+            CameraFeel.TickCameraFeel(DeltaSeconds);
 
         if (HasAuthority())
         {
             // Down/revive bleed-out + revive-proximity (server-authoritative).
             Down.TickDown(DeltaSeconds);
 
+            // Stamina pip regen (server-authoritative; the attribute replicates the result. D-0023).
+            TickStaminaRegen(DeltaSeconds);
+
             if (Weapon != nullptr)
             {
                 Weapon.TickWeapon(DeltaSeconds);
+
+                // Reload started this frame (manual or auto): cosmetic montage everywhere.
+                bool bReloadingNow = Weapon.IsReloading();
+                if (bReloadingNow && !bWasReloading)
+                    Multicast_ReloadFX();
+                bWasReloading = bReloadingNow;
 
                 // Full-auto: keep re-activating the fire ability while held; CanFire() gates the rate.
                 if (bWantsToFire && Weapon.Definition != nullptr && Weapon.Definition.bFullAuto)
                     ActivateGrantedAbility(FireInputTag);
             }
         }
+    }
+
+    // Idle free-look: drop the camera-yaw hard lock while truly idle so the camera orbits a
+    // planted body; restore it (via a smooth catch-up turn) the moment the body must face the
+    // camera. Runs on the predicting owner and the server (sim proxies replicate rotation);
+    // both sides compute from the same inputs so corrections stay negligible.
+    private void TickFacing(float DeltaSeconds)
+    {
+        if (!bActorLevelFreeLook)
+        {
+            // Lyra stack owns idle facing; keep the classic hard camera-yaw lock.
+            if (!bUseControllerRotationYaw)
+                bUseControllerRotationYaw = true;
+            return;
+        }
+
+        if (Controller == nullptr)
+            return;
+
+        if (IsIncapacitated())
+        {
+            // Downed bodies never rotate with the camera.
+            bUseControllerRotationYaw = false;
+            return;
+        }
+
+        bool bNeedsCamera = bFireHeldForFacing || bFocusing
+            || CharacterMovement.IsFalling()
+            || Locomotion.IsSliding()
+            || CharacterMovement.GetCurrentAcceleration().SizeSquared() > 1.0;
+
+        float CtrlYaw = GetControlRotation().Yaw;
+        float ActorYaw = GetActorRotation().Yaw;
+        float Delta = NormalizeYaw(CtrlYaw - ActorYaw);
+
+        if (bNeedsCamera)
+        {
+            if (bUseControllerRotationYaw)
+                return;
+            // Catch up to the camera, then hand back to the hard lock.
+            float Step = IdleAlignYawRate * DeltaSeconds;
+            if (Math::Abs(Delta) <= Step)
+            {
+                bUseControllerRotationYaw = true;
+            }
+            else
+            {
+                FRotator R = GetActorRotation();
+                R.Yaw += (Delta > 0.0) ? Step : -Step;
+                SetActorRotation(R);
+            }
+            return;
+        }
+
+        // True idle: free-look. If the camera swings past the deadband, drag the body just
+        // enough to ride the limit (reads as a natural repositioning step).
+        bUseControllerRotationYaw = false;
+        if (Math::Abs(Delta) > IdleFreeLookYawLimit)
+        {
+            float Step = Math::Min(IdleAlignYawRate * DeltaSeconds, Math::Abs(Delta) - IdleFreeLookYawLimit);
+            FRotator R = GetActorRotation();
+            R.Yaw += (Delta > 0.0) ? Step : -Step;
+            SetActorRotation(R);
+        }
+    }
+
+    private float NormalizeYaw(float Angle) const
+    {
+        float A = Angle;
+        while (A > 180.0)  A -= 360.0;
+        while (A < -180.0) A += 360.0;
+        return A;
     }
 
     // Resolve an input tag to the granted ability spec and activate it (server-authoritative).
@@ -368,13 +706,12 @@ class AHeroCharacter : ARogueHeroBase
     UFUNCTION(Server)
     void Server_SetWantsToFire(bool bWants)
     {
-        if (IsIncapacitated())
-        {
-            bWantsToFire = false;
-            return;
-        }
-        bWantsToFire = bWants;
-        if (bWants)
+        // Incapacitated heroes can't hold the trigger; forcing the flag through the same edge
+        // detector means a press-while-down is a no-op and a held->incap stop releases the tail.
+        bool bWant = bWants && !IsIncapacitated();
+        SetHeldFire(bWant);
+        SetFireHeldForFacing(bWant);
+        if (bWant)
             ActivateGrantedAbility(FireInputTag);
     }
 
@@ -386,48 +723,140 @@ class AHeroCharacter : ARogueHeroBase
             Weapon.StartReload();
     }
 
-    // Cosmetic, fire-and-forget: muzzle tracer(s) on all machines + recoil and a hitmarker on the
-    // owning client. MuzzleLocation is the gun muzzle (computed server-side) so tracers come from the
-    // weapon, not the camera (D-0014). bHitEnemy flags that a pellet damaged an enemy this shot.
+    // Cosmetic, fire-and-forget: muzzle flash / tracer(s) / impacts + fire sound on all machines,
+    // recoil and a hitmarker on the owning client. MuzzleLocation is the gun muzzle (computed
+    // server-side) so tracers come from the weapon, not the camera (D-0014). ImpactIsEnemy is
+    // per-pellet (surface-aware impact FX); bHitEnemy flags that any pellet damaged an enemy.
+    // All FX/audio slots on the definition are optional: null = debug-line / silent fallback.
     UFUNCTION(NetMulticast, Unreliable)
-    void Multicast_FireFX(FVector MuzzleLocation, TArray<FVector> Impacts, bool bHitEnemy)
+    void Multicast_FireFX(FVector MuzzleLocation, TArray<FVector> Impacts, TArray<bool> ImpactIsEnemy, bool bHitEnemy)
     {
-        for (FVector Impact : Impacts)
-            System::DrawDebugLine(MuzzleLocation, Impact, FLinearColor(1.0, 1.0, 0.0), 0.05, 2.0);
+        // A real shot happened this hold — arms the release tail (server-side flag; the multicast
+        // body also runs on the listen server).
+        if (HasAuthority())
+            bFiredSinceHeld = true;
+
+        PlayUpperBodyMontage(FireMontage);
+
+        URogueWeaponDefinition Def = GetCosmeticWeaponDef();
+        PlayWeaponMontage(Def != nullptr ? Def.WeaponFireMontage : nullptr);
+        for (int i = 0; i < Impacts.Num(); i++)
+        {
+            FVector Impact = Impacts[i];
+
+            // Tracer: spawn aimed muzzle->impact and hand the system its endpoint.
+            if (Def != nullptr && Def.TracerFX != nullptr)
+            {
+                FRotator TracerRot = (Impact - MuzzleLocation).ToOrientationRotator();
+                UNiagaraComponent Tracer = Niagara::SpawnSystemAtLocation(Def.TracerFX, MuzzleLocation, TracerRot);
+                if (Tracer != nullptr)
+                    Tracer.SetVectorParameter(n"TracerEnd", Impact);
+            }
+            else
+            {
+                System::DrawDebugLine(MuzzleLocation, Impact, FLinearColor(1.0, 1.0, 0.0), 0.05, 2.0);
+            }
+
+            // Surface-aware impact: enemy flesh vs world geometry.
+            if (Def != nullptr)
+            {
+                bool bEnemyImpact = i < ImpactIsEnemy.Num() && ImpactIsEnemy[i];
+                UNiagaraSystem ImpactFX = bEnemyImpact ? Def.ImpactEnemyFX : Def.ImpactWorldFX;
+                if (ImpactFX != nullptr)
+                    Niagara::SpawnSystemAtLocation(ImpactFX, Impact);
+            }
+        }
+
+        if (Def != nullptr)
+        {
+            // Muzzle flash rides the gun (one per cartridge, not per pellet). A bad socket name
+            // silently attaches to the mesh root — acceptable cosmetic degradation.
+            if (Def.MuzzleFlashFX != nullptr)
+                Niagara::SpawnSystemAttached(Def.MuzzleFlashFX, WeaponMesh, Def.MuzzleSocket,
+                    FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget, true);
+            if (Def.FireSound != nullptr)
+                Gameplay::SpawnSoundAtLocation(Def.FireSound, MuzzleLocation);
+        }
 
         if (IsLocallyControlled())
         {
+            CameraFeel.NotifyFired();
             if (Weapon != nullptr && Weapon.Definition != nullptr)
             {
                 AddControllerPitchInput(-Weapon.Definition.RecoilPitchPerShot);
                 AddControllerYawInput(Math::RandRange(-Weapon.Definition.RecoilYawRange, Weapon.Definition.RecoilYawRange));
             }
             if (bHitEnemy)
+            {
                 LastHitConfirmTime = Gameplay::GetTimeSeconds();
+                if (Def != nullptr && Def.HitTickSound != nullptr)
+                    Gameplay::SpawnSound2D(Def.HitTickSound);
+            }
         }
     }
 
-    // Apply a chosen upgrade server-side: the upgrade's GameplayEffect is applied to the player ASC,
-    // modifying attributes authoritatively. Called by UpgradeSelectWidget on the owning client. D-0010.
+    // Cosmetic: the gun tail rings out once when the trigger releases (full-auto fatigue fix).
+    UFUNCTION(NetMulticast, Unreliable)
+    void Multicast_FireStopped()
+    {
+        URogueWeaponDefinition Def = GetCosmeticWeaponDef();
+        if (Def != nullptr && Def.FireTailSound != nullptr)
+            Gameplay::SpawnSoundAtLocation(Def.FireTailSound, GetCosmeticMuzzleLocation());
+    }
+
+    // Muzzle position safe on ANY machine: socket via the cosmetic def when the mesh exists,
+    // else the actor location (close enough for a tail sound). GetMuzzleLocation stays the
+    // server-path origin (it reads the server-only Weapon.Definition).
+    FVector GetCosmeticMuzzleLocation() const
+    {
+        URogueWeaponDefinition Def = GetCosmeticWeaponDef();
+        if (Def != nullptr && WeaponMesh != nullptr && WeaponMesh.GetSkeletalMeshAsset() != nullptr
+            && WeaponMesh.DoesSocketExist(Def.MuzzleSocket))
+        {
+            return WeaponMesh.GetSocketLocation(Def.MuzzleSocket);
+        }
+        return GetActorLocation();
+    }
+
+    // Cosmetic, fire-and-forget: reload montage + reload sound on all machines.
+    UFUNCTION(NetMulticast, Unreliable)
+    void Multicast_ReloadFX()
+    {
+        PlayUpperBodyMontage(ReloadMontage);
+        URogueWeaponDefinition Def = GetCosmeticWeaponDef();
+        PlayWeaponMontage(Def != nullptr ? Def.WeaponReloadMontage : nullptr);
+        if (Def != nullptr && Def.ReloadSound != nullptr)
+            Gameplay::SpawnSoundAtLocation(Def.ReloadSound, GetActorLocation());
+    }
+
+    private void PlayUpperBodyMontage(UAnimMontage Montage)
+    {
+        if (Montage == nullptr || Mesh == nullptr)
+            return;
+        UAnimInstance AnimInst = Mesh.GetAnimInstance();
+        if (AnimInst != nullptr)
+            AnimInst.Montage_Play(Montage);
+    }
+
+    private void PlayWeaponMontage(UAnimMontage Montage)
+    {
+        if (Montage == nullptr || WeaponMesh == nullptr || WeaponMesh.GetSkeletalMeshAsset() == nullptr)
+            return;
+        UAnimInstance WeapAnim = WeaponMesh.GetAnimInstance();
+        if (WeapAnim != nullptr)
+            WeapAnim.Montage_Play(Montage);
+    }
+
+    // Apply a chosen upgrade server-side. The GameMode validates the card against the player's
+    // offered hand (client intent never trusted), applies the GE, and resumes the raid when
+    // everyone has picked. D-0010 / D-0019.
     UFUNCTION(Server)
     void Server_ApplyUpgrade(URogueUpgradeDef Upgrade)
     {
-        if (Upgrade == nullptr || Upgrade.Effect.Get() == nullptr)
-            return;
-
-        UAngelscriptAbilitySystemComponent ASC = GetRogueAbilitySystem();
-        if (ASC != nullptr)
-            ASC.ApplyGameplayEffectToTarget(Upgrade.Effect, ASC, 1.0, FGameplayEffectContextHandle());
-
-        // Stat credit (results screen "Upgrades" row). Server-side: this is a Server RPC.
-        ARoguePlayerState PS = Cast<ARoguePlayerState>(PlayerState);
-        if (PS != nullptr)
-            PS.AddUpgradeTaken();
-
-        // Pick bookkeeping: the GameMode resumes the pick-paused raid once everyone has chosen.
         ARaidGameMode GameMode = Cast<ARaidGameMode>(Gameplay::GetGameMode());
-        if (GameMode != nullptr)
-            GameMode.NotifyUpgradePicked();
+        ARaidPlayerController PC = Cast<ARaidPlayerController>(GetController());
+        if (GameMode != nullptr && PC != nullptr)
+            GameMode.ApplyUpgradeFor(PC, Upgrade);
     }
 
     // Route a remote client's "call extraction" through a player-owned RPC (clients can't

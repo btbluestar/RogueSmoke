@@ -1,5 +1,8 @@
 # Handoff — 3rd-person shooting + enemy roster (overnight 2026-06-09 → 10)
 
+> 📦 **Historical handoff** — accurate for its date; the roster and damage seam it introduced
+> are now documented in `DECISIONS.md` D-0017 and `GLOSSARY.md`.
+
 Built while you slept. **Everything below is committed on `main` and compiles/builds clean**
 (`ue-cpp build` + `as-helper run_code_test` exit 0). The focus-input wiring (item 1) was finished
 headlessly via a python commandlet after the editor closed; what genuinely remains is **PIE feel-checks**

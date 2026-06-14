@@ -32,7 +32,7 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 # array — all must appear). Optional: Exec (passed as -ExecCmds, for debug-exec batteries) and
 # Window (per-case spawn window in seconds, when the exec needs longer than the default).
 $Cases = @(
-    @{ Name = "RaidArena";          Map = "/Game/Levels/RaidArena";                       Expect = "[Raid] spawned 4 ring elites + boss" }
+    @{ Name = "RaidArena";          Map = "/Game/Levels/RaidArena";                       Expect = @("[Raid] spawned 4 ring elites + boss", "[MoveSmoke] RESULT 4/4"); Exec = "MoveSmoke"; Window = 45 }
     @{ Name = "Enemy_Crawler";      Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Crawler";     Expect = "CRAWLER (fodder): spawned 8" }
     @{ Name = "Enemy_Carapace";     Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Carapace";    Expect = "CARAPACE: spawned 2" }
     @{ Name = "Enemy_Spitter";      Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Spitter";     Expect = "SPITTER: spawned 2" }
@@ -41,8 +41,19 @@ $Cases = @(
     @{ Name = "Enemy_BroodMother";  Map = "/Game/Levels/DebuggingLevels/DL_Enemy_BroodMother"; Expect = "BROOD-MOTHER (boss): spawned 1" }
     # Upgrade firing range + the GE->attribute battery: every pool upgrade must move an attribute.
     @{ Name = "Upgrades";           Map = "/Game/Levels/DebuggingLevels/DL_Upgrades";
-       Expect = @("[UpgradeTest] range ready: solo=1 line=4 cluster=5", "[UpgradeSmoke] RESULT 16/16")
-       Exec = "UpgradeSmoke"; Window = 45 }
+       Expect = @("[UpgradeTest] range ready: solo=1 line=4 cluster=5", "[UpgradeSmoke] RESULT 35/35", "[FlowSmoke] RESULT 7/7")
+       Exec = "UpgradeSmoke, UpgradeFlowSmoke"; Window = 60 }
+    # Behavior evolutions + wave director (D-0020). Separate boot: UpgradeSmoke pre-sets every
+    # evolution flag, so EvoSmoke needs a clean ASC.
+    @{ Name = "UpgradesEvo";        Map = "/Game/Levels/DebuggingLevels/DL_Upgrades";
+       Expect = @("[EvoSmoke] RESULT 7/7", "[DirectorSmoke] RESULT 6/6")
+       Exec = "EvoSmoke, DirectorReport"; Window = 75 }
+    # Full raid-loop bridges (D-0009/D-0010). Each outcome ends the run, so they boot separately:
+    # victory = clear -> extraction -> defend wave -> survive -> Victory; defeat = party-wipe -> Defeat.
+    @{ Name = "RaidLoopVictory";    Map = "/Game/Levels/RaidArena";
+       Expect = "[RaidLoopSmoke] RESULT 4/4"; Exec = "RaidLoopSmoke victory"; Window = 45 }
+    @{ Name = "RaidLoopDefeat";     Map = "/Game/Levels/RaidArena";
+       Expect = "[RaidLoopSmoke] RESULT 2/2"; Exec = "RaidLoopSmoke defeat"; Window = 30 }
 )
 
 $FatalPatterns = @("Fatal error", "Assertion failed", "Script call stack", "LogScript: Error")

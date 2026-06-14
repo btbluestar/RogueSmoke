@@ -16,6 +16,10 @@ class UUpgradeSelectWidget : UCommonActivatableWidget
     UPROPERTY(EditAnywhere, Category = "Upgrades")
     TArray<URogueUpgradeDef> OfferedUpgrades;
 
+    // Stack counts aligned with OfferedUpgrades (how many copies the player already owns).
+    UPROPERTY(EditAnywhere, Category = "Upgrades")
+    TArray<int> OfferedStacks;
+
     default bIsFocusable = true;     // so number-key picks reach OnKeyDown
     default bIsBackHandler = false;  // no backing out of the pick
 
@@ -24,6 +28,9 @@ class UUpgradeSelectWidget : UCommonActivatableWidget
     private TArray<UUpgradeCardWidget> Cards;
     private bool bBuilt = false;
     private bool bCardsBuilt = false;
+    private UTextBlock WaitingText;
+    private UButton RerollButton;
+    private UTextBlock RerollLabel;
 
     UFUNCTION(BlueprintOverride)
     void OnInitialized()
@@ -33,9 +40,22 @@ class UUpgradeSelectWidget : UCommonActivatableWidget
 
     // Called by the PC right after pushing this onto the GameMenu stack (the stack constructs
     // the widget itself, so the offer can't be set before creation like the old flow did).
-    void Setup(TArray<URogueUpgradeDef> Options)
+    void Setup(TArray<URogueUpgradeDef> Options, TArray<int> CurrentStacks)
     {
         OfferedUpgrades = Options;
+        OfferedStacks = CurrentStacks;
+        BuildCards();
+    }
+
+    // Reroll path: the server re-rolled our hand while the screen is up — rebuild the cards.
+    void Refresh(TArray<URogueUpgradeDef> Options, TArray<int> CurrentStacks)
+    {
+        OfferedUpgrades = Options;
+        OfferedStacks = CurrentStacks;
+        if (CardRow != nullptr)
+            CardRow.ClearChildren();
+        Cards.Empty();
+        bCardsBuilt = false;
         BuildCards();
     }
 
@@ -53,6 +73,18 @@ class UUpgradeSelectWidget : UCommonActivatableWidget
     UWidget BP_GetDesiredFocusTarget() const
     {
         return Cards.Num() > 0 ? Cards[0].GetFocusWidget() : nullptr;
+    }
+
+    // On close (pick made or watchdog force-close), CommonUI's own restore of the underlying
+    // HUD host's Game/capture config is eaten by an editor-only focus guard (slate focus sits
+    // on the clicked card's dying button at this exact frame) and never retried — restore it
+    // deterministically through the PC.
+    UFUNCTION(BlueprintOverride)
+    void OnDeactivated()
+    {
+        ARaidPlayerController PC = Cast<ARaidPlayerController>(GetOwningPlayer());
+        if (PC != nullptr)
+            PC.RestoreTopmostInputConfig();
     }
 
     private void BuildFrame()
@@ -73,7 +105,7 @@ class UUpgradeSelectWidget : UCommonActivatableWidget
         BackdropSlot.SetAnchors(FAnchors(0.0, 0.0, 1.0, 1.0));
         BackdropSlot.SetOffsets(FMargin(0.0, 0.0, 0.0, 0.0));
 
-        UTextBlock Title = RogueUITheme::MakeText(this, "CHOOSE AN UPGRADE", RogueUITheme::TextPrimary, 2.2);
+        UTextBlock Title = RogueUITheme::MakeText(this, "CHOOSE AN UPGRADE", RogueUITheme::TextPrimary(), 2.2);
         UCanvasPanelSlot TitleSlot = Root.AddChildToCanvas(Title);
         TitleSlot.SetAnchors(FAnchors(0.5, 0.18));
         TitleSlot.SetAlignment(FVector2D(0.5, 0.5));
@@ -85,11 +117,28 @@ class UUpgradeSelectWidget : UCommonActivatableWidget
         RowSlot.SetAlignment(FVector2D(0.5, 0.45));
         RowSlot.SetAutoSize(true);
 
-        UTextBlock Hint = RogueUITheme::MakeText(this, "Click a card or press its number — the raid is paused until everyone picks", RogueUITheme::TextDim, 1.0);
+        UTextBlock Hint = RogueUITheme::MakeText(this, "Click a card or press its number — the raid is paused until everyone picks", RogueUITheme::TextDim(), 1.0);
         UCanvasPanelSlot HintSlot = Root.AddChildToCanvas(Hint);
         HintSlot.SetAnchors(FAnchors(0.5, 0.82));
         HintSlot.SetAlignment(FVector2D(0.5, 0.5));
         HintSlot.SetAutoSize(true);
+
+        // Lock-in status: who the squad is waiting on (replicated AwaitingPickNames).
+        WaitingText = RogueUITheme::MakeText(this, "", RogueUITheme::TextDim(), 1.0);
+        UCanvasPanelSlot WaitingSlot = Root.AddChildToCanvas(WaitingText);
+        WaitingSlot.SetAnchors(FAnchors(0.5, 0.88));
+        WaitingSlot.SetAlignment(FVector2D(0.5, 0.5));
+        WaitingSlot.SetAutoSize(true);
+
+        // Squad reroll: one shared charge; re-rolls THIS player's hand.
+        RerollButton = Cast<UButton>(ConstructWidget(UButton::StaticClass()));
+        RerollLabel = RogueUITheme::MakeText(this, "REROLL (R)", RogueUITheme::TextPrimary(), 1.1);
+        RerollButton.AddChild(RerollLabel);
+        RerollButton.OnClicked.AddUFunction(this, n"HandleRerollClicked");
+        UCanvasPanelSlot RerollSlot = Root.AddChildToCanvas(RerollButton);
+        RerollSlot.SetAnchors(FAnchors(0.5, 0.74));
+        RerollSlot.SetAlignment(FVector2D(0.5, 0.5));
+        RerollSlot.SetAutoSize(true);
     }
 
     private void BuildCards()
@@ -104,7 +153,8 @@ class UUpgradeSelectWidget : UCommonActivatableWidget
                 WidgetBlueprint::CreateWidget(UUpgradeCardWidget, GetOwningPlayer()));
             if (Card == nullptr)
                 continue;
-            Card.Populate(OfferedUpgrades[i], i, this);
+            int StackCount = (i < OfferedStacks.Num()) ? OfferedStacks[i] : 0;
+            Card.Populate(OfferedUpgrades[i], StackCount, i, this);
             UHorizontalBoxSlot CardSlot = CardRow.AddChildToHorizontalBox(Card);
             CardSlot.SetPadding(FMargin(12.0, 0.0, 12.0, 0.0));
             Cards.Add(Card);
@@ -133,7 +183,50 @@ class UUpgradeSelectWidget : UCommonActivatableWidget
             ChooseUpgrade(Picked);
             return FEventReply::Handled();
         }
+        if (Key == EKeys::R)
+        {
+            HandleRerollClicked();
+            return FEventReply::Handled();
+        }
         return FEventReply::Unhandled();
+    }
+
+    UFUNCTION()
+    private void HandleRerollClicked()
+    {
+        ARaidPlayerController PC = Cast<ARaidPlayerController>(GetOwningPlayer());
+        if (PC != nullptr)
+            PC.Server_RequestReroll();
+    }
+
+    UFUNCTION(BlueprintOverride)
+    void Tick(FGeometry MyGeometry, float InDeltaTime)
+    {
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (GS == nullptr)
+            return;
+
+        if (WaitingText != nullptr)
+        {
+            FString Line;
+            for (int i = 0; i < GS.AwaitingPickNames.Num(); i++)
+            {
+                if (i > 0)
+                    Line += ", ";
+                Line += GS.AwaitingPickNames[i];
+            }
+            WaitingText.SetText(FText::FromString(
+                Line.IsEmpty() ? "" : f"Waiting on: {Line}"));
+        }
+
+        if (RerollButton != nullptr)
+        {
+            bool bCanReroll = GS.SquadRerollsRemaining > 0;
+            RerollButton.SetIsEnabled(bCanReroll);
+            if (RerollLabel != nullptr)
+                RerollLabel.SetText(FText::FromString(
+                    bCanReroll ? f"REROLL (R) — {GS.SquadRerollsRemaining} left" : "NO REROLLS LEFT"));
+        }
     }
 
     // Routes the choice through the owning pawn's server RPC so the upgrade's GameplayEffect

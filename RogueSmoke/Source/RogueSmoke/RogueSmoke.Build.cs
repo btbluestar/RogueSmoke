@@ -29,7 +29,14 @@ public class RogueSmoke : ModuleRules
 			"AngelscriptGAS",
 			// CommonUI: layer-stack push shim (BP_AddWidget is private, so AngelScript can't
 			// reflect it — RogueUIStatics wraps the public C++ template AddWidget instead).
-			"CommonUI"
+			"CommonUI",
+			// ContextEffects (Feedback/ContextEffects, ported from Lyra):
+			// Niagara for UNiagaraSystem/Component + SpawnSystemAttached,
+			// DeveloperSettings for URogueContextEffectsSettings (UDeveloperSettings),
+			// PhysicsCore for EPhysicalSurface / Chaos/ChaosEngineInterface.h / UPhysicalMaterial.
+			"Niagara",
+			"DeveloperSettings",
+			"PhysicsCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

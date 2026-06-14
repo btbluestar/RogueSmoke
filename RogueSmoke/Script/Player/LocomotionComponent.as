@@ -1,117 +1,167 @@
 // LocomotionComponent.as
-// The hero's mobility state machine (D-0015): hold-to-sprint, crouch, momentum slide, and the
-// double-jump config. Apex/Deadlock feel, built on stock UCharacterMovementComponent so movement
-// stays client-predicted without a custom C++ movement mode (the documented upgrade path).
+// The hero's mobility state machine (D-0015, reworked for the feel pass — see
+// docs/superpowers/research/2026-06-11-feel-research-notes.md Report A):
+// Deadlock-lean ground response, heavy gravity, and Apex-style slide-hop momentum
+// (boost-arming threshold + hard cap + landing re-entry), all on stock CMC so movement
+// stays client-predicted. Every knob is a UPROPERTY: MoveTune sets them live in PIE and
+// meta-progression (D-0013) modifies them later.
 //
-// Composition home (CODING_STANDARDS §3), mirroring URogueWeaponComponent: tunables + runtime state
-// here, the hero exposes thin input methods that drive it. The slide physics run from the hero Tick
-// via delta seconds (no timers/world-clock), on both the locally-controlled client (prediction) and
-// the server (authority) so stock CMC reconciliation keeps them aligned.
-//
-// MVP: state is not separately replicated — CMC already replicates velocity/crouch/jump. The tunable
-// fields below are the seam meta-progression (D-0013) will later modify (speed, jump height/count,
-// slide distance) and re-apply via ApplyGroundSpeed().
+// Composition home (CODING_STANDARDS §3), mirroring URogueWeaponComponent: tunables + runtime
+// state live here; the hero exposes thin input methods that drive it. Slide physics run from the
+// hero Tick via delta seconds (no timers/world-clock) on both the locally-controlled client and
+// the server, so stock CMC reconciliation keeps them aligned.
 class URogueLocomotionComponent : UActorComponent
 {
-    // --- Sprint ---
-    UPROPERTY(EditDefaultsOnly, Category = "Movement|Sprint")
-    float SprintSpeedMultiplier = 1.6;
+    // --- Ground response (input feels direct) ---
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Ground")
+    float MaxAcceleration = 6144.0;          // sv_accelerate 10 ~= full speed in ~0.15 s
 
-    // --- Jump ---
-    // Double-jump enabled by default so it's playable now. When meta-progression lands this becomes an
-    // unlock: default this to 1 and have an upgrade raise it.
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Ground")
+    float BrakingDecelerationWalking = 3072.0;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Ground")
+    float GroundFriction = 10.0;
+
+    // Separate braking friction decouples stop-feel from turn-feel (PBCharacterMovement pattern).
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Ground")
+    float BrakingFriction = 6.0;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Ground")
+    float BrakingFrictionFactor = 1.0;
+
+    // --- Gravity & air (the floatiness fix) ---
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Air")
+    float GravityScale = 1.8;                // Deadlock ~2.07, Apex ~1.46; lean Deadlock
+
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Air")
+    float JumpZVelocity = 750.0;             // similar height as before, faster arc
+
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Air")
+    float DoubleJumpZVelocity = 700.0;       // second jump reads better slightly weaker
+
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Air")
+    float JumpMaxHoldTime = 0.0;             // both refs use fixed impulse; tunable for PIE A/B
+
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Air")
+    float AirControl = 0.9;                  // Deadlock-style direct air steering
+
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Air")
+    float FallingLateralFriction = 0.0;      // preserve slide-hop momentum in air
+
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Jump")
     int MaxJumpCount = 2;
 
-    UPROPERTY(EditDefaultsOnly, Category = "Movement|Jump")
-    float JumpZVelocity = 600.0;
+    // --- Sprint / crouch / focus ---
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Sprint")
+    float SprintSpeedMultiplier = 1.6;
 
-    UPROPERTY(EditDefaultsOnly, Category = "Movement|Jump")
-    float AirControl = 0.35;
-
-    // --- Crouch ---
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Crouch")
     float CrouchSpeed = 300.0;
 
-    // --- Focus (light ADS) ---
-    // The strafe slow while aiming lives here (a movement tunable), not on the weapon, so the owning
-    // client can predict it without the server-only weapon state. The hero toggles it via SetFocus().
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Focus")
     float FocusMoveMultiplier = 0.8;
 
-    // --- Slide ---
+    // --- Slide (the fastest ground state; momentum tool) ---
+    // Boost target / cap / arming threshold are fractions of the CURRENT sprint speed so
+    // MoveSpeed upgrades scale the whole slide economy with them.
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
-    float SlideBoostSpeed = 900.0;          // target horizontal speed entering a slide
+    float SlideBoostMultiplier = 1.3;        // boost target = sprint * this (Apex ~1.34 cap)
 
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
-    float SlideMinSpeed = 350.0;            // drop below this and the slide ends
+    float SlideSpeedCapMultiplier = 1.5;     // hard cap = sprint * this (Deadlock dash-jump 1.55x)
 
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
-    float SlideGroundFriction = 0.4;        // low friction = the slide carries
+    float SlideBoostArmMultiplier = 1.1;     // boost ONLY if speed < sprint * this (anti-bhop, Apex rule)
 
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
-    float SlideBraking = 200.0;             // BrakingDecelerationWalking during the slide
+    float SlideEntryMinFraction = 0.85;      // entry needs speed >= sprint * this
 
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
-    float SlideDownhillAccel = 2048.0;      // extra accel along a downhill slope
+    float SlideExitSpeedFraction = 0.5;      // slide ends when speed < BaseWalkSpeed * this (lowered so the slide runs long enough to read)
+
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
+    float SlideGroundFriction = 0.5;         // also routed to BrakingFriction during the slide — this is what paces the flat-ground decay
+
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
+    float SlideBraking = 100.0;              // gentle constant decel; friction shapes the rest (was 256 = too abrupt)
+
+    // Input thrust ALLOWED during a slide (used as MaxAcceleration while sliding). 0 = pure momentum,
+    // no steering; small values let you nudge the slide's direction without killing the friction decay.
+    // Meta-upgrade knob ("Slide Steering" — see MetaUpgradeVariables.md / DesignThreads DT-5). Keep
+    // modest: high values re-accelerate the slide and defeat the flat-ground friction degrade.
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
+    float SlideSteerAccel = 1000.0;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
+    float SlideDownhillAccel = 2048.0;
 
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
     float SlideMaxDuration = 1.5;
 
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
-    float SlideCooldown = 0.4;              // re-slide gate
+    float SlideBoostCooldown = 1.8;          // belt-and-suspenders on top of the arming rule
 
-    // Downhill steepness (|horizontal floor normal|, ~sin of the slope angle) at or above which a
-    // slide is "descending" and sustains itself instead of timing out. 0.1 ~= a 6 degree ramp.
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
-    float SlideSustainMinSlope = 0.1;
+    float SlideSustainMinSlope = 0.1;        // ~6 deg: descending refreshes the duration
 
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
     bool bRequireSprintToSlide = true;
 
-    // --- Runtime state (host-authoritative MVP; CMC replicates the actual motion) ---
+    // --- Runtime state (CMC replicates the actual motion; this mirrors on client+server) ---
     private ACharacter OwnerCharacter;
     private UCharacterMovementComponent Move;
-    private float BaseWalkSpeed = 600.0;    // from the MoveSpeed attribute
+    private float BaseWalkSpeed = 600.0;
     private bool bSprinting = false;
     private bool bFocusing = false;
     private bool bCrouchHeld = false;
     private bool bSliding = false;
+    private bool bPostSlideHopAir = false;   // cap applies in air after a slide-hop
     private float SlideTimeRemaining = 0.0;
-    private float SlideCooldownRemaining = 0.0;
+    private float BoostCooldownRemaining = 0.0;
+    private float LastLandingFallSpeed = 0.0;  // |Z| at last landing; anim/camera read it
 
-    // Stashed walking values restored when a slide ends.
-    private float DefaultGroundFriction = 8.0;
-    private float DefaultBrakingDeceleration = 2048.0;
-
-    // Called by the hero once its ASC is ready. Caches owner + CMC and pushes jump/crouch config.
     void Initialize(ACharacter InOwner)
     {
         OwnerCharacter = InOwner;
         if (OwnerCharacter == nullptr)
             return;
-
         Move = OwnerCharacter.CharacterMovement;
         if (Move == nullptr)
             return;
 
-        DefaultGroundFriction = Move.GroundFriction;
-        DefaultBrakingDeceleration = Move.BrakingDecelerationWalking;
-
-        OwnerCharacter.JumpMaxCount = MaxJumpCount;
-        Move.JumpZVelocity = JumpZVelocity;
-        Move.AirControl = AirControl;
-
-        // Enable crouching (NavAgentProps.bCanCrouch defaults false). Read-modify-write because the
-        // struct property is a value copy in AngelScript.
+        // Enable crouching (struct property is a value copy in AS: read-modify-write).
         FNavAgentProperties NavProps = Move.NavAgentProps;
         NavProps.bCanCrouch = true;
         Move.NavAgentProps = NavProps;
 
+        ApplyMovementConfig();
+    }
+
+    // Push every tunable into the CMC/character. Initialize, MoveTune, and upgrades call this.
+    void ApplyMovementConfig()
+    {
+        if (Move == nullptr || OwnerCharacter == nullptr)
+            return;
+        Move.BrakingFrictionFactor = BrakingFrictionFactor;
+        Move.bUseSeparateBrakingFriction = true;
+        Move.GravityScale = GravityScale;
+        Move.JumpZVelocity = JumpZVelocity;
+        Move.AirControl = AirControl;
+        Move.FallingLateralFriction = FallingLateralFriction;
+        OwnerCharacter.JumpMaxCount = MaxJumpCount;
+        OwnerCharacter.JumpMaxHoldTime = JumpMaxHoldTime;
+        // These four are swapped by the slide (StartSlide/EndSlide); only set them when not mid-slide
+        // or ApplyMovementConfig (Initialize/MoveTune/upgrades) would stomp the active slide overrides.
+        if (!bSliding)
+        {
+            Move.MaxAcceleration = MaxAcceleration;
+            Move.BrakingDecelerationWalking = BrakingDecelerationWalking;
+            Move.BrakingFriction = BrakingFriction;
+            Move.GroundFriction = GroundFriction;
+        }
         ApplyGroundSpeed();
     }
 
-    // Base (un-sprinted) walk speed, sourced from the MoveSpeed attribute by the hero.
     void SetBaseSpeed(float NewBaseSpeed)
     {
         if (NewBaseSpeed > 0.0)
@@ -119,23 +169,16 @@ class URogueLocomotionComponent : UActorComponent
         ApplyGroundSpeed();
     }
 
-    void SetSprint(bool bWantsSprint)
-    {
-        bSprinting = bWantsSprint;
-        ApplyGroundSpeed();
-    }
-
-    // Light-ADS focus: slows the strafe. Recomputes the ground speed (stacks under sprint/crouch).
-    void SetFocus(bool bWantsFocus)
-    {
-        bFocusing = bWantsFocus;
-        ApplyGroundSpeed();
-    }
+    void SetSprint(bool bWantsSprint)   { bSprinting = bWantsSprint; ApplyGroundSpeed(); }
+    void SetFocus(bool bWantsFocus)     { bFocusing = bWantsFocus;   ApplyGroundSpeed(); }
 
     bool IsSprinting() const { return bSprinting; }
     bool IsSliding() const { return bSliding; }
+    bool IsCrouchHeld() const { return bCrouchHeld; }
+    float GetLastLandingFallSpeed() const { return LastLandingFallSpeed; }
+    float SprintSpeed() const { return BaseWalkSpeed * SprintSpeedMultiplier; }
+    float SlideCap() const { return SprintSpeed() * SlideSpeedCapMultiplier; }
 
-    // Crouch key pressed: slide if we have the speed (and sprint, when required), else crouch-walk.
     void RequestCrouchOrSlide()
     {
         bCrouchHeld = true;
@@ -143,23 +186,87 @@ class URogueLocomotionComponent : UActorComponent
             return;
 
         bool bGrounded = Move.IsMovingOnGround();
-        bool bFastEnough = HorizontalSpeed() >= SlideMinSpeed;
+        bool bFastEnough = HorizontalSpeed() >= SprintSpeed() * SlideEntryMinFraction;
         bool bSprintOk = !bRequireSprintToSlide || bSprinting;
 
-        if (bGrounded && bFastEnough && bSprintOk && SlideCooldownRemaining <= 0.0 && !bSliding)
+        if (bGrounded && bFastEnough && bSprintOk && !bSliding)
             StartSlide();
         else
             OwnerCharacter.Crouch();
     }
 
-    // Crouch key released: end the slide if sliding, otherwise stand up.
     void ReleaseCrouch()
     {
         bCrouchHeld = false;
+        // A slide is a commit move: releasing crouch does NOT cancel it (cancelling on release made
+        // a tapped slide die almost instantly). The slide runs its course; EndSlide then stands you
+        // up because bCrouchHeld is now false. Holding crouch through the slide keeps you crouched.
         if (bSliding)
-            EndSlide();
-        else if (OwnerCharacter != nullptr)
+            return;
+        if (OwnerCharacter != nullptr)
             OwnerCharacter.UnCrouch();
+    }
+
+    // Jump pressed while sliding (owning client; the server converges via the airborne check in
+    // TickLocomotion). Ends the slide WITHOUT bleeding speed: friction restore only matters on
+    // ground, FallingLateralFriction 0 keeps the velocity in the air. Keeps crouch if held so
+    // landing can chain straight into the next slide (the Deadlock loop).
+    void NotifySlideJump()
+    {
+        if (!bSliding)
+            return;
+        bSliding = false;
+        bPostSlideHopAir = true;
+        Move.GroundFriction = GroundFriction;
+        Move.BrakingDecelerationWalking = BrakingDecelerationWalking;
+        Move.BrakingFriction = BrakingFriction;
+        Move.MaxAcceleration = MaxAcceleration;
+        Move.MaxWalkSpeedCrouched = CrouchSpeed;
+        // The hero UnCrouches before Jump() so stock CanJump allows it.
+        // Chain re-entry on landing keys off bCrouchHeld, not the crouch posture.
+    }
+
+    // Second-jump shaping: stock CMC reuses JumpZVelocity for every jump; rescale the second.
+    // Runs on predicted client + server (OnJumped fires on both) and is idempotent (sets, not adds).
+    void NotifyJumped(int JumpCount)
+    {
+        if (Move == nullptr || JumpCount < 2)
+            return;
+        FVector Vel = Move.Velocity;
+        Move.Velocity = FVector(Vel.X, Vel.Y, DoubleJumpZVelocity);
+    }
+
+    // Landed (server + owning client). Re-enter the slide instantly if the chain is alive.
+    void NotifyLanded(float FallSpeed)
+    {
+        LastLandingFallSpeed = FallSpeed;
+        bPostSlideHopAir = false;
+        if (OwnerCharacter == nullptr || Move == nullptr)
+            return;
+        bool bFastEnough = HorizontalSpeed() >= SprintSpeed() * SlideEntryMinFraction;
+        bool bSprintOk = !bRequireSprintToSlide || bSprinting;
+        if (bCrouchHeld && bFastEnough && bSprintOk && !bSliding)
+            StartSlide();
+    }
+
+    // Clears transient slide/air state when motion is force-stopped outside the normal landing
+    // path (down/revive, teleports) so the post-hop speed cap can't leak into the next life.
+    void ResetAirState()
+    {
+        bSliding = false;
+        bPostSlideHopAir = false;
+        SlideTimeRemaining = 0.0;
+        // A force-stop mid-slide must not leave the low slide friction / lifted crouch cap /
+        // clamped steer accel applied to ordinary walking — restore the walking CMC config the
+        // same way EndSlide does (down/revive/teleport otherwise inherit slide physics).
+        if (Move != nullptr)
+        {
+            Move.GroundFriction = GroundFriction;
+            Move.BrakingDecelerationWalking = BrakingDecelerationWalking;
+            Move.BrakingFriction = BrakingFriction;
+            Move.MaxAcceleration = MaxAcceleration;
+            Move.MaxWalkSpeedCrouched = CrouchSpeed;
+        }
     }
 
     private void StartSlide()
@@ -170,15 +277,37 @@ class URogueLocomotionComponent : UActorComponent
 
         Move.GroundFriction = SlideGroundFriction;
         Move.BrakingDecelerationWalking = SlideBraking;
+        // CRITICAL: while crouched, CMC brakes velocity toward MaxWalkSpeedCrouched. Left at the
+        // 300 crouch-walk speed it dragged the slide below the exit threshold almost instantly
+        // (the symptom: slide "cancels too fast"). The slide is meant to bleed via SlideGroundFriction
+        // alone, so lift the crouched cap to the slide cap for the duration.
+        Move.MaxWalkSpeedCrouched = SlideCap();
+        // bUseSeparateBrakingFriction is ON, so the *braking* friction (not GroundFriction) governs
+        // deceleration when there's no input — route the slide friction there too, else the 6.0
+        // walking BrakingFriction stops the slide in ~0.15 s (the real "animation never shows" cause).
+        Move.BrakingFriction = SlideGroundFriction;
+        // Momentum slide: clamp input thrust to SlideSteerAccel so the slide DEGRADES via friction on
+        // flat instead of the player's held move-key re-accelerating toward the lifted crouch cap (why
+        // flat slides didn't slow down). A small value gives a little steering; 0 = pure momentum.
+        // Downhill accel is added directly to velocity in TickLocomotion, so slopes still speed up.
+        Move.MaxAcceleration = SlideSteerAccel;
 
-        // Idempotent impulse: set horizontal speed to max(current, boost) along the move direction, so
-        // running this on client and server can't compound. Keep the existing vertical velocity.
         FVector Vel = Move.Velocity;
         FVector Flat = FVector(Vel.X, Vel.Y, 0.0);
         FVector Dir = Flat.GetSafeNormal();
         if (Dir.IsNearlyZero())
             Dir = OwnerCharacter.GetActorForwardVector();
-        float Target = Math::Max(Flat.Size(), SlideBoostSpeed);
+
+        // Apex's anti-bhop governor: the boost only arms below the threshold; above it you keep
+        // your speed but gain nothing. Idempotent on client+server (sets toward a target).
+        float Speed = Flat.Size();
+        float Target = Speed;
+        if (Speed < SprintSpeed() * SlideBoostArmMultiplier && BoostCooldownRemaining <= 0.0)
+        {
+            Target = Math::Max(Speed, SprintSpeed() * SlideBoostMultiplier);
+            BoostCooldownRemaining = SlideBoostCooldown;
+        }
+        Target = Math::Min(Target, SlideCap());
         FVector NewFlat = Dir * Target;
         Move.Velocity = FVector(NewFlat.X, NewFlat.Y, Vel.Z);
     }
@@ -186,11 +315,11 @@ class URogueLocomotionComponent : UActorComponent
     private void EndSlide()
     {
         bSliding = false;
-        SlideCooldownRemaining = SlideCooldown;
-        Move.GroundFriction = DefaultGroundFriction;
-        Move.BrakingDecelerationWalking = DefaultBrakingDeceleration;
-
-        // Stand back up unless the crouch key is still held (then stay crouch-walking).
+        Move.GroundFriction = GroundFriction;
+        Move.BrakingDecelerationWalking = BrakingDecelerationWalking;
+        Move.BrakingFriction = BrakingFriction;
+        Move.MaxAcceleration = MaxAcceleration;
+        Move.MaxWalkSpeedCrouched = CrouchSpeed;
         if (!bCrouchHeld && OwnerCharacter != nullptr)
             OwnerCharacter.UnCrouch();
     }
@@ -203,7 +332,9 @@ class URogueLocomotionComponent : UActorComponent
         if (bFocusing)
             Speed *= FocusMoveMultiplier;
         Move.MaxWalkSpeed = Speed;
-        Move.MaxWalkSpeedCrouched = CrouchSpeed;
+        // Mid-slide, keep the crouched cap lifted (StartSlide raised it) so a sprint/focus change
+        // mid-slide doesn't yank the slide back down to crouch-walk speed.
+        Move.MaxWalkSpeedCrouched = bSliding ? SlideCap() : CrouchSpeed;
     }
 
     private float HorizontalSpeed() const
@@ -214,22 +345,45 @@ class URogueLocomotionComponent : UActorComponent
         return FVector(Vel.X, Vel.Y, 0.0).Size();
     }
 
-    // Driven by the hero's Tick (wherever movement is simulated). Advances the re-slide cooldown and,
-    // while sliding, adds downhill acceleration and checks the slide's end conditions.
     void TickLocomotion(float DeltaSeconds)
     {
         if (Move == nullptr || OwnerCharacter == nullptr)
             return;
 
-        if (SlideCooldownRemaining > 0.0)
-            SlideCooldownRemaining -= DeltaSeconds;
+        if (BoostCooldownRemaining > 0.0)
+            BoostCooldownRemaining -= DeltaSeconds;
+
+        // Post-slide-hop air: hold the hard cap so air control can't compound past it.
+        if (bPostSlideHopAir && Move.IsFalling())
+        {
+            FVector Vel = Move.Velocity;
+            FVector Flat = FVector(Vel.X, Vel.Y, 0.0);
+            if (Flat.Size() > SlideCap())
+            {
+                FVector Capped = Flat.GetSafeNormal() * SlideCap();
+                Move.Velocity = FVector(Capped.X, Capped.Y, Vel.Z);
+            }
+        }
 
         if (!bSliding)
             return;
 
-        // Downhill speed-up: push velocity along the slope's downhill direction (zero on flat ground).
-        // The floor normal tilts toward downhill, so its horizontal projection *is* the downhill
-        // vector, and its length grows with slope steepness.
+        // Left the ground mid-slide (jumped or rolled off a ledge). NotifySlideJump is the
+        // explicit jump intent (owning client); this branch is the convergence/ledge path —
+        // same state transition, kept separate so the intent call site stays meaningful.
+        if (!Move.IsMovingOnGround())
+        {
+            bSliding = false;
+            bPostSlideHopAir = true;
+            Move.GroundFriction = GroundFriction;
+            Move.BrakingDecelerationWalking = BrakingDecelerationWalking;
+            Move.BrakingFriction = BrakingFriction;
+            Move.MaxAcceleration = MaxAcceleration;
+            Move.MaxWalkSpeedCrouched = CrouchSpeed;
+            return;
+        }
+
+        // Downhill: accelerate along the slope and sustain the slide (Apex-style).
         FVector FloorNormal = Move.CurrentFloor.HitResult.Normal;
         FVector Downhill = FVector(FloorNormal.X, FloorNormal.Y, 0.0);
         bool bDescending = false;
@@ -238,25 +392,26 @@ class URogueLocomotionComponent : UActorComponent
             FVector DownDir = Downhill.GetSafeNormal();
             Move.Velocity += DownDir * SlideDownhillAccel * DeltaSeconds;
 
-            // "Descending" = slope steep enough AND we're actually moving down it.
             FVector VelFlat = FVector(Move.Velocity.X, Move.Velocity.Y, 0.0);
             bDescending = Downhill.Size() >= SlideSustainMinSlope
                 && VelFlat.GetSafeNormal().DotProduct(DownDir) > 0.0;
         }
 
-        // The duration cap only burns down on flat/uphill ground; a sustained descent refreshes it so
-        // a long ramp keeps you sliding (Apex-style) instead of the timer popping you upright mid-slope.
-        // The slide still ends when the slope flattens and speed bleeds below SlideMinSpeed, on release,
-        // or on leaving the ground.
+        // Cap while sliding too (downhill accel must not run away).
+        FVector SVel = Move.Velocity;
+        FVector SFlat = FVector(SVel.X, SVel.Y, 0.0);
+        if (SFlat.Size() > SlideCap())
+        {
+            FVector Capped = SFlat.GetSafeNormal() * SlideCap();
+            Move.Velocity = FVector(Capped.X, Capped.Y, SVel.Z);
+        }
+
         if (bDescending)
             SlideTimeRemaining = SlideMaxDuration;
         else
             SlideTimeRemaining -= DeltaSeconds;
 
-        bool bStop = SlideTimeRemaining <= 0.0
-            || HorizontalSpeed() < SlideMinSpeed
-            || !Move.IsMovingOnGround();
-        if (bStop)
+        if (SlideTimeRemaining <= 0.0 || HorizontalSpeed() < BaseWalkSpeed * SlideExitSpeedFraction)
             EndSlide();
     }
 }

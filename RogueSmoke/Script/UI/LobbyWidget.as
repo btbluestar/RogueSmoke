@@ -59,12 +59,12 @@ class ULobbyWidget : UCommonActivatableWidget
         SetRootWidget(Root);
         bBuilt = true;
 
-        UBorder Backdrop = RogueUITheme::MakePanel(this, RogueUITheme::PanelDark, 0.0);
+        UBorder Backdrop = RogueUITheme::MakePanel(this, RogueUITheme::PanelDark(), 0.0);
         UCanvasPanelSlot BackdropSlot = Root.AddChildToCanvas(Backdrop);
         BackdropSlot.SetAnchors(FAnchors(0.0, 0.0, 1.0, 1.0));
         BackdropSlot.SetOffsets(FMargin(0.0, 0.0, 0.0, 0.0));
 
-        UTextBlock Title = RogueUITheme::MakeText(this, "SQUAD LOBBY", RogueUITheme::TextPrimary, 2.4);
+        UTextBlock Title = RogueUITheme::MakeText(this, "SQUAD LOBBY", RogueUITheme::TextPrimary(), 2.4);
         UCanvasPanelSlot TitleSlot = Root.AddChildToCanvas(Title);
         TitleSlot.SetAnchors(FAnchors(0.5, 0.1));
         TitleSlot.SetAlignment(FVector2D(0.5, 0.5));
@@ -90,7 +90,7 @@ class ULobbyWidget : UCommonActivatableWidget
         }
 
         // Squad panel: everyone's pick + ready, top-right. Rebuilt on the refresh tick.
-        UTextBlock SquadHeader = RogueUITheme::MakeText(this, "SQUAD", RogueUITheme::TextDim, 1.1);
+        UTextBlock SquadHeader = RogueUITheme::MakeText(this, "SQUAD", RogueUITheme::TextDim(), 1.1);
         UCanvasPanelSlot SquadHeaderSlot = Root.AddChildToCanvas(SquadHeader);
         SquadHeaderSlot.SetAnchors(FAnchors(0.97, 0.1));
         SquadHeaderSlot.SetAlignment(FVector2D(1.0, 0.0));
@@ -109,7 +109,7 @@ class ULobbyWidget : UCommonActivatableWidget
         ControlsSlot.SetAlignment(FVector2D(0.5, 0.5));
         ControlsSlot.SetAutoSize(true);
 
-        ReadyButton = RogueUITheme::MakeTextButton(this, "  READY  ", RogueUITheme::Accent);
+        ReadyButton = RogueUITheme::MakeTextButton(this, "  READY  ", RogueUITheme::Accent());
         ReadyButton.OnClicked.AddUFunction(this, n"HandleReady");
         UHorizontalBoxSlot ReadySlot = Controls.AddChildToHorizontalBox(ReadyButton);
         ReadySlot.SetPadding(FMargin(10.0, 0.0, 10.0, 0.0));
@@ -117,14 +117,14 @@ class ULobbyWidget : UCommonActivatableWidget
         APlayerController PC = GetOwningPlayer();
         if (PC != nullptr && PC.HasAuthority())
         {
-            StartButton = RogueUITheme::MakeTextButton(this, "  START RAID  ", RogueUITheme::Victory);
+            StartButton = RogueUITheme::MakeTextButton(this, "  START RAID  ", RogueUITheme::Victory());
             StartButton.OnClicked.AddUFunction(this, n"HandleStart");
             StartButton.SetIsEnabled(false);
             UHorizontalBoxSlot StartSlot = Controls.AddChildToHorizontalBox(StartButton);
             StartSlot.SetPadding(FMargin(10.0, 0.0, 10.0, 0.0));
         }
 
-        CountdownText = RogueUITheme::MakeText(this, "", RogueUITheme::Victory, 1.8);
+        CountdownText = RogueUITheme::MakeText(this, "", RogueUITheme::Victory(), 1.8);
         UCanvasPanelSlot CountSlot = Root.AddChildToCanvas(CountdownText);
         CountSlot.SetAnchors(FAnchors(0.5, 0.68));
         CountSlot.SetAlignment(FVector2D(0.5, 0.5));
@@ -132,7 +132,7 @@ class ULobbyWidget : UCommonActivatableWidget
 
         HintText = RogueUITheme::MakeText(
             this, "Pick a hero, then READY. The host launches when the whole squad is ready.",
-            RogueUITheme::TextDim, 1.0);
+            RogueUITheme::TextDim(), 1.0);
         UCanvasPanelSlot HintSlot = Root.AddChildToCanvas(HintText);
         HintSlot.SetAnchors(FAnchors(0.5, 0.88));
         HintSlot.SetAlignment(FVector2D(0.5, 0.5));
@@ -227,7 +227,7 @@ class ULobbyWidget : UCommonActivatableWidget
                 continue;
 
             FString HeroName = "picking...";
-            FLinearColor RowColor = RogueUITheme::TextDim;
+            FLinearColor RowColor = RogueUITheme::TextDim();
             if (RogueHeroes::IsValidIndex(PS.SelectedHeroIndex))
             {
                 FRogueHeroEntry Entry = RogueHeroes::Get(PS.SelectedHeroIndex);

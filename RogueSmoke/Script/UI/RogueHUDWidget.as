@@ -44,9 +44,22 @@ class URogueHUDWidget : UUserWidget
     const float ToastSeconds = 4.0;
 
     const float HitMarkerDuration = 0.12;   // seconds the hitmarker stays lit after a confirmed hit
+    const float KillPopDuration = 0.25;     // seconds the kill pop stays up (the loudest confirm layer)
+    const float HitMarkerScale = 1.4;       // marker scale for a plain hit
+    const float KillPopScale = 2.0;         // marker scale for a killing blow
 
     private AHeroCharacter Hero;
     private bool bBuilt = false;
+
+    // Stamina pips (D-0023): discrete sprint/slide charges shown as small squares under the health
+    // bar. Pip count tracks GetMaxStamina(), so a future +1-max-pip meta upgrade shows up without a
+    // HUD change. Pips are rebuilt on count change; fill state is restyled every tick (polling, same
+    // idiom as RefreshCrosshair). Own-player only — Hero is always the owning pawn.
+    private UHorizontalBox StaminaRow;
+    private TArray<UImage> StaminaPips;
+    const float StaminaPipSize = 14.0;       // square pip edge, px (layout space)
+    const float StaminaPipGap = 4.0;         // gap between pips
+    const float StaminaSpentAlpha = 0.25;    // spent pip = accent at low alpha
 
     // Off-screen edge indicators: a pool of arrow glyphs reused each tick (teal = teammate, red = elite).
     // They mark where an off-screen ally or threat is, clamped to the screen border and rotated to point at it.
@@ -57,14 +70,30 @@ class URogueHUDWidget : UUserWidget
     const float EdgeArrowScale = 1.8;  // arrows are tiny at the default font size, so scale them up
     const float EdgeLabelInset = 30.0; // how far inward (toward centre) the distance label sits from the arrow
 
-    // Palette (mirrors the mockup tokens): teal accent, red danger, light-blue shield.
-    const FLinearColor Accent = FLinearColor(0.27, 0.84, 0.77);
-    const FLinearColor Danger = FLinearColor(0.90, 0.28, 0.30);
-    const FLinearColor ShieldColor = FLinearColor(0.35, 0.62, 1.0);
+    // Floating damage numbers: a pool of rising texts reused per damaging pellet (white, fades as it
+    // rises). Slots are parallel arrays; Born < 0 marks a free slot, and a full pool evicts the oldest.
+    private TArray<UTextBlock> DamageNumberPool;
+    private TArray<FVector> DamageNumberAnchors;   // world point (impact + XY jitter) the number rises from
+    private TArray<float> DamageNumberBorn;        // world time the slot went live; -1 = free
+    private TArray<float> DamageNumberValues;      // damage shown (slot state; text is set on spawn)
+    const int MaxDamageNumbers = 32;
+    const float DamageNumberLife = 0.7;     // seconds from spawn to gone
+    const float DamageNumberRiseCm = 90.0;  // world-space rise over the lifetime
+    const float DamageNumberJitter = 18.0;  // XY scatter so multi-pellet hits don't stack into one glyph
+
+    // Palette: sourced once from the editable theme (DA_UITheme via RogueUITheme) in OnInitialized,
+    // so the user retints the HUD in-editor. Members (not consts) so they can be assigned at runtime;
+    // every Refresh below reads them unchanged. Defaults match the theme defaults if it sets nothing.
+    private FLinearColor Accent = FLinearColor(0.27, 0.84, 0.77);
+    private FLinearColor Danger = FLinearColor(0.90, 0.28, 0.30);
+    private FLinearColor ShieldColor = FLinearColor(0.35, 0.62, 1.0);
 
     UFUNCTION(BlueprintOverride)
     void OnInitialized()
     {
+        Accent = RogueUITheme::Accent();
+        Danger = RogueUITheme::Danger();
+        ShieldColor = RogueUITheme::Shield();
         BuildLayout();
     }
 
@@ -89,7 +118,7 @@ class URogueHUDWidget : UUserWidget
         HitMarker = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
         HitMarker.SetText(FText::FromString("X"));
         HitMarker.SetColorAndOpacity(FSlateColor(Danger));
-        HitMarker.SetRenderScale(FVector2D(1.4, 1.4));
+        HitMarker.SetRenderScale(FVector2D(HitMarkerScale, HitMarkerScale));
         HitMarker.SetVisibility(ESlateVisibility::Collapsed);
         AddChild(HitMarker, FAnchors(0.5, 0.5), FVector2D(0.5, 0.5), FVector2D(0.0, 0.0), FVector2D(), true);
 
@@ -138,6 +167,12 @@ class URogueHUDWidget : UUserWidget
         HealthBar.SetPercent(1.0);
         AddChild(HealthBar, FAnchors(0.0, 1.0), FVector2D(0.0, 1.0), FVector2D(40.0, -40.0), FVector2D(320.0, 18.0), false);
 
+        // Stamina pips (D-0023): just under the health bar, same left edge. The row is an auto-sized
+        // horizontal box; the pips themselves are created/recreated in RefreshStamina once a hero
+        // exists (count comes from the live MaxStamina attribute, not a HUD constant).
+        StaminaRow = Cast<UHorizontalBox>(ConstructWidget(UHorizontalBox::StaticClass()));
+        AddChild(StaminaRow, FAnchors(0.0, 1.0), FVector2D(0.0, 1.0), FVector2D(40.0, -18.0), FVector2D(), true);
+
         // Ammo: bottom-right.
         AmmoText = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
         AddChild(AmmoText, FAnchors(1.0, 1.0), FVector2D(1.0, 1.0), FVector2D(-40.0, -40.0), FVector2D(), true);
@@ -162,6 +197,23 @@ class URogueHUDWidget : UUserWidget
             LabelText.SetVisibility(ESlateVisibility::Collapsed);
             AddChild(LabelText, FAnchors(0.0, 0.0), FVector2D(0.5, 0.5), FVector2D(), FVector2D(), true);
             EdgeLabels.Add(LabelText);
+        }
+
+        // Damage-number pool: top-left anchored like the edge markers (absolute layout-space positioning),
+        // centred on their slot, collapsed until a hit claims one. Default text color is already white;
+        // slightly smaller than the HUD texts so they read as feedback, not UI.
+        for (int i = 0; i < MaxDamageNumbers; ++i)
+        {
+            UTextBlock Number = Cast<UTextBlock>(ConstructWidget(UTextBlock::StaticClass()));
+            if (Number == nullptr)
+                continue;
+            Number.SetRenderScale(FVector2D(0.9, 0.9));
+            Number.SetVisibility(ESlateVisibility::Collapsed);
+            AddChild(Number, FAnchors(0.0, 0.0), FVector2D(0.5, 0.5), FVector2D(), FVector2D(), true);
+            DamageNumberPool.Add(Number);
+            DamageNumberAnchors.Add(FVector());
+            DamageNumberBorn.Add(-1.0);
+            DamageNumberValues.Add(0.0);
         }
     }
 
@@ -188,11 +240,13 @@ class URogueHUDWidget : UUserWidget
     {
         RefreshHero();
         RefreshVitals();
+        RefreshStamina();
         RefreshAmmo();
         RefreshObjective();
         RefreshEdgeIndicators();
         RefreshCrosshair();
         RefreshHitMarker();
+        RefreshDamageNumbers();
         RefreshResultBanner();
         RefreshTimer();
         RefreshTeamXP();
@@ -328,34 +382,164 @@ class URogueHUDWidget : UUserWidget
             ResultHint.SetVisibility(ESlateVisibility::HitTestInvisible);
     }
 
-    // Crosshair bloom proxy: tighten when focusing, widen while moving (hip-fire). Full heat-driven bloom
-    // needs weapon heat replicated to the owning client (server-only today) — a follow-up; the host reads
-    // its own weapon directly, so this is exact for the host and a good approximation for remote clients.
+    // Crosshair bloom: scale tracks the weapon's live spread cone (GetSpreadDegrees — heat + movement
+    // + focus). Exact on the listen-server host; on remote clients heat is server-only so this degrades
+    // to the movement/focus modifiers over base spread (continuous, still reads correctly). Smoothed so
+    // per-shot heat blooms and decays like Destiny instead of snapping between fixed sizes.
+    private float CrosshairScale = 1.0;
+
     private void RefreshCrosshair()
     {
         if (Crosshair == nullptr || Hero == nullptr)
             return;
 
-        float Scale = 1.0;
-        if (Hero.bFocusing)
-            Scale = 0.6;
-        else if (Hero.CharacterMovement != nullptr && Hero.CharacterMovement.Velocity.Size() > 50.0)
-            Scale = 1.6;
-        Crosshair.SetRenderScale(FVector2D(Scale, Scale));
+        float TargetScale = 1.0;
+        URogueWeaponComponent Weapon = Hero.Weapon;
+        if (Weapon != nullptr && Weapon.Definition != nullptr)
+        {
+            bool bMoving = Hero.CharacterMovement != nullptr && Hero.CharacterMovement.Velocity.Size() > 50.0;
+            float SpreadDeg = Weapon.GetSpreadDegrees(bMoving, Hero.bFocusing);
+            TargetScale = 0.5 + SpreadDeg * 0.125;   // 1 deg -> 0.63, 8 deg -> 1.5, focused ~0.55
+        }
+        else if (Hero.bFocusing)
+            TargetScale = 0.6;
+
+        CrosshairScale = Math::FInterpTo(CrosshairScale, TargetScale, Gameplay::GetWorldDeltaSeconds(), 12.0);
+        Crosshair.SetRenderScale(FVector2D(CrosshairScale, CrosshairScale));
     }
 
     // Flash the hitmarker for HitMarkerDuration after the hero records a confirmed hit (set locally on the
-    // owning client in Multicast_FireFX).
+    // owning client in Multicast_FireFX). A killing blow (Client_KillConfirm) pops it bigger, for longer.
     private void RefreshHitMarker()
     {
         if (HitMarker == nullptr || Hero == nullptr)
             return;
 
-        bool bShow = Hero.LastHitConfirmTime > 0.0
-            && (Gameplay::GetTimeSeconds() - Hero.LastHitConfirmTime) < HitMarkerDuration;
+        float Now = Gameplay::GetTimeSeconds();
+        bool bKill = Hero.LastKillConfirmTime > 0.0
+            && (Now - Hero.LastKillConfirmTime) < KillPopDuration;
+        bool bShow = bKill || (Hero.LastHitConfirmTime > 0.0
+            && (Now - Hero.LastHitConfirmTime) < HitMarkerDuration);
+
+        // Kill pop: 2.0 while a kill is fresh, back to the plain-hit 1.4 otherwise (cheap to set
+        // every tick — same idiom as RefreshCrosshair).
+        float Scale = bKill ? KillPopScale : HitMarkerScale;
+        HitMarker.SetRenderScale(FVector2D(Scale, Scale));
+
         ESlateVisibility Want = bShow ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
         if (HitMarker.GetVisibility() != Want)
             HitMarker.SetVisibility(Want);
+    }
+
+    // Floating damage numbers: drain the hits the hero buffered from Client_DamageNumbers into pool
+    // slots, then animate every live slot (rise in world space, fade, free on expiry). Local + cosmetic.
+    private void RefreshDamageNumbers()
+    {
+        if (DamageNumberPool.Num() == 0)
+            return;
+
+        // Spawn: one number per damaging pellet buffered since last frame.
+        if (Hero != nullptr)
+        {
+            TArray<FVector> Locs;
+            TArray<float> Amounts;
+            Hero.TakePendingDamageNumbers(Locs, Amounts);
+            int Count = Math::Min(Locs.Num(), Amounts.Num());
+            for (int i = 0; i < Count; ++i)
+                SpawnDamageNumber(Locs[i], Amounts[i]);
+        }
+
+        APlayerController PC = GetOwningPlayer();
+        // If the PC is momentarily null (e.g. during level travel), leave live slots intact so
+        // they resume animating next frame rather than being silently discarded.
+        if (PC == nullptr)
+            return;
+
+        float Now = Gameplay::GetTimeSeconds();
+        for (int i = 0; i < DamageNumberPool.Num(); ++i)
+        {
+            if (DamageNumberBorn[i] < 0.0)
+                continue;
+            UTextBlock Number = DamageNumberPool[i];
+            if (Number == nullptr)
+                continue;
+
+            float Age = Now - DamageNumberBorn[i];
+            if (Age >= DamageNumberLife)
+            {
+                DamageNumberBorn[i] = -1.0;   // expired: free the slot
+                Number.SetVisibility(ESlateVisibility::Collapsed);
+                continue;
+            }
+
+            // Rise in world space so the number tracks the spot it was dealt at, then project
+            // DPI-corrected like the edge markers. Off-screen (behind the camera): hide this frame.
+            float T = Age / DamageNumberLife;
+            FVector WorldPos = DamageNumberAnchors[i] + FVector(0.0, 0.0, DamageNumberRiseCm * T);
+            FVector2D ScreenPos;
+            if (!WidgetLayout::ProjectWorldLocationToWidgetPosition(PC, WorldPos, ScreenPos, false))
+            {
+                if (Number.GetVisibility() != ESlateVisibility::Collapsed)
+                    Number.SetVisibility(ESlateVisibility::Collapsed);
+                continue;
+            }
+
+            Number.SetRenderOpacity(1.0 - T * T);   // ease-out fade: solid early, gone at end of life
+            if (Number.GetVisibility() != ESlateVisibility::HitTestInvisible)
+                Number.SetVisibility(ESlateVisibility::HitTestInvisible);
+            UCanvasPanelSlot Slot = WidgetLayout::SlotAsCanvasSlot(Number);
+            if (Slot != nullptr)
+                Slot.SetPosition(ScreenPos);
+        }
+    }
+
+    // Claim a pool slot for one damaging pellet: first free slot, else evict the oldest live number
+    // (newest feedback wins). XY jitter keeps a shotgun blast from stacking into a single glyph.
+    private void SpawnDamageNumber(FVector WorldLoc, float Amount)
+    {
+        int SlotIdx = -1;
+        int OldestIdx = -1;       // -1 until we see the first live slot
+        float OldestBorn = 0.0;
+        for (int i = 0; i < DamageNumberPool.Num(); ++i)
+        {
+            if (DamageNumberBorn[i] < 0.0)
+            {
+                SlotIdx = i;
+                break;
+            }
+            if (OldestIdx < 0 || DamageNumberBorn[i] < OldestBorn)
+            {
+                OldestIdx = i;
+                OldestBorn = DamageNumberBorn[i];
+            }
+        }
+        if (SlotIdx < 0)
+            SlotIdx = OldestIdx;   // pool is full; OldestIdx is guaranteed >= 0 here
+
+        DamageNumberAnchors[SlotIdx] = WorldLoc + FVector(
+            Math::RandRange(-DamageNumberJitter, DamageNumberJitter),
+            Math::RandRange(-DamageNumberJitter, DamageNumberJitter), 0.0);
+        DamageNumberBorn[SlotIdx] = Gameplay::GetTimeSeconds();
+        DamageNumberValues[SlotIdx] = Amount;
+
+        UTextBlock Number = DamageNumberPool[SlotIdx];
+        if (Number != nullptr)
+            Number.SetText(FText::FromString(FormatDamageValue(Amount)));
+        // Position/visibility/opacity are applied by the animate pass in the same Tick.
+    }
+
+    // Rounded int normally; 10000+ as "12.5k". Round to int first so the >= 10000 threshold
+    // applies to the rounded value (e.g. 9999.6 rounds to 10000 and correctly shows "10.0k").
+    // AS f-strings have no precision specifiers (no :.1f), so compose whole + tenths from integers.
+    private FString FormatDamageValue(float Amount)
+    {
+        int Rounded = Math::RoundToInt(Amount);
+        if (Rounded >= 10000)
+        {
+            int Tenths = (Rounded + 50) / 100;   // round to nearest tenth of a thousand
+            return f"{Tenths / 10}.{Tenths % 10}k";
+        }
+        return f"{Rounded}";
     }
 
     private void RefreshHero()
@@ -393,6 +577,50 @@ class URogueHUDWidget : UUserWidget
             float MaxShield = ASC.GetAttributeCurrentValue(URogueHealthSet, n"MaxShield", 0.0);
             ShieldBar.SetPercent(MaxShield > 0.0 ? Math::Clamp(Shield / MaxShield, 0.0, 1.0) : 0.0);
             ShieldBar.SetVisibility(MaxShield > 0.0 ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+        }
+    }
+
+    // Stamina pips (D-0023): poll the hero's stamina floats each tick (the HUD already polls for the
+    // crosshair — no attribute delegates). Pip i is FILLED while Stamina >= i+1; spent pips fade to
+    // low-alpha accent. Rebuilding on a MaxStamina change keeps the row honest under meta upgrades.
+    private void RefreshStamina()
+    {
+        if (StaminaRow == nullptr || Hero == nullptr)
+            return;
+
+        int PipCount = Math::Max(0, Math::RoundToInt(Hero.GetMaxStamina()));
+        if (PipCount != StaminaPips.Num())
+            RebuildStaminaPips(PipCount);
+
+        float Stamina = Hero.GetStamina();
+        for (int i = 0; i < StaminaPips.Num(); ++i)
+        {
+            if (StaminaPips[i] == nullptr)
+                continue;
+            FLinearColor PipColor = Accent;
+            PipColor.A = (Stamina >= float(i + 1)) ? 1.0 : StaminaSpentAlpha;
+            StaminaPips[i].SetColorAndOpacity(PipColor);
+        }
+    }
+
+    // Tear down and recreate the pip images to match the live MaxStamina. Rare (spawn + upgrades),
+    // so the simple clear-and-rebuild beats diffing the child list.
+    private void RebuildStaminaPips(int PipCount)
+    {
+        StaminaRow.ClearChildren();
+        StaminaPips.Empty();
+        for (int i = 0; i < PipCount; ++i)
+        {
+            UImage Pip = Cast<UImage>(ConstructWidget(UImage::StaticClass()));
+            if (Pip == nullptr)
+                continue;
+            // Default brush is the solid white box; size it down to a small square and tint via
+            // SetColorAndOpacity in RefreshStamina.
+            Pip.SetDesiredSizeOverride(FVector2D(StaminaPipSize, StaminaPipSize));
+            UHorizontalBoxSlot PipSlot = StaminaRow.AddChildToHorizontalBox(Pip);
+            if (PipSlot != nullptr && i > 0)
+                PipSlot.SetPadding(FMargin(StaminaPipGap, 0.0, 0.0, 0.0));
+            StaminaPips.Add(Pip);
         }
     }
 

@@ -1,6 +1,6 @@
 # Architecture
 
-> Working title: **[ProjectName]** — a co-op roguelike built in Unreal Engine 5 with
+> **RogueSmoke** — a co-op roguelike built in Unreal Engine 5 with
 > [UnrealEngine-Angelscript](https://angelscript.hazelight.se/) (Hazelight fork).
 > This document describes *what* the systems are and *why* they are shaped this way.
 > For *how* to write the code, see `CODING_STANDARDS.md`.
@@ -132,10 +132,13 @@ Script/
 Blueprints subclass the relevant script classes for asset assignment (mesh, particles, etc.),
 prefixed `BP_`. Keep logic in script; keep content in Blueprints/DataAssets.
 
-## 7. Open decisions (resolve early)
+## 7. Open decisions
 
-1. **Networking topology** — listen server (assumed) vs dedicated server.
-2. **Ability framework** — custom component (faster) vs GAS (heavier, more capable).
-3. **Meta-progression scope** — shared per-session vs per-player persistent unlocks.
-4. **Max party size** — affects spawn budgets, scaling curves, and UI layout.
-5. **Late join / drop-in** — supported, or run-locked once started?
+Decisions are tracked authoritatively in **`DECISIONS.md`** — check there before re-litigating.
+Of this section's original list: topology → **listen server** (D-0004) and ability framework →
+**GAS via AngelscriptGAS** (D-0013) are decided. Still open (see `DECISIONS.md` §"Still open"):
+
+1. **Meta-progression scope** — shared per-session vs per-player persistent unlocks.
+2. **Max party size** — affects spawn budgets, scaling curves, and UI layout.
+3. **Late join / drop-in** — supported, or run-locked once started?
+4. **Solo support / friendly fire / theme** — and the concrete enemy-count target.
