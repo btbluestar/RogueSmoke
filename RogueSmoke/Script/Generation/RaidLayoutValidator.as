@@ -138,9 +138,10 @@ namespace RaidValidate
                 if (Node.Slot != ERaidSlotType::HighGround)
                     continue;
                 if (Node.Location.Z > MaxStandableZ)
-                    MaxStandableZ = Node.Location.Z;
-                // Vertically reachable by double-jump from the ground below.
-                if (Node.Location.Z > Env.VertCeiling - Cfg.JumpReachMargin)
+                    MaxStandableZ = Node.Location.Z;   // absolute (escape-proof uses this)
+                // Vertically reachable by double-jump from the LOCAL ground below (terrain-relative).
+                float LocalZ = Node.Location.Z - RaidTerrain::WorldHeightAt(L.Terrain, Node.Location.X, Node.Location.Y);
+                if (LocalZ > Env.VertCeiling - Cfg.JumpReachMargin)
                     bReachOk = false;
                 // Horizontally reachable across the floor (slide-hop + double-jump).
                 FVector Flat = Node.Location;
@@ -153,6 +154,20 @@ namespace RaidValidate
 
         // Escape-proof: the boundary wall must out-reach the highest standable point.
         Check(R, Cfg.WallHeight >= MaxStandableZ + Env.VertCeiling + Cfg.EscapeMargin, "escape-proof");
+
+        // Slope-walkable: the flattened play disc around each site must not exceed the walkable
+        // neighbour-delta cap (slide-hop + Mass pathing stay clean). Skips if terrain is empty.
+        bool bSlopeOk = true;
+        if (L.Terrain.Heights.Num() > 0)
+        {
+            for (FRaidSite S : L.MainSites)
+            {
+                int slope = RaidTerrain::MaxSlopeInDisc(L.Terrain, S.Center.X, S.Center.Y, Cfg.SiteRadius);
+                if (slope > Cfg.MaxZoneSlopeLevels)
+                    bSlopeOk = false;
+            }
+        }
+        Check(R, bSlopeOk, "slope-walkable");
 
         R.bOk = (R.PassCount == R.Total);
         return R;
