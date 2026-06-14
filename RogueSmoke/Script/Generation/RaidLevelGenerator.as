@@ -39,6 +39,22 @@ struct FRaidGenConfig
 
     UPROPERTY()
     float CoverRadius = 120.0;
+
+    // --- Plan 2: reach-envelope-derived geometry (jump-reachability + escape-proof) ---
+    UPROPERTY()
+    float HighGroundMinZ = 150.0;        // lowest platform height
+
+    UPROPERTY()
+    float HighGroundMaxZ = 270.0;        // highest platform — kept under the ~298 double-jump ceiling
+
+    UPROPERTY()
+    float JumpReachMargin = 20.0;        // platforms must sit this far below the vertical ceiling
+
+    UPROPERTY()
+    float WallHeight = 1200.0;           // boundary wall height (stamped); validated vs the envelope
+
+    UPROPERTY()
+    float EscapeMargin = 150.0;          // wall must exceed (highest standable + VertCeiling) by this
 }
 
 namespace RaidGen
@@ -127,7 +143,7 @@ namespace RaidGen
             float A = (2.0 * PI * float(i)) / float(Cfg.HighGroundCount) + Rng.RandRange(-0.3, 0.3);
             float R = Cfg.SiteRadius * Rng.RandRange(0.5, 0.85);
             FVector P = Center + FVector(Math::Cos(A), Math::Sin(A), 0.0) * R;
-            P.Z = Rng.RandRange(300.0, 600.0);
+            P.Z = Rng.RandRange(Cfg.HighGroundMinZ, Cfg.HighGroundMaxZ);
             S.Nodes.Add(MakeNode(ERaidSlotType::HighGround, P, 0.5));
         }
 
@@ -261,7 +277,7 @@ namespace RaidGen
         {
             float A = (2.0 * PI * float(i)) / float(Cfg.HighGroundCount);
             FVector P = FVector(Math::Cos(A), Math::Sin(A), 0.0) * (Cfg.SiteRadius * 0.7);
-            P.Z = 400.0;
+            P.Z = (Cfg.HighGroundMinZ + Cfg.HighGroundMaxZ) * 0.5;
             S.Nodes.Add(MakeNode(ERaidSlotType::HighGround, P, 0.5));
         }
         S.Nodes.Add(MakeNode(ERaidSlotType::Entrance, FVector(-Cfg.SiteRadius, 0.0, 0.0), 0.2));
