@@ -90,6 +90,14 @@ class AHeroCharacter : ARogueHeroBase
     USkeletalMeshComponent WeaponMesh;
     default WeaponMesh.SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+    // Grip orientation offset, applied AFTER the SnapToTarget attach to the weapon_r socket. The
+    // socket's raw rotation doesn't match SK_Rifle's forward axis (Lyra normally applies a
+    // per-weapon attach transform via its equipment system, which we don't); this re-homes that
+    // offset in code so it's version-controlled and weapon-agnostic, instead of rotating each mesh.
+    // Default = the -90 yaw found empirically; tune in-editor (FRotator = Pitch, Yaw, Roll).
+    UPROPERTY(EditDefaultsOnly, Category = "Weapon")
+    FRotator WeaponAttachRotation = FRotator(0.0, -90.0, 0.0);
+
     // --- Focus / light ADS (D-0014). bFocusing gates the authoritative spread (server reads it when
     // firing) and the local camera zoom; the strafe slow lives on the locomotion component so the
     // owning client can predict it. The camera zoom itself is owning-client cosmetic only. ---
@@ -116,35 +124,17 @@ class AHeroCharacter : ARogueHeroBase
     UPROPERTY(EditDefaultsOnly, Category = "Animation")
     bool bActorLevelFreeLook = false;
 
-    // GASP slide set (retargeted onto the Lyra skeleton) played as dynamic montages on the
-    // full-body slot — slide is OUR mechanic, Lyra's graph knows nothing about it (D-0022).
-    UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
-    UAnimSequenceBase SlideInAnim;
+    // Slide POSE is owned by the ABP: a Slide state in LocomotionSM (driven by the anim instance's
+    // bIsSliding / GameplayTag_IsDashing bool) plays the MM_Slide_* clips on the LOWER body, so the
+    // UpperBody fire layer composes over it (shoot-while-slide preserved). The slide MOVEMENT is
+    // physics (URogueLocomotionComponent). (Retired: dynamic montages on the FullBody slot — that
+    // slot overrides the whole body, so it blocked aim/fire during the slide; D-0022 montage
+    // approach replaced by the state.)
 
-    UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
-    UAnimSequenceBase SlideLoopAnim;
-
-    UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
-    UAnimSequenceBase SlideOutStandAnim;
-
-    UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
-    UAnimSequenceBase SlideOutCrouchAnim;
-
-    UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
-    UAnimSequenceBase SlideOutRunAnim;
-
-    // Must be a slot that exists in the live anim graph. Lyra's ABP_Mannequin_Base has exactly
-    // two: FullBodySlot and UpperBodySlot — there is NO DefaultSlot, and a montage played into a
-    // missing slot advances silently without ever touching the pose (checkpoint-A bug #3).
-    UPROPERTY(EditDefaultsOnly, Category = "Animation|Slide")
-    FName SlideMontageSlot = n"FullBodySlot";
-
-    private bool bSlideAnimActive = false;
-    private float SlideLoopStartTime = 0.0;
-
-    // --- Stamina pips (D-0023, Deadlock model): slide and slide-hop each cost one pip; sprint is
-    // free. Server spends/regens on the GAS attribute (URogueMovementSet); the owning client
-    // predicts gating off the replicated value, so movement never waits on the server. ---
+    // --- Stamina pips (D-0023, Deadlock model). NOTE: sliding and slide-hopping are now FREE — the
+    // pip spends were removed so movement is never gated. The attribute/regen/HUD plumbing stays in
+    // place (dormant) in case stamina is repurposed; nothing currently consumes a pip. Server
+    // owns the GAS attribute (URogueMovementSet); the owning client reads the replicated value. ---
     UPROPERTY(EditDefaultsOnly, Category = "Stamina")
     float StaminaRegenSeconds = 2.5;     // one pip per this many seconds
 
@@ -337,6 +327,9 @@ class AHeroCharacter : ARogueHeroBase
         FName GripSocket = Mesh.DoesSocketExist(n"weapon_r") ? n"weapon_r" : n"hand_r";
         WeaponMesh.AttachToComponent(Mesh, GripSocket, EAttachmentRule::SnapToTarget,
             EAttachmentRule::SnapToTarget, EAttachmentRule::SnapToTarget, false);
+        // Re-home the grip offset in code (see WeaponAttachRotation) so the gun points down the
+        // socket's forward instead of ~90 deg off; supersedes any per-mesh band-aid rotation.
+        WeaponMesh.SetRelativeRotation(WeaponAttachRotation);
         if (DefaultWeapon != nullptr && DefaultWeapon.WeaponMesh != nullptr)
         {
             WeaponMesh.SetSkeletalMeshAsset(DefaultWeapon.WeaponMesh);
@@ -483,13 +476,7 @@ class AHeroCharacter : ARogueHeroBase
             return;
         // Slide-hop: jumping out of a slide keeps 100% of horizontal velocity (D-0015 rework).
         if (Locomotion.IsSliding())
-        {
             Locomotion.NotifySlideJump();
-            // Slide-hop costs a pip (D-0023). DoJump only runs where the input lands, so this
-            // covers the listen-server host; remote clients are charged in OnJumped below.
-            if (HasAuthority())
-                SpendStaminaPip();
-        }
         // Auto-stand like Apex/Deadlock: stock CanJump refuses while crouched, and UnCrouch
         // is a no-op when already standing. Landing re-entry keys off the held crouch input.
         UnCrouch();
@@ -500,12 +487,6 @@ class AHeroCharacter : ARogueHeroBase
     UFUNCTION(BlueprintOverride)
     void OnJumped()
     {
-        // Remote clients' slide-hops reach the server through the CMC saved move, not DoJump —
-        // at server-side jump time bSliding is still set (the airborne convergence in
-        // TickLocomotion clears it later), so this is their authoritative pip spend. The host
-        // never double-pays: its DoJump already ran NotifySlideJump, clearing IsSliding().
-        if (HasAuthority() && Locomotion.IsSliding())
-            SpendStaminaPip();
         Locomotion.NotifyJumped(JumpCurrentCount);
     }
 
@@ -542,10 +523,7 @@ class AHeroCharacter : ARogueHeroBase
     {
         if (IsIncapacitated())
             return;
-        // Out of pips -> crouch, not slide (no hard input eat): dropping sprint makes
-        // RequestCrouchOrSlide degrade to a plain crouch. Predicted off the replicated attribute.
-        if (Locomotion.IsSprinting() && !HasStaminaPip())
-            Locomotion.SetSprint(false);
+        // Sliding is free (no stamina gate): crouch-while-sprinting-and-fast always slides.
         Locomotion.RequestCrouchOrSlide();
         Server_CrouchPressed();
     }
@@ -553,9 +531,6 @@ class AHeroCharacter : ARogueHeroBase
     UFUNCTION(Server)
     void Server_CrouchPressed()
     {
-        // Mirror the out-of-pips degrade so the server's crouch-vs-slide decision matches the owner's.
-        if (!HasStaminaPip())
-            Locomotion.SetSprint(false);
         Locomotion.RequestCrouchOrSlide();
     }
 
@@ -595,9 +570,6 @@ class AHeroCharacter : ARogueHeroBase
         // Slide physics run wherever movement is simulated (predicted client + authority).
         if (IsLocallyControlled() || HasAuthority())
         {
-            // Anim edge-detect BEFORE the locomotion tick: a slide that starts and ends across
-            // one frame boundary must still register its start edge here.
-            TickSlideAnim();
             Locomotion.TickLocomotion(DeltaSeconds);
             TickFacing(DeltaSeconds);
         }
@@ -701,65 +673,6 @@ class AHeroCharacter : ARogueHeroBase
         while (A > 180.0)  A -= 360.0;
         while (A < -180.0) A += 360.0;
         return A;
-    }
-
-    // Slide anim driver: edge-detect the locomotion slide state every Tick (all machines — the
-    // state derives from replicated movement, so owner predicts, server confirms, proxies mirror).
-    private void TickSlideAnim()
-    {
-        bool bSlidingNow = Locomotion != nullptr && Locomotion.IsSliding();
-        if (bSlidingNow == bSlideAnimActive)
-        {
-            // Mid-slide: hand over from the one-shot In to the Loop once the In has played out.
-            if (bSlidingNow && SlideLoopAnim != nullptr && SlideLoopStartTime > 0.0
-                && Gameplay::GetTimeSeconds() >= SlideLoopStartTime)
-            {
-                PlaySlideAnim(SlideLoopAnim, 9999);
-                SlideLoopStartTime = 0.0;
-            }
-            return;
-        }
-        bSlideAnimActive = bSlidingNow;
-        if (bSlidingNow)
-        {
-            // The server observes the slide's start edge here and charges the pip (the owner
-            // predicted the gate in CrouchPressed; the spend itself is authority-only. D-0023).
-            if (HasAuthority())
-                SpendStaminaPip();
-            if (SlideInAnim != nullptr)
-            {
-                PlaySlideAnim(SlideInAnim, 1);
-                SlideLoopStartTime = Gameplay::GetTimeSeconds() + SlideInAnim.GetPlayLength() - 0.2;
-            }
-            else if (SlideLoopAnim != nullptr)
-            {
-                PlaySlideAnim(SlideLoopAnim, 9999);
-            }
-        }
-        else
-        {
-            SlideLoopStartTime = 0.0;
-            // Exit pick: crouch-held -> crouch exit; still fast -> run exit; else stand exit.
-            UAnimSequenceBase Out = SlideOutStandAnim;
-            if (Locomotion != nullptr && Locomotion.IsCrouchHeld() && SlideOutCrouchAnim != nullptr)
-                Out = SlideOutCrouchAnim;
-            else
-            {
-                FVector V = GetVelocity();
-                if (FVector(V.X, V.Y, 0.0).Size() > 500.0 && SlideOutRunAnim != nullptr)
-                    Out = SlideOutRunAnim;
-            }
-            if (Out != nullptr)
-                PlaySlideAnim(Out, 1);
-        }
-    }
-
-    private void PlaySlideAnim(UAnimSequenceBase Anim, int LoopCount)
-    {
-        UAnimInstance AnimInst = Mesh.GetAnimInstance();
-        if (AnimInst == nullptr)
-            return;
-        AnimInst.PlaySlotAnimationAsDynamicMontage(Anim, SlideMontageSlot, 0.15, 0.25, 1.0, LoopCount, -1.0, 0.0);
     }
 
     // Resolve an input tag to the granted ability spec and activate it (server-authoritative).

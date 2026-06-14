@@ -708,8 +708,10 @@ class ARaidPlayerController : APlayerController
     // the D-0023 stamina spend math. All checks read SYNCHRONOUSLY after the call — no tick runs
     // between the press and the read, so the speed we read is exactly StartSlide's transform of
     // the velocity we set (and no tick means checks 1-3 never observe a slide edge, so they stay
-    // pip-neutral). `[MoveSmoke] RESULT 4/4` is the SmokeTest.ps1 assertion (RaidArena case).
-    // Polls at boot like the other batteries so it works as -ExecCmds.
+    // pip-neutral). The slide is a COMMIT move now — CrouchReleased no longer ends it — so each
+    // check force-resets via ResetAirState() to enter clean (else check 2/3's press is a no-op
+    // against the still-running check-1 slide). `[MoveSmoke] RESULT 4/4` is the SmokeTest.ps1
+    // assertion (RaidArena case). Polls at boot like the other batteries so it works as -ExecCmds.
     private int MoveSmokeRetries = 0;
 
     UFUNCTION(Exec)
@@ -750,6 +752,7 @@ class ARaidPlayerController : APlayerController
         else
             Print(f"[MoveSmoke] FAIL 1: boost (sliding={L.IsSliding()} speed={Speed1} sprint={L.SprintSpeed()} target={L.SprintSpeed() * L.SlideBoostMultiplier})", 15.0);
         Hero.CrouchReleased();
+        L.ResetAirState();
 
         // 2) Cap: enter at twice the cap -> clamped to SlideCap. The cap clamps every entry,
         //    boost cooldown (still hot from check 1) or not.
@@ -762,6 +765,7 @@ class ARaidPlayerController : APlayerController
         else
             Print(f"[MoveSmoke] FAIL 2: cap (speed={Speed2} cap={L.SlideCap()})", 15.0);
         Hero.CrouchReleased();
+        L.ResetAirState();
 
         // 3) No boost above the arming threshold: entry just over sprint * SlideBoostArmMultiplier
         //    must keep its speed, not gain. (Check 1's boost cooldown is also still hot —
@@ -777,6 +781,7 @@ class ARaidPlayerController : APlayerController
             Print(f"[MoveSmoke] FAIL 3: armed-over-threshold boost leaked (speed={Speed3} entry={Entry3})", 15.0);
         Hero.CrouchReleased();
         Hero.SetSprint(false);
+        L.ResetAirState();
 
         // 4) Stamina gate math (D-0023): one spend drops exactly one pip — synthetic, no PIE
         //    timing. On authority with a pip banked the count must read S0 - 1; anywhere else

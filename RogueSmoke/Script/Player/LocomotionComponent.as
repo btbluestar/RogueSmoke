@@ -77,13 +77,20 @@ class URogueLocomotionComponent : UActorComponent
     float SlideEntryMinFraction = 0.85;      // entry needs speed >= sprint * this
 
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
-    float SlideExitSpeedFraction = 0.9;      // slide ends when speed < BaseWalkSpeed * this
+    float SlideExitSpeedFraction = 0.5;      // slide ends when speed < BaseWalkSpeed * this (lowered so the slide runs long enough to read)
 
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
-    float SlideGroundFriction = 0.6;
+    float SlideGroundFriction = 0.5;         // also routed to BrakingFriction during the slide — this is what paces the flat-ground decay
 
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
-    float SlideBraking = 256.0;
+    float SlideBraking = 100.0;              // gentle constant decel; friction shapes the rest (was 256 = too abrupt)
+
+    // Input thrust ALLOWED during a slide (used as MaxAcceleration while sliding). 0 = pure momentum,
+    // no steering; small values let you nudge the slide's direction without killing the friction decay.
+    // Meta-upgrade knob ("Slide Steering" — see MetaUpgradeVariables.md / DesignThreads DT-5). Keep
+    // modest: high values re-accelerate the slide and defeat the flat-ground friction degrade.
+    UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
+    float SlideSteerAccel = 1000.0;
 
     UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
     float SlideDownhillAccel = 2048.0;
@@ -135,9 +142,6 @@ class URogueLocomotionComponent : UActorComponent
     {
         if (Move == nullptr || OwnerCharacter == nullptr)
             return;
-        Move.MaxAcceleration = MaxAcceleration;
-        Move.BrakingDecelerationWalking = BrakingDecelerationWalking;
-        Move.BrakingFriction = BrakingFriction;
         Move.BrakingFrictionFactor = BrakingFrictionFactor;
         Move.bUseSeparateBrakingFriction = true;
         Move.GravityScale = GravityScale;
@@ -146,9 +150,15 @@ class URogueLocomotionComponent : UActorComponent
         Move.FallingLateralFriction = FallingLateralFriction;
         OwnerCharacter.JumpMaxCount = MaxJumpCount;
         OwnerCharacter.JumpMaxHoldTime = JumpMaxHoldTime;
-        // GroundFriction is stateful (the slide swaps it); only set when not mid-slide.
+        // These four are swapped by the slide (StartSlide/EndSlide); only set them when not mid-slide
+        // or ApplyMovementConfig (Initialize/MoveTune/upgrades) would stomp the active slide overrides.
         if (!bSliding)
+        {
+            Move.MaxAcceleration = MaxAcceleration;
+            Move.BrakingDecelerationWalking = BrakingDecelerationWalking;
+            Move.BrakingFriction = BrakingFriction;
             Move.GroundFriction = GroundFriction;
+        }
         ApplyGroundSpeed();
     }
 
@@ -188,9 +198,12 @@ class URogueLocomotionComponent : UActorComponent
     void ReleaseCrouch()
     {
         bCrouchHeld = false;
+        // A slide is a commit move: releasing crouch does NOT cancel it (cancelling on release made
+        // a tapped slide die almost instantly). The slide runs its course; EndSlide then stands you
+        // up because bCrouchHeld is now false. Holding crouch through the slide keeps you crouched.
         if (bSliding)
-            EndSlide();
-        else if (OwnerCharacter != nullptr)
+            return;
+        if (OwnerCharacter != nullptr)
             OwnerCharacter.UnCrouch();
     }
 
@@ -206,6 +219,9 @@ class URogueLocomotionComponent : UActorComponent
         bPostSlideHopAir = true;
         Move.GroundFriction = GroundFriction;
         Move.BrakingDecelerationWalking = BrakingDecelerationWalking;
+        Move.BrakingFriction = BrakingFriction;
+        Move.MaxAcceleration = MaxAcceleration;
+        Move.MaxWalkSpeedCrouched = CrouchSpeed;
         // The hero UnCrouches before Jump() so stock CanJump allows it.
         // Chain re-entry on landing keys off bCrouchHeld, not the crouch posture.
     }
@@ -240,6 +256,17 @@ class URogueLocomotionComponent : UActorComponent
         bSliding = false;
         bPostSlideHopAir = false;
         SlideTimeRemaining = 0.0;
+        // A force-stop mid-slide must not leave the low slide friction / lifted crouch cap /
+        // clamped steer accel applied to ordinary walking — restore the walking CMC config the
+        // same way EndSlide does (down/revive/teleport otherwise inherit slide physics).
+        if (Move != nullptr)
+        {
+            Move.GroundFriction = GroundFriction;
+            Move.BrakingDecelerationWalking = BrakingDecelerationWalking;
+            Move.BrakingFriction = BrakingFriction;
+            Move.MaxAcceleration = MaxAcceleration;
+            Move.MaxWalkSpeedCrouched = CrouchSpeed;
+        }
     }
 
     private void StartSlide()
@@ -250,6 +277,20 @@ class URogueLocomotionComponent : UActorComponent
 
         Move.GroundFriction = SlideGroundFriction;
         Move.BrakingDecelerationWalking = SlideBraking;
+        // CRITICAL: while crouched, CMC brakes velocity toward MaxWalkSpeedCrouched. Left at the
+        // 300 crouch-walk speed it dragged the slide below the exit threshold almost instantly
+        // (the symptom: slide "cancels too fast"). The slide is meant to bleed via SlideGroundFriction
+        // alone, so lift the crouched cap to the slide cap for the duration.
+        Move.MaxWalkSpeedCrouched = SlideCap();
+        // bUseSeparateBrakingFriction is ON, so the *braking* friction (not GroundFriction) governs
+        // deceleration when there's no input — route the slide friction there too, else the 6.0
+        // walking BrakingFriction stops the slide in ~0.15 s (the real "animation never shows" cause).
+        Move.BrakingFriction = SlideGroundFriction;
+        // Momentum slide: clamp input thrust to SlideSteerAccel so the slide DEGRADES via friction on
+        // flat instead of the player's held move-key re-accelerating toward the lifted crouch cap (why
+        // flat slides didn't slow down). A small value gives a little steering; 0 = pure momentum.
+        // Downhill accel is added directly to velocity in TickLocomotion, so slopes still speed up.
+        Move.MaxAcceleration = SlideSteerAccel;
 
         FVector Vel = Move.Velocity;
         FVector Flat = FVector(Vel.X, Vel.Y, 0.0);
@@ -276,6 +317,9 @@ class URogueLocomotionComponent : UActorComponent
         bSliding = false;
         Move.GroundFriction = GroundFriction;
         Move.BrakingDecelerationWalking = BrakingDecelerationWalking;
+        Move.BrakingFriction = BrakingFriction;
+        Move.MaxAcceleration = MaxAcceleration;
+        Move.MaxWalkSpeedCrouched = CrouchSpeed;
         if (!bCrouchHeld && OwnerCharacter != nullptr)
             OwnerCharacter.UnCrouch();
     }
@@ -288,7 +332,9 @@ class URogueLocomotionComponent : UActorComponent
         if (bFocusing)
             Speed *= FocusMoveMultiplier;
         Move.MaxWalkSpeed = Speed;
-        Move.MaxWalkSpeedCrouched = CrouchSpeed;
+        // Mid-slide, keep the crouched cap lifted (StartSlide raised it) so a sprint/focus change
+        // mid-slide doesn't yank the slide back down to crouch-walk speed.
+        Move.MaxWalkSpeedCrouched = bSliding ? SlideCap() : CrouchSpeed;
     }
 
     private float HorizontalSpeed() const
@@ -331,6 +377,9 @@ class URogueLocomotionComponent : UActorComponent
             bPostSlideHopAir = true;
             Move.GroundFriction = GroundFriction;
             Move.BrakingDecelerationWalking = BrakingDecelerationWalking;
+            Move.BrakingFriction = BrakingFriction;
+            Move.MaxAcceleration = MaxAcceleration;
+            Move.MaxWalkSpeedCrouched = CrouchSpeed;
             return;
         }
 

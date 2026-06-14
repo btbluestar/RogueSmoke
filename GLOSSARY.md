@@ -44,9 +44,9 @@
 - **Sprint** — hold-to-run; raises move speed in any direction (omnidirectional). Base 600 ×1.6 = 960.
 - **Slide** — the fastest ground state: crouch while sprinting boosts to 1.3× sprint (cap 1.5×),
   carries on low friction, sustains downhill, ends when speed bleeds below 0.9× base. The MVP's
-  skill-expression traversal move. (D-0021 numbers supersede the D-0015 list.) Costs one
-  **stamina pip** (D-0023); out of pips, the crouch press degrades to a plain crouch. Animated
-  by the GASP slide set as dynamic montages — see Anim instance.
+  skill-expression traversal move. (D-0021 numbers supersede the D-0015 list.) **Free to use** —
+  the original stamina-pip cost was removed after play-feel testing (D-0023 Update / DesignThreads
+  DT-1). Animated by the GASP slide set as a lower-body overlay on the Lyra stack — see Anim instance.
 - **Slide-hop** — jumping out of a slide: auto-stands, keeps the slide's speed through the air
   (`FallingLateralFriction 0`), and re-enters the slide on landing if crouch is held. The
   **boost-arming threshold** (boost only applies below 1.1× sprint speed) means chains *carry*
@@ -64,10 +64,11 @@
   `ABP_Mannequin_Base` and supplies `GroundDistance` + the `GameplayTag_*` bools from
   replicated state; the graph computes its own locomotion data. The retired v1 fields
   (StrafeSpeed/PlayRate/Direction…) remain for the on-disk `ABP_Hero` until parity sign-off.
-- **Stamina pip** — one discrete charge of the movement economy (D-0023): slide and slide-hop
-  each cost 1, sprint is free; regen one pip per `StaminaRegenSeconds` after a post-spend
-  pause. Lives on `URogueMovementSet` (GAS) so upgrades are plain GameplayEffects; HUD renders
-  one square per pip under the health bar.
+- **Stamina pip** — one discrete charge of the movement economy (D-0023). **Currently dormant:**
+  nothing consumes a pip (the slide/slide-hop spends were removed — DesignThreads DT-1); reserved
+  for dash + air/double-jump. Regen is one pip per `StaminaRegenSeconds` after a post-spend pause.
+  Lives on `URogueMovementSet` (GAS) so upgrades are plain GameplayEffects; HUD renders one square
+  per pip under the health bar.
 
 ## Animation (Lyra stack, D-0022)
 

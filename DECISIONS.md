@@ -476,8 +476,12 @@ Format per entry: ID, date, status, the decision, the reasoning, and consequence
 ### D-0023 — Stamina pips (Deadlock model) on GAS attributes
 
 - **Status:** Decided — part of the D-0022 workstream (spec §Phase 6).
-- **Decision:** 3 discrete stamina pips; **slide costs 1, slide-hop's jump costs 1, sprint is
-  free** (gating sprint would fight the movement identity). Pips regen one at a time
+- **Update (DT-1, 2026-06-14):** play-feel testing removed the slide/slide-hop pip spends —
+  **sliding, sprinting, and jumping are now free**. The pip attribute/regen/HUD plumbing stays
+  in place but **dormant**; it will wire to dash + air/double-jump when those land. See
+  [DesignThreads](DesignThreads.md) DT-1. The model below records the original decision.
+- **Decision (original):** 3 discrete stamina pips; **slide costs 1, slide-hop's jump costs 1,
+  sprint is free** (gating sprint would fight the movement identity). Pips regen one at a time
   (`StaminaRegenSeconds 2.5`, post-spend pause `StaminaRegenDelay 1.0`; both MoveTune knobs).
   `Stamina`/`MaxStamina` live on **`URogueMovementSet`** (C++ `UAngelscriptAttributeSet`,
   granted via both hero `DA_*_AbilitySet` assets) so future meta-progression upgrades are plain
