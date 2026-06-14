@@ -94,8 +94,12 @@ namespace RaidArena
 
         // Landmark marker pillars so the key nodes are legible at a glance (these aren't blockers;
         // they label where the Maw / hold / drop / extraction sit on the generated layout).
-        Total += StampMarker(Stamp, SlotLocation(L, ERaidSlotType::CombatCore), kMawColor,    600.0);
-        Total += StampMarker(Stamp, SlotLocation(L, ERaidSlotType::HoldAnchor), kHoldColor,    500.0);
+        // Mark every zone's Maw + hold pad (2-3 zones) so the multi-site layout is legible.
+        for (FRaidSite MS : L.MainSites)
+        {
+            Total += StampMarker(Stamp, NodeLocation(MS, ERaidSlotType::CombatCore), kMawColor,  600.0);
+            Total += StampMarker(Stamp, NodeLocation(MS, ERaidSlotType::HoldAnchor), kHoldColor, 500.0);
+        }
         Total += StampMarker(Stamp, L.Drop.Center,                              kDropColor,    400.0);
         Total += StampMarker(Stamp, L.Extraction.Center,                        kExtractColor, 700.0);
         return Total;
