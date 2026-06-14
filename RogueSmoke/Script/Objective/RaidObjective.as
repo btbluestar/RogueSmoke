@@ -250,7 +250,10 @@ class ARaidObjective : AActor
 
         int TeamLevel = GetTeamLevel();
         int NumPlayers = GetNumPlayers();
-        FWavePlan Plan = RaidDirector::ComputeWavePlan(TeamLevel, WaveIndex, NumPlayers, MakeTunables(), Elapsed);
+        // The time-spine drives only the generated hold-and-channel loop; the legacy ClearElites map
+        // keeps its team-level director untouched (pass 0 elapsed so spikes never fire there).
+        float DirectorElapsed = (Mode == EObjectiveMode::HoldAndChannel) ? Elapsed : 0.0;
+        FWavePlan Plan = RaidDirector::ComputeWavePlan(TeamLevel, WaveIndex, NumPlayers, MakeTunables(), DirectorElapsed);
 
         WaveTimer += DeltaSeconds;
         if (WaveTimer < Plan.Interval)
@@ -283,14 +286,17 @@ class ARaidObjective : AActor
             }
         }
 
-        if (Plan.bSpawnMiniBoss && BossClass.Get() != nullptr && !bSpikeBossSpawned)
+        if (Plan.bSpawnMiniBoss && !bSpikeBossSpawned)
         {
-            bSpikeBossSpawned = true;
-            AEliteEnemyBase SpikeBoss = Director.SpawnElite(BossClass, Center + FVector(0.0, 0.0, 40.0), FRotator());
-            if (SpikeBoss != nullptr)
+            bSpikeBossSpawned = true;   // fire once, even if no BossClass is set
+            if (BossClass.Get() != nullptr)
             {
-                SpikeBoss.SetCountsAsObjectiveTarget(false);   // pressure spike, not a clear-gate
-                Print("[Director] mini-boss spike", 4.0);
+                AEliteEnemyBase SpikeBoss = Director.SpawnElite(BossClass, Center + FVector(0.0, 0.0, 40.0), FRotator());
+                if (SpikeBoss != nullptr)
+                {
+                    SpikeBoss.SetCountsAsObjectiveTarget(false);   // pressure spike, not a clear-gate
+                    Print("[Director] mini-boss spike", 4.0);
+                }
             }
         }
         WaveIndex += 1;
