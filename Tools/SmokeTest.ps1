@@ -37,6 +37,8 @@ $Cases = @(
     @{ Name = "ProcGenFoundation";  Map = "/Game/Levels/RaidArena";                       Expect = "[GenSmoke] RESULT 6/6"; Exec = "GenSmoke"; Window = 25 }
     # Procgen stamping (Plan 2): builds collidable greybox geometry from the seed via the ISM seam.
     @{ Name = "StampArena";         Map = "/Game/Levels/RaidArena";                       Expect = "[StampSmoke] RESULT 2/2"; Exec = "StampSmoke"; Window = 25 }
+    # Generated Phase-1 loop (Plan 3): auto-stamp + spawn-at-drop + hold-and-channel + separate extraction -> Victory.
+    @{ Name = "GenLoopVictory";     Map = "/Game/Levels/L_GenRaid";                       Expect = @("[RaidArena] stamped", "[GenLoopSmoke] VICTORY confirmed"); Exec = "GenLoopSmoke"; Window = 40 }
     @{ Name = "Enemy_Crawler";      Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Crawler";     Expect = "CRAWLER (fodder): spawned 8" }
     @{ Name = "Enemy_Carapace";     Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Carapace";    Expect = "CARAPACE: spawned 2" }
     @{ Name = "Enemy_Spitter";      Map = "/Game/Levels/DebuggingLevels/DL_Enemy_Spitter";     Expect = "SPITTER: spawned 2" }

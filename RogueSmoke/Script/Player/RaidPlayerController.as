@@ -1972,6 +1972,108 @@ class ARaidPlayerController : APlayerController
         Print(f"[RaidLoopSmoke] RESULT {Pass}/2", 15.0);
     }
 
+    // --- Generated Phase-1 loop gate (procgen Plan 3): on L_GenRaid the run auto-stamps the
+    // generated arena, spawns heroes at the Drop node, and runs a hold-and-channel objective with a
+    // SEPARATE extraction. This drives it headlessly: fill the channel -> extraction opens at the
+    // separate node -> survive the (collapsed) hold -> Victory. SmokeTest greps `[RaidArena] stamped`
+    // and `[GenLoopSmoke] VICTORY confirmed`. ---
+    private int GenLoopRetries = 0;
+    private bool bGenCheck1 = false;
+    private bool bGenReachedReady = false;
+    private bool bGenExtracting = false;
+
+    UFUNCTION(Exec)
+    void GenLoopSmoke()
+    {
+        GenLoopRetries = 0;
+        bGenCheck1 = false;
+        bGenReachedReady = false;
+        bGenExtracting = false;
+        GenLoopStep();
+    }
+
+    UFUNCTION()
+    void GenLoopStep()
+    {
+        if (!HasAuthority())
+        {
+            Print("[GenLoopSmoke] host only (authority required)", 8.0);
+            return;
+        }
+
+        ARaidObjective Obj = FindRaidObjective();
+        ARaidGameState GS = Cast<ARaidGameState>(Gameplay::GetGameState());
+        if (Obj == nullptr || GS == nullptr)
+        {
+            GenLoopRetry();
+            return;
+        }
+
+        // Observe progress greedily (robust to the proximity auto-extraction beating our CallExtraction).
+        if (Obj.Phase != ERaidPhase::InProgress)
+            bGenReachedReady = true;
+        if (Obj.Phase == ERaidPhase::Extracting || Obj.Phase == ERaidPhase::Extracted)
+            bGenExtracting = true;
+
+        if (Obj.Phase == ERaidPhase::InProgress)
+        {
+            // First pass: assert generated hold-and-channel placement (channel != extraction node).
+            if (!bGenCheck1)
+            {
+                bGenCheck1 = (Obj.Mode == EObjectiveMode::HoldAndChannel)
+                          && ((Obj.ChannelCenter - Obj.ExtractionCenter).Size() > 1.0);
+                if (!bGenCheck1)
+                    Print(f"[GenLoopSmoke] FAIL 1: not generated hold-and-channel (mode={Obj.Mode})", 12.0);
+                Obj.ExtractionDefendSeconds = 0.1;   // collapse the hold for a quick headless gate
+                Obj.DefendWaveCount = 0;
+            }
+            Obj.DebugFillChannel();                  // force the bar full; next tick opens extraction
+            GenLoopRetry();
+            return;
+        }
+
+        if (Obj.Phase == ERaidPhase::ExtractionReady)
+        {
+            Obj.CallExtraction();                    // authority entry point -> Extracting
+            GenLoopRetry();
+            return;
+        }
+
+        if (Obj.Phase == ERaidPhase::Extracting)
+        {
+            GenLoopRetry();                          // 0.1s defend timer ticking down to Extracted
+            return;
+        }
+
+        if (Obj.Phase == ERaidPhase::Extracted)
+        {
+            int Pass = 0;
+            if (bGenCheck1) Pass++;
+            if (bGenReachedReady) Pass++;
+            else Print("[GenLoopSmoke] FAIL 2: never reached ExtractionReady", 12.0);
+            if (bGenExtracting) Pass++;
+            else Print("[GenLoopSmoke] FAIL 3: never entered Extracting", 12.0);
+            Pass++;                                  // reached Extracted = survived the hold
+            Print(f"[GenLoopSmoke] RESULT {Pass}/4", 15.0);
+            if (GS.Phase == ERunPhase::Victory) Print("[GenLoopSmoke] VICTORY confirmed", 12.0);
+            else Print(f"[GenLoopSmoke] victory not reached (phase={GS.Phase})", 12.0);
+            return;
+        }
+
+        Print("[GenLoopSmoke] RESULT 0/4 — unexpected objective state", 15.0);
+    }
+
+    private void GenLoopRetry()
+    {
+        if (GenLoopRetries < 60)
+        {
+            GenLoopRetries++;
+            System::SetTimer(this, n"GenLoopStep", 0.5, false);
+            return;
+        }
+        Print("[GenLoopSmoke] RESULT 0/4 — timed out waiting for the loop", 15.0);
+    }
+
     // --- End-of-run results (CommonUI: pushed onto the Menu layer). Triggered by the HUD's
     // banner->panel timer, or instantly via the RaidResults console command. ---
     private UResultsScreenWidget ResultsScreen;
