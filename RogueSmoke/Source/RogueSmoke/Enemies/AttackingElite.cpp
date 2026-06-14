@@ -93,6 +93,10 @@ void AAttackingElite::ClearTransientState()
 	DashTimeRemaining = 0.f;
 	bDashHitApplied = false;
 
+	EngageState = EEngageState::Background;
+	TimeInEngageState = 0.f;
+	bAttackedThisEngagement = false;
+
 	// Cosmetics back to baseline so a pooled recycle doesn't wake up mid-flash/swell.
 	LocalTelegraphElapsed = 0.f;
 	FlashUntilSeconds = 0.f;
@@ -215,7 +219,7 @@ void AAttackingElite::Tick(float DeltaSeconds)
 	}
 	else
 	{
-		ApproachTarget(DeltaSeconds);
+		ApproachTarget(DeltaSeconds, PreferredRange);
 	}
 }
 
@@ -400,7 +404,7 @@ bool AAttackingElite::IsTargetInAttackRange() const
 	return FVector::Dist(Target->GetActorLocation(), GetActorLocation()) <= AttackRange;
 }
 
-void AAttackingElite::ApproachTarget(float DeltaSeconds)
+void AAttackingElite::ApproachTarget(float DeltaSeconds, float StopRange)
 {
 	if (!Target.IsValid())
 	{
@@ -410,13 +414,32 @@ void AAttackingElite::ApproachTarget(float DeltaSeconds)
 	FVector ToTarget = Target->GetActorLocation() - Mine;
 	ToTarget.Z = 0.f;
 	const float Dist = ToTarget.Size();
-	if (Dist <= PreferredRange)
+	if (Dist <= StopRange)
 	{
 		return;
 	}
 	const FVector Dir = ToTarget / Dist;
 	SetActorLocation(Mine + Dir * MoveSpeed * DeltaSeconds, /*bSweep=*/false);
 	SetActorRotation(Dir.Rotation());
+}
+
+void AAttackingElite::SetEngageState(EEngageState NewState)
+{
+	if (NewState == EngageState)
+	{
+		return;
+	}
+	EngageState = NewState;
+	TimeInEngageState = 0.f;
+	if (NewState == EEngageState::Engaged)
+	{
+		bAttackedThisEngagement = false;
+	}
+}
+
+bool AAttackingElite::IsAlive() const
+{
+	return Health == nullptr || Health->Health > 0.f;
 }
 
 void AAttackingElite::FaceTarget()
