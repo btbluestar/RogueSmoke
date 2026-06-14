@@ -206,6 +206,9 @@ class ARaidObjective : AActor
         ExtractionCenter = GetActorLocation();
         if (bUseGeneratedLayout)
         {
+            // A generated objective is always hold-and-channel (MVP). Set it here so the level asset
+            // needn't carry the enum value (editor-python can't set AS EnumProperties).
+            Mode = EObjectiveMode::HoldAndChannel;
             FRaidLayout L = RaidArena::GetLayout(GetMasterSeed());
             if (L.MainSites.Num() > 0)
                 ChannelCenter = RaidArena::NodeLocation(L.MainSites[0], ERaidSlotType::CombatCore);
