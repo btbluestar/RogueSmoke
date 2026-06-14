@@ -454,30 +454,93 @@ class ARaidObjective : AActor
             SetPhase(ERaidPhase::ExtractionReady);
     }
 
-    // Hold-and-channel: accumulate progress while >= 1 living hero stands in the channel radius.
+    // Hold-and-channel: every zone channels independently while >= 1 living hero stands in its radius.
+    // Extraction opens only when ALL zones are full; the last zone to fill spawns the mini-boss.
     private void UpdateChannel()
     {
         const float RadiusSq = ChannelRadius * ChannelRadius;
-        bool bAnyChanneling = false;
+        const float Dt = GetWorld().GetDeltaSeconds();
 
         TArray<AHeroCharacter> Heroes;
         GetAllActorsOfClass(Heroes);
-        for (AHeroCharacter H : Heroes)
+
+        // Single-point fallback (no generated zones): legacy behavior on ChannelCenter/ChannelProgress.
+        if (ChannelCenters.Num() == 0)
         {
-            if (H == nullptr || H.IsIncapacitated())
-                continue;
-            if ((H.GetActorLocation() - ChannelCenter).SizeSquared() <= RadiusSq)
+            for (AHeroCharacter H : Heroes)
             {
-                bAnyChanneling = true;
-                break;
+                if (H == nullptr || H.IsIncapacitated())
+                    continue;
+                if ((H.GetActorLocation() - ChannelCenter).SizeSquared() <= RadiusSq)
+                {
+                    ChannelProgress = Math::Min(ChannelProgress + Dt, ChannelSeconds);
+                    break;
+                }
             }
+            if (ChannelProgress >= ChannelSeconds)
+                SetPhase(ERaidPhase::ExtractionReady);
+            return;
         }
 
-        if (bAnyChanneling)
-            ChannelProgress = Math::Min(ChannelProgress + GetWorld().GetDeltaSeconds(), ChannelSeconds);
+        int Active = -1;
+        int CompleteCount = 0;
+        for (int s = 0; s < ChannelCenters.Num(); s++)
+        {
+            bool bOccupied = false;
+            for (AHeroCharacter H : Heroes)
+            {
+                if (H == nullptr || H.IsIncapacitated())
+                    continue;
+                if ((H.GetActorLocation() - ChannelCenters[s]).SizeSquared() <= RadiusSq)
+                { bOccupied = true; break; }
+            }
+            if (bOccupied)
+            {
+                ChannelProgresses[s] = Math::Min(ChannelProgresses[s] + Dt, ChannelSeconds);
+                if (Active < 0)
+                    Active = s;   // lowest-index occupied site is the director's focus
+            }
+            if (ChannelProgresses[s] >= ChannelSeconds)
+                CompleteCount += 1;
+        }
 
-        if (ChannelProgress >= ChannelSeconds)
+        // Mirror the active (or last-active) site into ChannelCenter/ChannelProgress for the HUD.
+        if (Active >= 0)
+            ActiveSiteIndex = Active;
+        if (ActiveSiteIndex >= 0)
+        {
+            ChannelCenter = ChannelCenters[ActiveSiteIndex];
+            ChannelProgress = ChannelProgresses[ActiveSiteIndex];
+        }
+
+        // All zones full -> climax mini-boss at the last-completed site, then open extraction.
+        if (CompleteCount >= ChannelCenters.Num())
+        {
+            SpawnClimaxMiniBoss();
             SetPhase(ERaidPhase::ExtractionReady);
+        }
+    }
+
+    // Spawn the mini-boss at the active (last-completed) site and suppress the director's timed spike.
+    private void SpawnClimaxMiniBoss()
+    {
+        if (bSpikeBossSpawned)
+            return;
+        bSpikeBossSpawned = true;     // also stops RaidDirector's timed mini-boss from double-spawning
+        if (BossClass.Get() == nullptr)
+            return;
+        int Idx = ActiveSiteIndex >= 0 ? ActiveSiteIndex : 0;
+        FVector Where = (Idx < ChannelCenters.Num()) ? ChannelCenters[Idx] : GetActorLocation();
+        USpawnDirector Director = USpawnDirector::Get();
+        if (Director != nullptr)
+        {
+            AEliteEnemyBase Boss = Director.SpawnElite(BossClass, Where + FVector(0.0, 0.0, 40.0), FRotator());
+            if (Boss != nullptr)
+            {
+                Boss.SetCountsAsObjectiveTarget(false);   // a spike, not a re-gate (extraction already opens)
+                Print("[Raid] climax mini-boss at last objective", 4.0);
+            }
+        }
     }
 
     // Test/exec hook: jump the channel bar to full so the smoke can drive the loop headlessly.
