@@ -159,7 +159,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Combat|Director")
 	float RingStandoffMult = 1.6f;
 
-	/** Token-gated by the combat director. AFodderEnemy clears this (fodder attack freely). */
+	/** Token-gated by the combat director. Set false on an AAttackingElite subclass to let it
+	 *  attack freely (skip the ring-standoff/token loop). AFodderEnemy is NOT a subclass of
+	 *  AAttackingElite — it is already exempt by not having this loop at all. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Combat|Director")
 	bool bUsesAttackToken = true;
 
