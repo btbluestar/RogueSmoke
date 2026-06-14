@@ -169,6 +169,7 @@ void AAttackingElite::Tick(float DeltaSeconds)
 	{
 		AttackCooldown -= DeltaSeconds;
 	}
+	TimeInEngageState += DeltaSeconds;
 
 	AcquireTarget();
 
@@ -197,6 +198,7 @@ void AAttackingElite::Tick(float DeltaSeconds)
 			{
 				PerformAttack();
 			}
+			bAttackedThisEngagement = true; // committed this engagement (even a whiff) -> director can release
 			AttackCooldown = AttackInterval;
 		}
 		return; // committed to the wind-up; hold position
@@ -207,7 +209,9 @@ void AAttackingElite::Tick(float DeltaSeconds)
 		return; // taunt owns our movement (the synergy SETUP); the C++ base Tick steers us
 	}
 
-	if (IsTargetInAttackRange())
+	// Token-gating: a token-using elite only attacks while Engaged; in Background it holds at the ring.
+	const bool bMayAttack = !bUsesAttackToken || EngageState == EEngageState::Engaged;
+	if (bMayAttack && IsTargetInAttackRange())
 	{
 		FaceTarget();
 		if (AttackCooldown <= 0.f)
@@ -219,7 +223,9 @@ void AAttackingElite::Tick(float DeltaSeconds)
 	}
 	else
 	{
-		ApproachTarget(DeltaSeconds, PreferredRange);
+		const float StopRange = (bUsesAttackToken && EngageState == EEngageState::Background)
+			? GetRingStandoff() : PreferredRange;
+		ApproachTarget(DeltaSeconds, StopRange);
 	}
 }
 
