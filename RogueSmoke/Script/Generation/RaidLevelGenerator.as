@@ -44,9 +44,14 @@ struct FRaidGenConfig
 namespace RaidGen
 {
     const float PI = 3.14159265;
-    const int kArenaSalt = 104729;       // prime; salts the generation stream off the master seed
+    // Distinct primes from RaidObjective.as (which salts with 104729 / 7919) so that, once Plan 2
+    // feeds this the real master seed, the layout stream is decorrelated from the elite-roster stream.
+    // (Seed + salt) may wrap int32 for seeds near INT_MAX — fine: two's-complement wrap is deterministic.
+    const int kArenaSalt  = 1000003;     // prime; salts the generation stream off the master seed
+    const int kRerollSalt = 9973;        // prime; per-retry advance in GenerateValidated
 
     // Roll a full layout from a seed. Deterministic: same (Seed, Cfg) -> identical FRaidLayout.
+    // NOTE: a raw roll is UNVALIDATED — bValid stays false. Consumers must use GenerateValidated.
     FRaidLayout Generate(int Seed, const FRaidGenConfig& Cfg)
     {
         FRaidLayout L;
@@ -217,7 +222,7 @@ namespace RaidGen
     {
         for (int i = 0; i <= MaxRetries; i++)
         {
-            FRaidLayout L = Generate(Seed + i * 7919, Cfg);   // 7919 prime: deterministic re-roll salt
+            FRaidLayout L = Generate(Seed + i * kRerollSalt, Cfg);   // deterministic per-retry salt
             FRaidValidationResult Res = RaidValidate::Validate(L, Cfg);
             if (Res.bOk)
             {
