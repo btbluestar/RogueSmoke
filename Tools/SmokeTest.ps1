@@ -34,7 +34,7 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $Cases = @(
     @{ Name = "RaidArena";          Map = "/Game/Levels/RaidArena";                       Expect = @("[Raid] spawned 4 ring elites + boss", "[MoveSmoke] RESULT 4/4"); Exec = "MoveSmoke"; Window = 45 }
     # Procedural raid generation foundation (Plan 1): deterministic layout + validation, pure-logic.
-    @{ Name = "ProcGenFoundation";  Map = "/Game/Levels/RaidArena";                       Expect = "[GenSmoke] RESULT 9/9"; Exec = "GenSmoke"; Window = 25 }
+    @{ Name = "ProcGenFoundation";  Map = "/Game/Levels/RaidArena";                       Expect = "[GenSmoke] RESULT 12/12"; Exec = "GenSmoke"; Window = 25 }
     # Procgen stamping (Plan 2): builds collidable greybox geometry from the seed via the ISM seam.
     @{ Name = "StampArena";         Map = "/Game/Levels/RaidArena";                       Expect = "[StampSmoke] RESULT 2/2"; Exec = "StampSmoke"; Window = 25 }
     # Generated Phase-1 loop (Plan 3): auto-stamp + spawn-at-drop + hold-and-channel + separate extraction -> Victory.

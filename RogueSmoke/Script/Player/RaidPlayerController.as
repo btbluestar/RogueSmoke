@@ -888,6 +888,36 @@ class ARaidPlayerController : APlayerController
         if (slope <= TCfg.MaxZoneSlopeLevels) Pass += 1;
         else Print(f"[GenSmoke] FAIL slope-walkable ({slope})", 6.0);
 
+        // --- Plan B: multi-site assertions ---
+        // (1) Zone count in range.
+        Total += 1;
+        if (TL.MainSites.Num() >= TCfg.ZoneCountMin && TL.MainSites.Num() <= TCfg.ZoneCountMax)
+            Pass += 1;
+        else
+            Print(f"[GenSmoke] FAIL zone-count ({TL.MainSites.Num()})", 6.0);
+
+        // (2) Zone centers min-separated.
+        bool bSep = true;
+        for (int za = 0; za < TL.MainSites.Num(); za++)
+            for (int zb = za + 1; zb < TL.MainSites.Num(); zb++)
+            {
+                FVector Da = TL.MainSites[za].Center;
+                FVector Db = TL.MainSites[zb].Center;
+                if (FVector(Da.X - Db.X, Da.Y - Db.Y, 0.0).Size() < TCfg.ZoneMinSeparation - 0.5)
+                    bSep = false;
+            }
+        Total += 1;
+        if (bSep) Pass += 1; else Print("[GenSmoke] FAIL zone-separation", 6.0);
+
+        // (3) Determinism: same seed -> same zone count + centers.
+        FRaidLayout TL3 = RaidGen::GenerateValidated(20260614, TCfg);
+        bool bMS = (TL3.MainSites.Num() == TL.MainSites.Num());
+        if (bMS)
+            for (int zc = 0; zc < TL.MainSites.Num(); zc++)
+                if ((TL.MainSites[zc].Center - TL3.MainSites[zc].Center).Size() > 0.01) { bMS = false; break; }
+        Total += 1;
+        if (bMS) Pass += 1; else Print("[GenSmoke] FAIL multisite-determinism", 6.0);
+
         Print(f"[GenSmoke] RESULT {Pass}/{Total}", 15.0);
     }
 
