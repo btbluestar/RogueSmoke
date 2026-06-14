@@ -60,6 +60,7 @@ $Cases = @(
        Expect = "[RaidLoopSmoke] RESULT 4/4"; Exec = "RaidLoopSmoke victory"; Window = 45 }
     @{ Name = "RaidLoopDefeat";     Map = "/Game/Levels/RaidArena";
        Expect = "[RaidLoopSmoke] RESULT 2/2"; Exec = "RaidLoopSmoke defeat"; Window = 30 }
+    @{ Name = "CombatDirector";     Map = "/Game/Levels/RaidArena";                       Expect = "[CombatDirectorSmoke] RESULT 2/2"; Exec = "CombatDirectorSmoke"; Window = 30 }
 )
 
 $FatalPatterns = @("Fatal error", "Assertion failed", "Script call stack", "LogScript: Error")

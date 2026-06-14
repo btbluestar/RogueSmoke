@@ -1932,6 +1932,88 @@ class ARaidPlayerController : APlayerController
         Print(f"[RaidLoopSmoke] RESULT 0/{Total} — timed out waiting for the loop", 15.0);
     }
 
+    // --- Combat-director smoke: spawn many token-using elites around the hero; assert only the per-player
+    // budget are Engaged at once, and that tokens rotate over time. Boot RaidArena with
+    // -ExecCmds="CombatDirectorSmoke". ---
+    private int CDSpawned = 0;
+    private int CDMaxEngaged = 0;
+    private int CDSamples = 0;
+    private bool CDDone = false;
+    private TArray<AAttackingElite> CDFirstEngaged;
+
+    UFUNCTION(Exec)
+    void CombatDirectorSmoke()
+    {
+        AHeroCharacter Hero = GetHero();
+        if (Hero == nullptr)
+        {
+            System::SetTimer(this, n"CombatDirectorSmoke", 0.5, false);   // retry until possessed
+            return;
+        }
+        FVector C = Hero.GetActorLocation();
+        for (int i = 0; i < 8; i++)
+        {
+            float A = (2.0 * 3.14159265 * float(i)) / 8.0;
+            FVector P = C + FVector(Math::Cos(A), Math::Sin(A), 0.0) * 250.0;
+            ACarapace E = Cast<ACarapace>(SpawnActor(ACarapace, P, FRotator()));
+            if (E != nullptr)
+                CDSpawned += 1;
+        }
+        Print(f"[CombatDirectorSmoke] spawned {CDSpawned} elites", 6.0);
+        CDSamples = 0;
+        CDDone = false;
+        System::SetTimer(this, n"CombatDirectorSample", 0.8, true);   // repeating sampler
+    }
+
+    UFUNCTION()
+    void CombatDirectorSample()
+    {
+        if (CDDone)
+            return;
+
+        ARaidObjective Obj = FindRaidObjective();
+        int Budget = (Obj != nullptr) ? Obj.AttackTokensPerPlayer : 3;
+
+        TArray<AAttackingElite> Elites;
+        GetAllActorsOfClass(Elites);
+        TArray<AAttackingElite> NowEngaged;
+        for (AAttackingElite E : Elites)
+        {
+            if (E == nullptr || !E.GetUsesAttackToken() || !E.IsAlive())
+                continue;
+            if (E.GetEngageState() == EEngageState::Engaged)
+                NowEngaged.Add(E);
+        }
+        if (NowEngaged.Num() > CDMaxEngaged)
+            CDMaxEngaged = NowEngaged.Num();
+        if (CDFirstEngaged.Num() == 0 && NowEngaged.Num() > 0)
+            CDFirstEngaged = NowEngaged;
+
+        CDSamples += 1;
+        if (CDSamples >= 8)
+        {
+            CDDone = true;   // stop sampling (guard; the repeating timer will no-op now)
+
+            // Rotation: at least one currently-Engaged elite differs from the first set we saw.
+            bool bRotated = false;
+            for (AAttackingElite E : NowEngaged)
+            {
+                bool bWasFirst = false;
+                for (AAttackingElite F : CDFirstEngaged)
+                    if (E == F) { bWasFirst = true; break; }
+                if (!bWasFirst) { bRotated = true; break; }
+            }
+
+            int Pass = 0;
+            int Total = 2;
+            if (CDMaxEngaged > 0 && CDMaxEngaged <= Budget) Pass += 1;
+            else Print(f"[CombatDirectorSmoke] FAIL cap (max {CDMaxEngaged} > budget {Budget})", 8.0);
+            if (bRotated) Pass += 1;
+            else Print("[CombatDirectorSmoke] FAIL no rotation", 8.0);
+            Print(f"[CombatDirectorSmoke] RESULT {Pass}/{Total}", 15.0);
+        }
+    }
+
     private ARaidObjective FindRaidObjective()
     {
         TArray<ARaidObjective> Objectives;
