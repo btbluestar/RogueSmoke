@@ -807,6 +807,51 @@ class ARaidPlayerController : APlayerController
         Print(f"[MoveSmoke] RESULT {Pass}/4", 15.0);
     }
 
+    // Headless determinism + validation gate for procedural generation (procgen Plan 1). Pure: no
+    // pawn/world needed, so it runs immediately under -ExecCmds. SmokeTest.ps1 greps the RESULT line.
+    UFUNCTION(Exec)
+    void GenSmoke()
+    {
+        FRaidGenConfig Cfg;
+        int Pass = 0;
+        int Total = 0;
+
+        // 1. Same seed -> identical layout.
+        Total += 1;
+        FRaidLayout A = RaidGen::Generate(12345, Cfg);
+        FRaidLayout B = RaidGen::Generate(12345, Cfg);
+        if (RaidGen::LayoutsEqual(A, B)) Pass += 1;
+        else Print("[GenSmoke] FAIL 1: same seed diverged", 12.0);
+
+        // 2. Different seed -> different layout.
+        Total += 1;
+        FRaidLayout C = RaidGen::Generate(99999, Cfg);
+        if (!RaidGen::LayoutsEqual(A, C)) Pass += 1;
+        else Print("[GenSmoke] FAIL 2: different seeds identical", 12.0);
+
+        // 3. Validated layout passes the full battery.
+        Total += 1;
+        FRaidLayout V = RaidGen::GenerateValidated(12345, Cfg);
+        FRaidValidationResult RV = RaidValidate::Validate(V, Cfg);
+        if (V.bValid && RV.bOk) Pass += 1;
+        else Print(f"[GenSmoke] FAIL 3: validated invalid ({RV.PassCount}/{RV.Total} {RV.FirstFail})", 12.0);
+
+        // 4. Validated generation is reproducible (reroll determinism).
+        Total += 1;
+        FRaidLayout V2 = RaidGen::GenerateValidated(12345, Cfg);
+        if (RaidGen::LayoutsEqual(V, V2)) Pass += 1;
+        else Print("[GenSmoke] FAIL 4: GenerateValidated not reproducible", 12.0);
+
+        // 5. The safe fallback itself validates (never-softlock net).
+        Total += 1;
+        FRaidLayout Safe = RaidGen::BuildSafeFallback(Cfg);
+        FRaidValidationResult RS = RaidValidate::Validate(Safe, Cfg);
+        if (RS.bOk) Pass += 1;
+        else Print(f"[GenSmoke] FAIL 5: fallback invalid ({RS.PassCount}/{RS.Total} {RS.FirstFail})", 12.0);
+
+        Print(f"[GenSmoke] RESULT {Pass}/{Total}", 15.0);
+    }
+
     private float FlatSpeed(UCharacterMovementComponent Move) const
     {
         FVector Vel = Move.Velocity;
